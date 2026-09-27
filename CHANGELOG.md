@@ -5,6 +5,21 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 
 ## [Non publié]
 
+### Ajouté
+- **Connexion avec les comptes Windows / Active Directory** (`web.auth.mode: ldap`) : page de
+  connexion, vérification LDAPS, restriction par groupes AD (imbriqués), sessions sécurisées,
+  blocage après échecs répétés, bouton de déconnexion.
+- **Authentification unique** derrière IIS (`web.auth.mode: header`).
+- **HTTPS** intégré (`web.tls_cert` / `web.tls_key`) ; refus de démarrer la connexion AD en HTTP
+  sur le réseau ; en-têtes de sécurité (HSTS, anti-iframe).
+- **Journal d'audit** : connexions, échecs, déconnexions, exports (utilisateur et filtres).
+- **Rapport par e-mail** (`freelm send-report`) : abonnements avec destinataires, période et
+  filtres ; résumé HTML (pénuries, sous-utilisation) + classeur Excel joint ; une fois par
+  période (`--skip-sent`), aperçu `.eml` (`--dry-run`), envoi de test (`--to`) ; journal
+  `report_delivery` (schéma v2).
+- Tâches planifiées « Envoi des rapports » et, en option, « Interface web » permanente.
+- Documentation `docs/AUTHENTIFICATION.md`.
+
 ## [0.1.0] — 2026-09-27
 
 Première version.

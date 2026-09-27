@@ -318,3 +318,21 @@ def previous_month(today: date | None = None) -> tuple[datetime, datetime]:
     first_this = today.replace(day=1)
     first_prev = (first_this - timedelta(days=1)).replace(day=1)
     return datetime.combine(first_prev, datetime.min.time()), datetime.combine(first_this, datetime.min.time())
+
+
+def period_bounds(period: str, today: date | None = None) -> tuple[datetime, datetime]:
+    """Bornes [début, fin[ d'une période nommée (last-month, this-month, last-week, last-7d, last-year)."""
+    today = today or date.today()
+    midnight = datetime.combine(today, datetime.min.time())
+    if period == "this-month":
+        return midnight.replace(day=1), midnight + timedelta(days=1)
+    if period == "last-week":
+        monday = midnight - timedelta(days=today.weekday())
+        return monday - timedelta(days=7), monday
+    if period == "last-7d":
+        return midnight - timedelta(days=7), midnight
+    if period == "last-year":
+        return midnight.replace(year=today.year - 1, month=1, day=1), midnight.replace(month=1, day=1)
+    if period == "last-month":
+        return previous_month(today)
+    raise ValueError(f"Période inconnue : {period}")

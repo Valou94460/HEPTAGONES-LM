@@ -125,6 +125,12 @@ jobs:
       - name: Test de bout en bout (Playwright)
         run: node tests/ui/ui_smoke.cjs http://localhost:8765 ui-captures
 
+      - name: Connexion Windows/AD (annuaire factice)
+        run: |
+          python tests/ui/fake_auth_server.py 8766 > auth.log 2>&1 &
+          for i in $(seq 1 60); do grep -q "prêt" auth.log && break; sleep 1; done
+          node tests/ui/login_smoke.cjs http://localhost:8766 ui-captures
+
       - name: Captures d'écran
         if: always()
         uses: actions/upload-artifact@v4
@@ -253,6 +259,11 @@ jobs:
           freelm -c demo-mssql/freelm.demo.yaml collect | tee collect.out
           grep -q "déjà en cours" collect.out
           wait
+
+      - name: Envoi de rapport (aperçu .eml) sur SQL Server
+        run: |
+          freelm -c demo-mssql/freelm.demo.yaml send-report --to test@example.com --period last-7d --dry-run eml
+          ls eml/*.eml
 
       - name: Contrôle des vues SQL
         run: |

@@ -57,7 +57,7 @@ def _open_db(cfg: AppConfig):
 
 
 def _period(args) -> tuple[datetime, datetime]:
-    from freelm.reporting import previous_month
+    from freelm.reporting.dataset import period_bounds
 
     today = date.today()
     if args.date_from:
@@ -68,17 +68,7 @@ def _period(args) -> tuple[datetime, datetime]:
             else datetime.combine(today + timedelta(days=1), datetime.min.time())
         )
         return start, end
-    midnight = datetime.combine(today, datetime.min.time())
-    if args.period == "this-month":
-        return midnight.replace(day=1), midnight + timedelta(days=1)
-    if args.period == "last-week":
-        monday = midnight - timedelta(days=today.weekday())
-        return monday - timedelta(days=7), monday
-    if args.period == "last-7d":
-        return midnight - timedelta(days=7), midnight
-    if args.period == "last-year":
-        return midnight.replace(year=today.year - 1, month=1, day=1), midnight.replace(month=1, day=1)
-    return previous_month(today)
+    return period_bounds(args.period, today)
 
 
 # ---------------------------------------------------------------------------
@@ -205,6 +195,33 @@ def cmd_import_users(cfg: AppConfig, args) -> int:
     return 0
 
 
+def cmd_send_report(cfg: AppConfig, args) -> int:
+    from freelm.config import Subscription
+    from freelm.mailer import deliver
+
+    subs = cfg.email.subscriptions
+    if args.subscription:
+        wanted = {n.lower() for n in args.subscription}
+        subs = [s for s in subs if s.name.lower() in wanted]
+        if len(subs) != len(wanted):
+            raise ConfigError(f"Abonnement inconnu (disponibles : {', '.join(s.name for s in cfg.email.subscriptions) or 'aucun'})")
+    if not subs and args.to:  # envoi de test sans abonnement configuré
+        subs = [Subscription(name="Test", recipients=args.to)]
+    if not subs:
+        print("Aucun abonnement e-mail configuré (section email.subscriptions) : rien à envoyer.")
+        return 0
+    if not args.dry_run and not cfg.email.smtp_host:
+        raise ConfigError("email.smtp_host est obligatoire (ou utiliser --dry-run)")
+    results = []
+    with _open_db(cfg) as db:
+        for sub in subs:
+            results.append(deliver(cfg, db, sub, dry_run_dir=args.dry_run, override_to=args.to,
+                                   skip_sent=args.skip_sent, period=args.period))
+    for r in results:
+        print(f"{r.subscription:<24} {r.status:<8} {r.detail}")
+    return 2 if any(r.status == "ERROR" for r in results) else 0
+
+
 def cmd_purge(cfg: AppConfig, args) -> int:
     from freelm.service import CollectionService
 
@@ -313,6 +330,14 @@ def build_parser() -> argparse.ArgumentParser:
     iu = sub.add_parser("import-users", help="importe nom complet et service des utilisateurs (CSV AD/RH)")
     iu.add_argument("file", help="CSV avec colonnes username;display_name;department (ou utilisateur;nom;service)")
 
+    sr = sub.add_parser("send-report", help="envoie le rapport par e-mail aux abonnés (à planifier)")
+    sr.add_argument("--subscription", action="append", help="limiter à cet abonnement (répétable)")
+    sr.add_argument("--period", choices=["last-month", "this-month", "last-week", "last-7d", "last-year"],
+                    help="période (défaut : celle de l'abonnement)")
+    sr.add_argument("--to", action="append", help="remplacer les destinataires (test) ; répétable")
+    sr.add_argument("--skip-sent", action="store_true", help="ne pas renvoyer un rapport déjà envoyé pour la période")
+    sr.add_argument("--dry-run", metavar="DOSSIER", help="écrire les messages en .eml au lieu de les envoyer")
+
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
@@ -324,8 +349,8 @@ def build_parser() -> argparse.ArgumentParser:
     dm.add_argument("--no-report", action="store_true", help="ne pas générer le rapport Excel")
 
     w = sub.add_parser("web", help="interface web : rapports à la demande et exports")
-    w.add_argument("--host", default="127.0.0.1", help="adresse d'écoute (défaut : poste local uniquement)")
-    w.add_argument("--port", type=int, default=8765)
+    w.add_argument("--host", help="adresse d'écoute (défaut : web.host, sinon poste local uniquement)")
+    w.add_argument("--port", type=int, help="port (défaut : web.port, sinon 8765)")
     w.add_argument("--open", action="store_true", help="ouvrir le navigateur")
     w.add_argument("--demo", action="store_true", help="utiliser des données de démonstration simulées")
     w.add_argument("--demo-days", type=int, default=90, help=argparse.SUPPRESS)
@@ -343,6 +368,7 @@ WITH_CONFIG = {
     "import-log": cmd_import_log,
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
+    "send-report": cmd_send_report,
     "purge": cmd_purge,
     "apply-products": cmd_apply_products,
 }

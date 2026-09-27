@@ -12,7 +12,7 @@
 2. [Environnements](#2-environnements)
 3. [Critères d'entrée, de sortie et gravité](#3-critères-dentrée-de-sortie-et-gravité)
 4. [Tests automatisés](#4-tests-automatisés)
-5. [Cas de test fonctionnels](#5-cas-de-test-fonctionnels) (installation, configuration, collecte, données, rapports, interface, exécutable, exploitation)
+5. [Cas de test fonctionnels](#5-cas-de-test-fonctionnels) (installation, configuration, collecte, données, rapports, interface, exécutable, exploitation, connexion AD, e-mails)
 6. [Validation sur les serveurs réels](#6-validation-sur-les-serveurs-réels)
 7. [Performance](#7-performance)
 8. [Sécurité](#8-sécurité)
@@ -31,9 +31,9 @@ dans un tableur.
 
 | Niveau | Quoi | Comment | Qui | Où |
 |---|---|---|---|---|
-| **N1 — Unitaire** | Parsers lmstat / log, reconstruction des sessions, calcul des indicateurs, paramètres de l'API | 50 tests automatisés (`python -m pytest`) | CI | E1 |
+| **N1 — Unitaire** | Parsers lmstat / log, sessions, indicateurs, API, authentification, e-mails | 75 tests automatisés (`python -m pytest`) | CI | E1 |
 | **N2 — Intégration** | Chaîne complète simulée : simulateur → parsers → base → rapports ; SQL Server réel ; exécutable Windows | Workflow CI (5 jobs) | CI | E1 |
-| **N3 — Bout en bout** | Interface web dans un vrai navigateur : onglets, filtres, exports | Playwright (`tests/ui/ui_smoke.cjs`) | CI | E1 |
+| **N3 — Bout en bout** | Interface web et page de connexion dans un vrai navigateur | Playwright (`tests/ui/*.cjs`) | CI | E1 |
 | **N4 — Recette fonctionnelle** | Cas de test manuels du § 5 sur les données de démonstration | Manuel | Admin applicatif | E2 |
 | **N5 — Validation réelle (VSR)** | Exactitude des données face aux serveurs de licences réels | Procédure du § 6 | Admin applicatif + admin licences | E3 |
 | **N6 — Recette métier** | Les rapports répondent aux questions des utilisateurs | Scénarios du § 10 | Responsables métier | E3 |
@@ -94,6 +94,9 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/test_report.py` | 7 | Indicateurs (émis, pic, moyenne, taux, heures saturées, refus, utilisateurs, heures), profil horaire, contention, filtre serveur, mois précédent, export Excel (y compris période vide) |
 | `tests/test_simulation.py` | 9 | Déterminisme du simulateur, jamais plus de jetons utilisés qu'émis, log conforme au modèle, faux lmutil, sessions en base identiques au modèle (lmstat et log), durées exactes (log), configuration « en direct » |
 | `tests/test_web.py` | 12 | Paramètres (défauts, listes, validation), fichiers statiques et types MIME, métadonnées, les 9 rapports, filtres (serveur, utilisateur, produit), granularités, exports CSV / JSON / Excel (9 rapports + classeur complet), erreurs 400 / 404, import utilisateurs (format AD) |
+| `tests/test_auth.py` | 16 | Mode ldap (routes protégées, redirection, connexion / déconnexion, cookie `HttpOnly` `SameSite`, cookie forgé, blocage après échecs, audit des exports, en-têtes de sécurité), mode header (proxy de confiance, utilisateur non autorisé, proxy non fiable), refus de l'AD sans HTTPS, configurations invalides, expiration des sessions, serveur HTTPS, **vrai code LDAP** contre l'annuaire fictif ldap3 (groupes imbriqués, mauvais mot de passe, mot de passe vide, restriction par groupe) |
+| `tests/test_mailer.py` | 9 | Libellés de période, validation de la configuration, envoi réel à un serveur SMTP de test (destinataires, sujet, HTML, texte, lien, pièce jointe), abonnement filtré, une fois par période, aperçu `.eml`, erreur SMTP journalisée, destinataires de test, abonnement ponctuel |
+| `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
 | `tests/ui/ui_smoke.cjs` | — | Navigateur réel : 9 onglets en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
@@ -101,15 +104,15 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | Job | Vérifie |
 |---|---|
 | Tests + démo (Linux, Windows × Python 3.10, 3.12) | Tests unitaires ; script SQL à jour ; démo 30 jours + rapport Excel ; collecte « en direct » via le faux lmutil ; relecture des classeurs ; rendu PDF (LibreOffice) |
-| Interface web (navigateur) | `tests/ui/ui_smoke.cjs` + captures d'écran publiées |
+| Interface web (navigateur) | `tests/ui/ui_smoke.cjs`, `tests/ui/login_smoke.cjs` + captures d'écran publiées |
 | Exécutable Windows | Construction de `FreeLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
-| SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; vues SQL non vides ; relance de la démo |
+| SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; aperçu d'e-mail ; vues SQL non vides ; relance de la démo |
 
 | Id | Cas | Résultat attendu | Statut |
 |---|---|---|:---:|
 | AUT-01 🔴 | Consulter la dernière exécution CI de la version testée | Tous les jobs verts | ☐ |
 | AUT-02 | Télécharger l'artefact `captures-interface-web` | Captures lisibles, cohérentes avec § 5.6 | ☐ |
-| AUT-03 | `python -m pytest` sur le poste de test (E2) | 50 tests passés (ou « skipped » uniquement si openpyxl absent) | ☐ |
+| AUT-03 | `python -m pytest` sur le poste de test (E2) | 75 tests passés (« skipped » uniquement si openpyxl, ldap3 ou openssl sont absents) | ☐ |
 
 ---
 
@@ -245,6 +248,49 @@ Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
 | MNT-02 [E3] | Sauvegarde / restauration | Sauvegarde SQL puis restauration sur une autre base | Interface fonctionnelle sur la base restaurée | ☐ |
 | MNT-03 | Mise à jour de version | Remplacer l'exe / réinstaller le paquet, `init-db` | Données conservées, interface fonctionnelle | ☐ |
 
+### 5.9 Connexion Windows / Active Directory (AUTH)
+
+Environnement E3, configuration selon [AUTHENTIFICATION.md](AUTHENTIFICATION.md) ;
+prévoir un compte de test membre du groupe autorisé et un compte non membre.
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| AUTH-01 🔴 [E3] | Sécurité au démarrage | `auth.mode: ldap`, `host: 0.0.0.0`, **sans** certificat ; lancer `web` | Refus : « Connexion AD sur le réseau sans HTTPS… », code 1 | ☐ |
+| AUTH-02 🔴 [E3] | HTTPS | Certificat de l'AC d'entreprise ; ouvrir `https://freelm…:8765` depuis un poste du domaine | Cadenas sans avertissement ; `http://` refusé | ☐ |
+| AUTH-03 🔴 [E3] | Redirection | Ouvrir un lien de rapport partagé sans être connecté | Page de connexion ; après connexion, retour **sur le rapport du lien** | ☐ |
+| AUTH-04 🔴 [E3] | Connexion nominale | Compte membre du groupe, formats `jdupont`, `DOMAINE\jdupont`, `jdupont@domaine` | Connexion ; nom complet affiché en haut à droite | ☐ |
+| AUTH-05 🔴 [E3] | Mauvais mot de passe | Saisir un mot de passe erroné | « Identifiant ou mot de passe incorrect » ; échec dans le journal d'audit | ☐ |
+| AUTH-06 🔴 [E3] | Restriction par groupe | Compte valide **hors** du groupe autorisé | « Accès refusé : vous n'appartenez à aucun groupe autorisé » | ☐ |
+| AUTH-07 [E3] | Groupe imbriqué | Compte membre d'un groupe lui-même membre du groupe autorisé | Connexion acceptée | ☐ |
+| AUTH-08 [E3] | Blocage | 5 échecs consécutifs puis bon mot de passe | « Trop de tentatives… » pendant 15 min ; **compte AD non verrouillé** (seuil FreeLM < seuil AD) | ☐ |
+| AUTH-09 [E3] | Déconnexion | « Se déconnecter », puis bouton Précédent du navigateur | Retour à la connexion ; données non accessibles | ☐ |
+| AUTH-10 [E3] | Expiration | `session_hours: 0.05` (3 min) ; attendre 4 min puis changer d'onglet | Retour à la page de connexion | ☐ |
+| AUTH-11 [E3] | Redondance des DC | Deux `ldap_servers`, le premier arrêté / filtré | Connexion via le second | ☐ |
+| AUTH-12 [E3] | Annuaire injoignable | Tous les DC filtrés | « Annuaire indisponible, réessayez plus tard » ; cause dans `freelm.log` | ☐ |
+| AUTH-13 🔴 [E3] | Journal d'audit | Se connecter, exporter un rapport, se déconnecter | `freelm.log` : connexion, export (utilisateur, rapport, format, filtres), déconnexion ; **aucun mot de passe** | ☐ |
+| AUTH-14 [E3] | SSO IIS (si mode header retenu) | Poste du domaine, navigateur Edge | Accès **sans saisie** ; nom affiché ; accès direct au port FreeLM impossible depuis un autre poste | ☐ |
+| AUTH-15 [E3] | Usurpation d'en-tête (mode header) | Requête vers IIS avec un en-tête `X-Remote-User: admin` forgé | Ignoré : l'utilisateur reste celui authentifié par IIS | ☐ |
+| AUTH-16 [E3] | Service permanent | `register_tasks.ps1 … -WithWebInterface` ; redémarrer le serveur | Interface disponible sans intervention | ☐ |
+
+### 5.10 Rapport par e-mail (MAIL)
+
+Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une boîte de test.
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| MAIL-01 🔴 | Aperçu sans envoi | `send-report --dry-run apercu` | Un `.eml` par abonnement, ouvrable dans Outlook ; rien n'est envoyé ni tracé | ☐ |
+| MAIL-02 🔴 [E3] | Envoi de test | `send-report --to moi@entreprise.local` | Message reçu (pas en indésirables) ; sujet « FreeLM — Utilisation des licences <mois> — <abonnement> » | ☐ |
+| MAIL-03 🔴 [E3] | Contenu | Lire le message reçu | Indicateurs, produits en pénurie / sous-utilisés, tableau par produit, lien qui ouvre l'interface **sur la bonne période et les bons filtres** ; lisible dans Outlook (bureau, web, mobile) | ☐ |
+| MAIL-04 🔴 [E3] | Pièce jointe | Ouvrir le classeur joint | Classeur 8 onglets du mois précédent, filtré comme l'abonnement | ☐ |
+| MAIL-05 | Abonnement filtré | Abonnement `servers: [ANSYS]` | Seuls les produits Ansys apparaissent | ☐ |
+| MAIL-06 🔴 [E3] | Une fois par période | Lancer 2 fois `send-report --skip-sent` | 2ᵉ exécution : `SKIPPED déjà envoyé…` ; un seul message reçu | ☐ |
+| MAIL-07 [E3] | Rattrapage | Tâche « Envoi des rapports » désactivée le 1er, réactivée le 2 | Envoi le 2, une seule fois | ☐ |
+| MAIL-08 [E3] | SMTP indisponible | `smtp_host` erroné | `ERROR` + code retour 2 ; échec tracé dans `report_delivery` ; nouvel essai le lendemain | ☐ |
+| MAIL-09 [E3] | Authentification SMTP | `security: starttls`, port 587, `username` / `password: ${FREELM_SMTP_PASSWORD}` | Envoi réussi ; mot de passe absent du YAML et des journaux | ☐ |
+| MAIL-10 | Pièce jointe trop lourde | `max_attachment_mb: 0.01` | Message envoyé sans pièce jointe, avec la mention « Classeur Excel non joint… » | ☐ |
+| MAIL-11 | Configuration invalide | Abonnement sans destinataire ; période inconnue ; abonnements sans `smtp_host` | Erreur de configuration explicite | ☐ |
+| MAIL-12 [E3] | Traçabilité | `SELECT * FROM report_delivery ORDER BY sent_at DESC` | Une ligne par envoi : abonnement, période, destinataires, statut | ☐ |
+
 ---
 
 ## 6. Validation sur les serveurs réels
@@ -297,8 +343,8 @@ données simulées pour mesurer PRF-03 à PRF-05 avant d'avoir un an d'historiqu
 
 | Id | Étapes | Résultat attendu | Statut |
 |---|---|---|:---:|
-| SEC-01 🔴 | `netstat -ano | findstr 8765` avec `freelm web` par défaut | Écoute sur `127.0.0.1` uniquement | ☐ |
-| SEC-02 | Depuis un autre poste : `http://<serveur>:8765/` | Injoignable (sauf `--host 0.0.0.0` explicite) | ☐ |
+| SEC-01 🔴 | `netstat -ano | findstr 8765` avec `freelm web` par défaut (`auth.mode: none`) | Écoute sur `127.0.0.1` uniquement | ☐ |
+| SEC-02 | Depuis un autre poste : `http://<serveur>:8765/` (configuration par défaut) | Injoignable ; accès réseau uniquement avec authentification + HTTPS (§ 5.9) | ☐ |
 | SEC-03 🔴 | Lecture seule | Aucune action de l'interface ne modifie la base (vérifier `SELECT COUNT(*)` des tables avant / après une session d'utilisation) | ☐ |
 | SEC-04 | Injection | Paramètres forgés dans l'URL : `server=' OR 1=1 --`, `type=../../etc`, `start=2026-01-01;DROP` | Réponse 400 ou résultat vide ; aucune erreur SQL | ☐ |
 | SEC-05 | Traversée de répertoire | `http://localhost:8765/../freelm.yaml`, `/static/../../freelm.yaml` | 404 | ☐ |
@@ -343,6 +389,7 @@ achats, DSI) sur les données réelles (E3), après au moins 2 semaines de colle
 | J2 | Installation E3 (INS, CFG, COL-01/09, LOG-01), planification | 1 jour |
 | J3 → J4 | Collecte en continu ; validation réelle § 6.1 et 6.2 | 2 jours (dont 1 jour de collecte) |
 | J5 | Tests contrôlés § 6.3, sécurité, robustesse | 1 jour |
+| J6 | Connexion AD / HTTPS (§ 5.9), e-mails (§ 5.10) | 1 jour |
 | J5 → J15 | Collecte continue (≥ 2 semaines) | — |
 | J15 | Performance sur l'historique, recette métier § 10 | 1 jour |
 | J16 | Bilan, procès-verbal, décision de mise en production | ½ jour |

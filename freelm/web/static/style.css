@@ -204,3 +204,16 @@ td.empty-cell { color: var(--muted); }
   #coverage { display: none; }
   .options:not(:has(.field:not([hidden]))) { display: none; }
 }
+
+/* Connexion */
+.login-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.login-card { width: 100%; max-width: 380px; padding: 28px; display: flex; flex-direction: column; gap: 20px; }
+.login-card form { display: flex; flex-direction: column; gap: 14px; }
+.login-card input[type="text"], .login-card input[type="password"] {
+  height: 36px; padding: 0 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text); font-size: 14px; width: 100%;
+}
+.login-card .btn { height: 38px; font-size: 14px; }
+.login-hint { margin: 0; font-size: 12px; text-align: center; }
+.user-badge { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-2); }
+.user-badge .btn { height: 28px; padding: 0 10px; font-size: 12px; }

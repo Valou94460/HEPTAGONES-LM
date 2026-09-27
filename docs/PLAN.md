@@ -52,14 +52,15 @@ Points d'attention connus selon les éditeurs :
 
 ## Étape 4 — Enrichissements (à la demande)
 
-- [ ] Authentification de l'interface web (Windows/AD) pour un usage partagé sur le réseau.
-- [ ] Rapports planifiés envoyés par e-mail depuis l'interface.
+- [x] Connexion Windows/AD (LDAPS, groupes) ou SSO via IIS ; HTTPS ; journal d'audit.
+- [x] Rapports mensuels par e-mail (abonnements).
+- [ ] Droits par service (un responsable ne voit que son service).
+- [ ] Gestion des abonnements e-mail depuis l'interface.
 - [ ] Onglet « Optimisation » : jetons jamais utilisés au-delà de N
       (pic < émis sur 3 mois) → pistes de réduction du parc.
 - [ ] Features regroupées par produit avec calcul du pic simultané
       *réel* (et non la somme des pics) à partir des sondages bruts.
 - [ ] Liste d'exclusion d'utilisateurs / postes (comptes de service, tests).
-- [ ] Envoi du rapport par e-mail (SMTP) en fin de tâche mensuelle.
 - [ ] Migrations de schéma versionnées (`schema_info.version`).
 
 ## Étape 5 — Autres gestionnaires (si besoin)

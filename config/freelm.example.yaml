@@ -59,6 +59,48 @@ reporting:
   top_n_chart: 10          # éléments affichés dans les graphiques
   business_hours: [8, 19]  # plage des heures ouvrées (jours ouvrés lundi-vendredi)
 
+# ---------------------------------------------------------------------------
+# Interface web (freelm web / FreeLM.exe) — voir docs/AUTHENTIFICATION.md
+# ---------------------------------------------------------------------------
+web:
+  host: 127.0.0.1            # 0.0.0.0 pour un accès réseau (avec authentification + HTTPS)
+  port: 8765
+  # tls_cert: "C:/FreeLM/certs/freelm.pem"     # HTTPS (obligatoire avec ldap sur le réseau)
+  # tls_key:  "C:/FreeLM/certs/freelm.key"
+  # public_url: "https://freelm.entreprise.local:8765"   # lien cité dans les e-mails
+  auth:
+    mode: none               # none | ldap (identifiants Windows) | header (SSO via IIS)
+    # --- mode ldap ---
+    # ldap_servers: ["ldaps://dc01.entreprise.local", "ldaps://dc02.entreprise.local"]
+    # base_dn: "DC=entreprise,DC=local"
+    # upn_suffix: "entreprise.local"           # connexion en identifiant@entreprise.local
+    # allowed_groups: ["GG_FreeLM_Lecteurs"]   # vide = tout compte du domaine
+    # ldap_ca_file: "C:/FreeLM/certs/ac-interne.pem"   # si l'AC interne n'est pas reconnue
+    # session_hours: 8
+    # --- mode header (IIS + authentification Windows en frontal) ---
+    # header_name: X-Remote-User
+    # trusted_proxies: ["127.0.0.1"]
+    # allowed_users: []                         # vide = tout utilisateur authentifié par IIS
+
+# ---------------------------------------------------------------------------
+# Envoi du rapport par e-mail (freelm send-report, tâche « Envoi des rapports »)
+# ---------------------------------------------------------------------------
+# email:
+#   smtp_host: smtp.entreprise.local
+#   smtp_port: 25                # 587 avec starttls + authentification, 465 avec ssl
+#   security: starttls           # starttls | ssl | none
+#   # username: svc_freelm@entreprise.local
+#   # password: ${FREELM_SMTP_PASSWORD}
+#   sender: "FreeLM <freelm@entreprise.local>"
+#   subscriptions:
+#     - name: Direction
+#       recipients: [dsi@entreprise.local, achats@entreprise.local]
+#       period: last-month       # last-month | last-week | last-7d | this-month | last-year
+#     - name: Simulation
+#       recipients: [responsable.simulation@entreprise.local]
+#       servers: [ANSYS]
+#       attach_excel: true
+
 retention:
   snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés
   events_days: 730         # refus, journal des collectes

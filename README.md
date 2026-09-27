@@ -25,6 +25,7 @@ interface web et en exports Excel.
 - [Utilisation](#utilisation)
 - [Interface web](#interface-web)
 - [Configuration](#configuration)
+- [Rapport mensuel par e-mail](#rapport-mensuel-par-e-mail)
 - [Comparaison avec OpenLM](#comparaison-avec-openlm)
 - [Documentation](#documentation)
 - [Développement et tests](#développement-et-tests)
@@ -38,7 +39,9 @@ interface web et en exports Excel.
 | **Interface web** | 9 rapports à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **FreeLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
-| **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, purge). |
+| **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
+| **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
+| **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
 | **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
 | **Extensible** | Architecture à collecteurs : d'autres gestionnaires (RLM, LM-X…) s'ajoutent sans toucher au reste. |
 
@@ -109,8 +112,9 @@ cd C:\FreeLM
 powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm"
 ```
 
-Crée trois tâches : collecte toutes les 5 minutes, rapport Excel du mois précédent
-(généré une fois par mois, même si le 1er est manqué), purge hebdomadaire.
+Crée les tâches : collecte toutes les 5 minutes, rapport Excel du mois précédent
+(généré une fois par mois, même si le 1er est manqué), envoi des rapports par e-mail,
+purge hebdomadaire ; `-WithWebInterface` ajoute l'interface web permanente.
 
 **5. Référentiel** (recommandé) :
 
@@ -136,6 +140,7 @@ Get-ADUser -Filter * -Properties DisplayName,Department |
 | `freelm report --from 2026-09-01 --to 2026-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
 | `freelm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
 | `freelm import-users users.csv` | Noms complets et services (export AD/RH) |
+| `freelm send-report [--skip-sent] [--dry-run DOSSIER] [--to adresse]` | Envoi du rapport aux abonnés e-mail (aperçu `.eml` avec `--dry-run`) |
 | `freelm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
 | `freelm purge` | Applique la politique de rétention |
 | `freelm test-server --server X` | Interroge un serveur sans rien écrire |
@@ -169,8 +174,54 @@ freelm -c freelm.yaml web --open
 - **Exports** : bouton Excel / CSV / JSON sur chaque onglet, avec les filtres appliqués ;
   « Rapport complet » produit le classeur 8 onglets.
 - **Sécurité** : lecture seule ; n'écoute que sur le poste local par défaut.
-  `--host 0.0.0.0` la rend accessible sur le réseau **sans authentification** :
-  réseau de confiance uniquement.
+  Pour un accès réseau : **connexion avec les comptes Windows / AD** et HTTPS, voir
+  [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md).
+
+### Connexion Windows / Active Directory
+
+```yaml
+web:
+  host: 0.0.0.0
+  tls_cert: "C:/FreeLM/certs/freelm.pem"
+  tls_key:  "C:/FreeLM/certs/freelm.key"
+  auth:
+    mode: ldap                                  # ou header : SSO derrière IIS
+    ldap_servers: ["ldaps://dc01.entreprise.local"]
+    base_dn: "DC=entreprise,DC=local"
+    upn_suffix: "entreprise.local"
+    allowed_groups: ["GG_FreeLM_Lecteurs"]
+```
+
+Identifiants vérifiés par l'AD (jamais stockés), groupes imbriqués, blocage après
+échecs répétés, session de 8 h, journal d'audit (connexions et exports). FreeLM refuse
+d'exposer la page de connexion sur le réseau sans HTTPS.
+
+## Rapport mensuel par e-mail
+
+```yaml
+email:
+  smtp_host: smtp.entreprise.local
+  sender: "FreeLM <freelm@entreprise.local>"
+  subscriptions:
+    - name: Direction
+      recipients: [dsi@entreprise.local, achats@entreprise.local]
+    - name: Simulation
+      recipients: [responsable.simulation@entreprise.local]
+      servers: [ANSYS]
+```
+
+Chaque abonné reçoit un résumé (indicateurs clés, produits en pénurie — avec refus ou
+saturés plus de 5 % des heures ouvrées —, produits sous-utilisés, détail par produit,
+lien vers l'interface) et le classeur Excel complet en pièce jointe.
+
+```powershell
+FreeLM.exe -c freelm.yaml send-report --dry-run apercu      # .eml à ouvrir dans Outlook, rien n'est envoyé
+FreeLM.exe -c freelm.yaml send-report --to moi@entreprise.local   # envoi de test
+```
+
+La tâche planifiée « Envoi des rapports » (`send-report --skip-sent`, quotidienne)
+n'envoie chaque abonnement qu'une fois par période et rattrape un 1er du mois manqué ;
+les envois sont tracés en base (`report_delivery`).
 
 <img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">
 
@@ -212,7 +263,9 @@ products:                                # feature FlexLM -> produit lisible
 | Historique SQL Server | ✅ | ✅ |
 | Rapports d'usage, contention, refus, par service | ✅ | ✅ |
 | Interface web + exports Excel / CSV | ✅ | ✅ |
-| Authentification / rôles | ❌ (lecture seule, poste local) | ✅ |
+| Connexion comptes Windows / AD, restriction par groupe | ✅ | ✅ |
+| Rapports périodiques par e-mail | ✅ | ✅ |
+| Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
 | Alertes temps réel, libération de licences inactives | ❌ | ✅ |
 | Autres gestionnaires (RLM, DSLS, Sentinel…) | Extensible, à développer | ✅ |
 
@@ -221,6 +274,7 @@ products:                                # feature FlexLM -> produit lisible
 | Document | Contenu |
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
+| [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
 | [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation et évolutions prévues |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
@@ -231,13 +285,13 @@ products:                                # feature FlexLM -> produit lisible
 ```bash
 git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
 pip install -e ".[dev]"
-python -m pytest                     # 50 tests, SQLite en mémoire, aucun serveur requis
+python -m pytest                     # ~80 tests, SQLite en mémoire, aucun serveur requis
 freelm web --demo --open             # interface sur données simulées
 ```
 
 La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Linux et
 Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
-l'interface dans un vrai navigateur (Playwright), démonstration contre un vrai
+l'interface et de la page de connexion dans un vrai navigateur (Playwright), démonstration contre un vrai
 SQL Server 2022, construction et vérification de `FreeLM.exe`. Une étiquette
 `vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/FREE-LM/releases)
 avec l'exécutable.

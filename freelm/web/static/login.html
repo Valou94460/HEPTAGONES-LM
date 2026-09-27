@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeLM — Connexion</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="login-page">
+  <main class="login-card card">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/></svg>
+      <div>
+        <h1>FreeLM</h1>
+        <p class="subtitle">Suivi et reporting des licences FlexLM</p>
+      </div>
+    </div>
+    <form id="login-form" novalidate>
+      <label class="field">
+        <span>Identifiant Windows</span>
+        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus placeholder="identifiant ou DOMAINE\identifiant">
+      </label>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </label>
+      <div id="login-error" class="error" role="alert" hidden></div>
+      <button type="submit" id="login-submit" class="btn primary">Se connecter</button>
+      <p class="muted login-hint">Utilisez votre compte de session Windows.</p>
+    </form>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

@@ -1,15 +1,19 @@
 <#
 .SYNOPSIS
-    Enregistre les tâches planifiées FreeLM (collecte, rapport mensuel, purge).
+    Enregistre les tâches planifiées FreeLM (collecte, rapport mensuel, envoi par e-mail, purge).
 
 .EXAMPLE
     .\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm"
+.EXAMPLE
+    .\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm" -WithWebInterface
+    (ajoute l'interface web permanente, démarrée avec le serveur : section web du YAML)
     (le mot de passe du compte est demandé ; utiliser un gMSA "DOMAINE\gmsa_freelm$" pour s'en passer)
 #>
 param(
     [string]$FreeLMHome = "C:\FreeLM",
     [string]$ServiceAccount = "NT AUTHORITY\SYSTEM",
-    [int]$CollectIntervalMinutes = 5
+    [int]$CollectIntervalMinutes = 5,
+    [switch]$WithWebInterface
 )
 
 $ErrorActionPreference = "Stop"
@@ -48,10 +52,27 @@ Register-ScheduledTask -TaskName "FreeLM - Rapport mensuel" -TaskPath "\FreeLM\"
     -Trigger (New-ScheduledTaskTrigger -Daily -At 6am) -Settings $settings `
     -Description "Rapport Excel du mois précédent (généré une seule fois par mois)"
 
-# 3. Purge hebdomadaire des données au-delà de la rétention
+# 3. Envoi des rapports par e-mail aux abonnés (section email du YAML) : tâche
+#    quotidienne, chaque abonnement n'est envoyé qu'une fois par période (--skip-sent).
+Register-ScheduledTask -TaskName "FreeLM - Envoi des rapports" -TaskPath "\FreeLM\" -Force @register `
+    -Action (New-FreeLMAction "send-report --skip-sent") `
+    -Trigger (New-ScheduledTaskTrigger -Daily -At 7am) -Settings $settings `
+    -Description "Rapports mensuels par e-mail (une fois par période)"
+
+# 4. Purge hebdomadaire des données au-delà de la rétention
 Register-ScheduledTask -TaskName "FreeLM - Purge" -TaskPath "\FreeLM\" -Force @register `
     -Action (New-FreeLMAction "purge") `
     -Trigger (New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At 3am) -Settings $settings `
     -Description "Purge selon la politique de rétention"
+
+# 5. (option) Interface web permanente : démarrée avec le serveur, relancée en cas d'arrêt
+if ($WithWebInterface) {
+    $webSettings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew `
+        -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)
+    Register-ScheduledTask -TaskName "FreeLM - Interface web" -TaskPath "\FreeLM\" -Force @register `
+        -Action (New-FreeLMAction "web") -Trigger (New-ScheduledTaskTrigger -AtStartup) -Settings $webSettings `
+        -Description "Interface web FreeLM (adresse, HTTPS et authentification : section web du YAML)"
+    Start-ScheduledTask -TaskName "FreeLM - Interface web" -TaskPath "\FreeLM\"
+}
 
 Write-Host "Tâches FreeLM enregistrées sous \FreeLM\ dans le Planificateur de tâches."

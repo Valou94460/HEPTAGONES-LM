@@ -11,6 +11,7 @@ Vue d'ensemble ::
                      │             └─< license_event   >─ app_user, workstation
                      ├─< collection_run   (journal des collectes)
                      └─< collector_state  (offset des logs...)
+    report_delivery   (envois de rapports par e-mail)
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import textwrap
 
 from freelm.storage.db import Database
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -146,6 +147,16 @@ TABLES: dict[str, str] = {
         updated_at {DT} NOT NULL,
         PRIMARY KEY (server_id, collector)
     """,
+    "report_delivery": """
+        id {BIGID},
+        subscription NVARCHAR(100) NOT NULL,
+        period_start {DT} NOT NULL,
+        period_end {DT} NOT NULL,
+        sent_at {DT} NOT NULL,
+        recipients NVARCHAR(2000) NOT NULL,
+        status NVARCHAR(10) NOT NULL,
+        message NVARCHAR(2000) NULL
+    """,
 }
 
 INDEXES: dict[str, str] = {
@@ -157,6 +168,7 @@ INDEXES: dict[str, str] = {
     "ix_snapshot_time": "usage_snapshot (snapshot_time)",
     "ix_hourly_time": "usage_hourly (hour_start)",
     "ix_run_server_time": "collection_run (server_id, started_at)",
+    "ix_delivery_sub_period": "report_delivery (subscription, period_start)",
 }
 
 VIEWS: dict[str, str] = {
@@ -248,3 +260,5 @@ def create_schema(db: Database) -> None:
             db.execute(stmt)
         if not db.scalar("SELECT COUNT(*) FROM schema_info"):
             db.execute("INSERT INTO schema_info (version) VALUES (?)", [SCHEMA_VERSION])
+        else:  # évolution : les nouvelles tables sont créées ci-dessus (ordres idempotents)
+            db.execute("UPDATE schema_info SET version = ? WHERE version < ?", [SCHEMA_VERSION, SCHEMA_VERSION])

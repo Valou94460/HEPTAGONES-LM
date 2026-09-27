@@ -1,5 +1,5 @@
 -- Schéma FreeLM (généré par `freelm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 1
+-- Version du schéma : 2
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -133,6 +133,19 @@ CREATE TABLE dbo.collector_state (
 )
 GO
 
+IF OBJECT_ID(N'dbo.report_delivery', N'U') IS NULL
+CREATE TABLE dbo.report_delivery (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    subscription NVARCHAR(100) NOT NULL,
+    period_start DATETIME2(0) NOT NULL,
+    period_end DATETIME2(0) NOT NULL,
+    sent_at DATETIME2(0) NOT NULL,
+    recipients NVARCHAR(2000) NOT NULL,
+    status NVARCHAR(10) NOT NULL,
+    message NVARCHAR(2000) NULL
+)
+GO
+
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_session_feature_time')
 CREATE INDEX ix_session_feature_time ON dbo.license_session (feature_id, checkout_time)
 GO
@@ -163,6 +176,10 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_run_server_time')
 CREATE INDEX ix_run_server_time ON dbo.collection_run (server_id, started_at)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_delivery_sub_period')
+CREATE INDEX ix_delivery_sub_period ON dbo.report_delivery (subscription, period_start)
 GO
 
 CREATE OR ALTER VIEW dbo.v_session_detail AS

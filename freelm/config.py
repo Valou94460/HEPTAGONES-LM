@@ -66,6 +66,75 @@ class RetentionConfig:
 
 
 @dataclass
+class AuthConfig:
+    """Authentification de l'interface web.
+
+    * ``none``   : pas d'authentification (interface limitée au poste local par défaut).
+    * ``ldap``   : page de connexion, identifiants vérifiés auprès de l'Active Directory.
+    * ``header`` : authentification unique Windows assurée par un reverse proxy (IIS)
+      qui transmet l'utilisateur dans un en-tête HTTP.
+    """
+
+    mode: str = "none"
+    # --- ldap ---
+    ldap_servers: list[str] = field(default_factory=list)   # ex. ldaps://dc01.entreprise.local
+    ldap_starttls: bool = False            # ldap:// + STARTTLS
+    ldap_ca_file: str | None = None        # AC interne pour valider le certificat du DC
+    ldap_validate_cert: bool = True
+    base_dn: str = ""                      # ex. DC=entreprise,DC=local
+    upn_suffix: str | None = None          # connexion directe en user@suffixe (AD)
+    bind_dn: str | None = None             # sinon : compte de service pour rechercher l'utilisateur
+    bind_password: str | None = None
+    user_filter: str = "(sAMAccountName={username})"
+    allowed_groups: list[str] = field(default_factory=list)   # vide = tout utilisateur authentifié
+    # --- header ---
+    header_name: str = "X-Remote-User"
+    trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1", "::1"])
+    allowed_users: list[str] = field(default_factory=list)
+    # --- commun ---
+    session_hours: float = 8.0
+    max_failures: int = 5                  # échecs avant blocage temporaire
+    lockout_minutes: int = 15
+
+
+@dataclass
+class WebConfig:
+    host: str = "127.0.0.1"
+    port: int = 8765
+    tls_cert: str | None = None            # certificat PEM : active HTTPS
+    tls_key: str | None = None
+    public_url: str | None = None          # adresse de l'interface, citée dans les e-mails
+    allow_insecure_http: bool = False      # autoriser la connexion LDAP en HTTP sur le réseau (déconseillé)
+    auth: AuthConfig = field(default_factory=AuthConfig)
+
+
+@dataclass
+class Subscription:
+    """Abonnement à l'envoi périodique du rapport par e-mail."""
+
+    name: str
+    recipients: list[str]
+    period: str = "last-month"
+    servers: list[str] = field(default_factory=list)
+    products: list[str] = field(default_factory=list)
+    attach_excel: bool = True
+    subject: str | None = None
+
+
+@dataclass
+class EmailConfig:
+    smtp_host: str | None = None
+    smtp_port: int = 25
+    security: str = "starttls"             # starttls | ssl | none
+    username: str | None = None
+    password: str | None = None
+    sender: str = "FreeLM <freelm@localhost>"
+    timeout_s: int = 30
+    max_attachment_mb: float = 15.0
+    subscriptions: list[Subscription] = field(default_factory=list)
+
+
+@dataclass
 class AppConfig:
     database: DatabaseConfig
     servers: list[ServerConfig]
@@ -75,6 +144,8 @@ class AppConfig:
     lmutil_path: str = "lmutil"
     log_file: str | None = None
     log_level: str = "INFO"
+    web: WebConfig = field(default_factory=WebConfig)
+    email: EmailConfig = field(default_factory=EmailConfig)
 
     def server(self, name: str) -> ServerConfig:
         for srv in self.servers:
@@ -168,6 +239,8 @@ def parse_config(raw: dict) -> AppConfig:
     logging_cfg = raw.get("logging") or {}
 
     return AppConfig(
+        web=_parse_web(raw.get("web") or {}),
+        email=_parse_email(raw.get("email") or {}),
         database=DatabaseConfig(connection_string=conn),
         servers=servers,
         products=products,
@@ -177,3 +250,102 @@ def parse_config(raw: dict) -> AppConfig:
         log_file=_expand(logging_cfg.get("file")),
         log_level=logging_cfg.get("level", "INFO"),
     )
+
+
+PERIODS = ("last-month", "this-month", "last-week", "last-7d", "last-year")
+
+
+def _as_list(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, str):
+        return [value]
+    return [str(v) for v in value]
+
+
+def _parse_web(w: dict) -> WebConfig:
+    a = w.get("auth") or {}
+    auth = AuthConfig(
+        mode=str(a.get("mode", "none")).lower(),
+        ldap_servers=_as_list(a.get("ldap_servers") or a.get("ldap_server")),
+        ldap_starttls=bool(a.get("ldap_starttls", False)),
+        ldap_ca_file=_expand(a.get("ldap_ca_file")),
+        ldap_validate_cert=bool(a.get("ldap_validate_cert", True)),
+        base_dn=a.get("base_dn", ""),
+        upn_suffix=a.get("upn_suffix"),
+        bind_dn=_expand(a.get("bind_dn")),
+        bind_password=_expand(a.get("bind_password")),
+        user_filter=a.get("user_filter", "(sAMAccountName={username})"),
+        allowed_groups=_as_list(a.get("allowed_groups")),
+        header_name=a.get("header_name", "X-Remote-User"),
+        trusted_proxies=_as_list(a.get("trusted_proxies")) or ["127.0.0.1", "::1"],
+        allowed_users=[u.lower() for u in _as_list(a.get("allowed_users"))],
+        session_hours=float(a.get("session_hours", 8)),
+        max_failures=int(a.get("max_failures", 5)),
+        lockout_minutes=int(a.get("lockout_minutes", 15)),
+    )
+    if auth.mode not in ("none", "ldap", "header"):
+        raise ConfigError("web.auth.mode doit valoir none, ldap ou header")
+    if auth.mode == "ldap":
+        if not auth.ldap_servers:
+            raise ConfigError("web.auth.ldap_servers est obligatoire en mode ldap")
+        if not auth.base_dn:
+            raise ConfigError("web.auth.base_dn est obligatoire en mode ldap")
+        if not auth.upn_suffix and not auth.bind_dn:
+            raise ConfigError("web.auth : renseigner upn_suffix (AD) ou bind_dn/bind_password (compte de service)")
+        if "{username}" not in auth.user_filter:
+            raise ConfigError("web.auth.user_filter doit contenir {username}")
+    web = WebConfig(
+        host=w.get("host", "127.0.0.1"),
+        port=int(w.get("port", 8765)),
+        tls_cert=_expand(w.get("tls_cert")),
+        tls_key=_expand(w.get("tls_key")),
+        public_url=w.get("public_url"),
+        allow_insecure_http=bool(w.get("allow_insecure_http", False)),
+        auth=auth,
+    )
+    if bool(web.tls_cert) != bool(web.tls_key):
+        raise ConfigError("web.tls_cert et web.tls_key doivent être renseignés ensemble")
+    return web
+
+
+def _parse_email(e: dict) -> EmailConfig:
+    subs = []
+    names: set[str] = set()
+    for i, s in enumerate(e.get("subscriptions") or []):
+        try:
+            sub = Subscription(
+                name=s["name"],
+                recipients=_as_list(s["recipients"]),
+                period=s.get("period", "last-month"),
+                servers=_as_list(s.get("servers")),
+                products=_as_list(s.get("products")),
+                attach_excel=bool(s.get("attach_excel", True)),
+                subject=s.get("subject"),
+            )
+        except KeyError as exc:
+            raise ConfigError(f"email.subscriptions[{i}] : champ obligatoire manquant {exc}") from None
+        if not sub.recipients:
+            raise ConfigError(f"Abonnement {sub.name} : aucun destinataire")
+        if sub.period not in PERIODS:
+            raise ConfigError(f"Abonnement {sub.name} : period doit valoir {', '.join(PERIODS)}")
+        if sub.name.lower() in names:
+            raise ConfigError(f"Abonnement en double : {sub.name}")
+        names.add(sub.name.lower())
+        subs.append(sub)
+    cfg = EmailConfig(
+        smtp_host=e.get("smtp_host"),
+        smtp_port=int(e.get("smtp_port", 25)),
+        security=str(e.get("security", "starttls")).lower(),
+        username=_expand(e.get("username")),
+        password=_expand(e.get("password")),
+        sender=e.get("sender", "FreeLM <freelm@localhost>"),
+        timeout_s=int(e.get("timeout_s", 30)),
+        max_attachment_mb=float(e.get("max_attachment_mb", 15)),
+        subscriptions=subs,
+    )
+    if cfg.security not in ("starttls", "ssl", "none"):
+        raise ConfigError("email.security doit valoir starttls, ssl ou none")
+    if subs and not cfg.smtp_host:
+        raise ConfigError("email.smtp_host est obligatoire pour envoyer des rapports")
+    return cfg

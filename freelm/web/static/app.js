@@ -143,6 +143,20 @@
       return;
     }
     $("version").textContent = meta.version || "";
+    fetchJSON("api/me").then(me => {
+      if (me.auth === "none") return;
+      $("user-badge").hidden = false;
+      $("user-name").textContent = me.display_name || me.user;
+      $("user-name").title = me.department ? `${me.user} — ${me.department}` : me.user;
+      if (me.auth === "ldap") {
+        const b = $("logout");
+        b.hidden = false;
+        b.addEventListener("click", async () => {
+          await fetch("api/logout", { method: "POST", credentials: "same-origin" }).catch(() => null);
+          location.replace("login.html");
+        });
+      }
+    }).catch(() => null);
     const cov = meta.data_start ? `Données du ${fmt(meta.data_start, "date")} au ${fmt(meta.data_end, "date")}` : "Aucune donnée collectée";
     $("coverage").textContent = cov;
     renderHealth();
@@ -227,8 +241,17 @@
     saveHash();
     load();
   }
+  function toLogin() {
+    try { sessionStorage.setItem("freelm_next_hash", location.hash); } catch (e) { /* stockage indisponible */ }
+    location.replace("login.html" + location.hash);
+  }
   async function fetchJSON(url) {
-    const r = await fetch(url);
+    const r = await fetch(url, { credentials: "same-origin" });
+    if (r.status === 401) {
+      const body = await r.json().catch(() => ({}));
+      if (body.login) toLogin();
+      throw new Error(body.error || "Authentification requise");
+    }
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
     return body;
@@ -351,7 +374,8 @@
     button.disabled = true;
     button.textContent = "Export…";
     try {
-      const r = await fetch("api/export?" + q.toString());
+      const r = await fetch("api/export?" + q.toString(), { credentials: "same-origin" });
+      if (r.status === 401) { toLogin(); return; }
       if (!r.ok) {
         const body = await r.json().catch(() => ({}));
         throw new Error(body.error || `HTTP ${r.status}`);
