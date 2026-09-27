@@ -1,0 +1,4 @@
+PyYAML>=6.0
+openpyxl>=3.1
+pyodbc>=5.0
+ldap3>=2.9

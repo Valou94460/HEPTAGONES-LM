@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HeptagonesLM — Connexion</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
+</head>
+<body class="login-page">
+  <main class="login-card card">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="hlm-logo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f6ff0"/><stop offset="1" stop-color="#5cc8e6"/></linearGradient></defs><polygon points="16.00,4.20 25.54,8.79 27.89,19.11 21.29,27.39 10.71,27.39 4.11,19.11 6.46,8.79" fill="none" stroke="url(#hlm-logo)" stroke-width="3.2" stroke-linejoin="round"/><polygon points="16.00,10.80 20.38,12.91 21.46,17.65 18.43,21.45 13.57,21.45 10.54,17.65 11.62,12.91" fill="url(#hlm-logo)" stroke="url(#hlm-logo)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <div>
+        <h1>HeptagonesLM</h1>
+        <p class="subtitle">Suivi et reporting des licences FlexLM</p>
+      </div>
+    </div>
+    <form id="login-form" novalidate>
+      <label class="field">
+        <span>Identifiant Windows</span>
+        <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus placeholder="identifiant ou DOMAINE\identifiant">
+      </label>
+      <label class="field">
+        <span>Mot de passe</span>
+        <input type="password" id="password" name="password" autocomplete="current-password" required>
+      </label>
+      <div id="login-error" class="error" role="alert" hidden></div>
+      <button type="submit" id="login-submit" class="btn primary">Se connecter</button>
+      <p class="muted login-hint">Utilisez votre compte de session Windows.</p>
+    </form>
+  </main>
+  <script src="login.js"></script>
+</body>
+</html>

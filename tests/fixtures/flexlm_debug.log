@@ -1,0 +1,18 @@
+ 8:00:01 (lmgrd) -----------------------------------------------
+ 8:00:01 (lmgrd)   Please Note:
+ 8:00:01 (lmgrd) FlexNet Licensing (v11.16.2.0 build 242433 x64_n6) started on licsrv1 (IBM PC) (9/23/2024)
+ 8:00:01 (lmgrd) Copyright (c) 1988-2019 Flexera. All Rights Reserved.
+ 8:00:05 (adskflex) Server started on licsrv1 for:	87545ACD_2024_0F
+ 8:15:40 (adskflex) OUT: "87545ACD_2024_0F" jdoe@PC123  
+ 8:20:00 (MLM) OUT: "MATLAB" jdoe@PC123  (2 licenses)
+ 9:12:05 (adskflex) IN: "87545ACD_2024_0F" jdoe@PC123  
+ 9:15:00 (adskflex) DENIED: "87545ACD_2024_0F" bob@PC999  (Licensed number of users already reached. (-4,342:10054 ""))
+ 9:16:00 (adskflex) DENIED: "87545ACD_2024_0F" bob@PC999  (Licensed number of users already reached. (-4,342:10054 ""))
+10:00:00 (MLM) IN: "MATLAB" jdoe@PC123  (INACTIVE)
+10:05:00 (MLM) QUEUED: "MATLAB" bob@PC999  
+10:06:00 (MLM) UNSUPPORTED: "FOO" bob@PC999  (License server system does not support this feature. (-18,327:10054 ""))
+23:50:00 (adskflex) OUT: "87545ACD_2024_0F" Jean Dupont@CAO-WS01  
+ 0:10:00 (adskflex) IN: "87545ACD_2024_0F" Jean Dupont@CAO-WS01  
+ 6:00:00 (lmgrd) TIMESTAMP 9/24/2024
+ 7:30:00 (adskflex) OUT: "87545ACD_2024_0F" asmith@PC456  
+18:00:00 (adskflex) EXITING DUE TO SIGNAL 15 Exit reason 2

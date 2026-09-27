@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installation de HeptagonesLM</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="setup.css">
+  <script src="theme.js"></script>
+</head>
+<body class="setup">
+<div class="setup-shell">
+  <aside class="setup-side" aria-label="Étapes de l'installation">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="hlm-logo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f6ff0"/><stop offset="1" stop-color="#5cc8e6"/></linearGradient></defs><polygon points="16.00,4.20 25.54,8.79 27.89,19.11 21.29,27.39 10.71,27.39 4.11,19.11 6.46,8.79" fill="none" stroke="url(#hlm-logo)" stroke-width="3.2" stroke-linejoin="round"/><polygon points="16.00,10.80 20.38,12.91 21.46,17.65 18.43,21.45 13.57,21.45 10.54,17.65 11.62,12.91" fill="url(#hlm-logo)" stroke="url(#hlm-logo)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <div>
+        <div class="brand-name">HeptagonesLM</div>
+        <p class="subtitle">Assistant d'installation</p>
+      </div>
+    </div>
+    <ol id="stepper" class="stepper"></ol>
+    <div class="side-foot">
+      <span id="sys-badge" class="badge"></span>
+      <span class="muted">HeptagonesLM <span id="version"></span></span>
+    </div>
+  </aside>
+
+  <main class="setup-main">
+    <div id="sim-banner" class="sim-banner" role="note" hidden>
+      <b>Mode simulation</b> — l'assistant montre l'installation complète sans rien modifier sur ce poste.
+    </div>
+    <header class="setup-head">
+      <div id="step-eyebrow" class="eyebrow"></div>
+      <h1 id="step-title">Chargement…</h1>
+      <p id="step-desc" class="muted"></p>
+    </header>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section id="step-body" class="setup-body" aria-live="polite"></section>
+    <footer class="setup-foot">
+      <button id="prev" class="btn ghost" type="button">Précédent</button>
+      <span class="spacer"></span>
+      <span id="foot-msg" class="muted"></span>
+      <button id="next" class="btn primary" type="button">Suivant</button>
+    </footer>
+  </main>
+</div>
+<script src="setup.js"></script>
+</body>
+</html>

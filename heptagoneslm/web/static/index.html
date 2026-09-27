@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>HeptagonesLM — Licences</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
+</head>
+<body>
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="hlm-logo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f6ff0"/><stop offset="1" stop-color="#5cc8e6"/></linearGradient></defs><polygon points="16.00,4.20 25.54,8.79 27.89,19.11 21.29,27.39 10.71,27.39 4.11,19.11 6.46,8.79" fill="none" stroke="url(#hlm-logo)" stroke-width="3.2" stroke-linejoin="round"/><polygon points="16.00,10.80 20.38,12.91 21.46,17.65 18.43,21.45 13.57,21.45 10.54,17.65 11.62,12.91" fill="url(#hlm-logo)" stroke="url(#hlm-logo)" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <div>
+        <div class="brand-name">HeptagonesLM</div>
+        <p class="subtitle">Licences FlexLM</p>
+      </div>
+    </div>
+    <nav id="nav" aria-label="Rapports"></nav>
+    <div class="sidebar-foot">
+      <span id="coverage" class="muted"></span>
+      <div class="theme-switch" role="group" aria-label="Thème">
+        <button type="button" data-theme-choice="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-theme-choice="light" aria-pressed="false">Clair</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Sombre</button>
+      </div>
+      <span class="muted">HeptagonesLM <span id="version"></span> · logiciel libre (MIT)</span>
+    </div>
+  </aside>
+
+  <div class="content">
+    <header class="topbar">
+      <button id="menu" class="icon-btn" type="button" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="page-head">
+        <h1 id="page-title">Tableau de bord</h1>
+        <p id="page-desc" class="muted"></p>
+      </div>
+      <div class="top-actions">
+        <button id="health" class="health" type="button" hidden></button>
+        <span id="user-badge" class="user-badge" hidden>
+          <span id="user-avatar" class="avatar" aria-hidden="true"></span>
+          <span id="user-name"></span>
+          <button id="logout" class="btn ghost small" type="button" hidden>Se déconnecter</button>
+        </span>
+      </div>
+    </header>
+
+    <section class="filterbar" aria-label="Filtres">
+      <div class="segmented" id="presets" role="group" aria-label="Période">
+        <button type="button" data-preset="7d">7 j</button>
+        <button type="button" data-preset="30d">30 j</button>
+        <button type="button" data-preset="90d">90 j</button>
+        <button type="button" data-preset="mtd">Ce mois</button>
+        <button type="button" data-preset="lastm">Mois préc.</button>
+        <button type="button" data-preset="ytd">Année</button>
+        <button type="button" data-preset="all">Tout</button>
+      </div>
+      <div class="dates">
+        <input type="date" id="start" aria-label="Du">
+        <span class="muted">→</span>
+        <input type="date" id="end" aria-label="Au">
+      </div>
+      <div class="ms" id="ms-server"></div>
+      <div class="ms" id="ms-product"></div>
+      <div class="ms" id="ms-user"></div>
+      <div class="ms" id="ms-department"></div>
+      <button id="reset" class="btn ghost small" type="button" hidden>Réinitialiser</button>
+      <span class="spacer"></span>
+      <div class="exports" role="group" aria-label="Exporter">
+        <button class="btn small" type="button" data-export="xlsx" title="Cette vue, au format Excel (avec graphique)">Excel</button>
+        <button class="btn small" type="button" data-export="csv" title="Cette vue, CSV pour Excel (séparateur ;)">CSV</button>
+        <button class="btn small" type="button" data-export="json" title="Cette vue, au format JSON">JSON</button>
+        <button class="btn small primary" type="button" data-export="full" title="Classeur complet 8 onglets, filtres serveurs et produits appliqués">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>Rapport complet
+        </button>
+      </div>
+    </section>
+
+    <div id="error" class="error" role="alert" hidden></div>
+    <main id="view" aria-live="polite"></main>
+  </div>
+</div>
+<div id="tooltip" class="tooltip" role="status" hidden></div>
+
+<script src="charts.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

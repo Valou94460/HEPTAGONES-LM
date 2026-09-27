@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+# données locales
+heptagoneslm.yaml
+*.db
+reports/
+logs/
+node_modules/
+package-lock.json
+*.spec
+.build-venv/
+ui-captures/

@@ -1,0 +1,105 @@
+# Publication d'une version : `git tag v0.2.0 && git push origin v0.2.0`
+#
+# Sécurité de la chaîne de publication :
+# - le job « build » (tests, installation des dépendances, PyInstaller) n'a qu'un
+#   droit de LECTURE sur le dépôt : une dépendance compromise ne peut pas altérer
+#   la release ni le code ;
+# - le job « publish » a le droit d'écriture mais n'exécute aucun code tiers : il
+#   calcule les empreintes SHA-256 et crée la release avec les fichiers construits.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  build:
+    name: Construction ${{ github.ref_name }}
+    runs-on: windows-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller
+          python -m pytest -q
+
+      - name: Construction de HeptagonesLM.exe
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console --name HeptagonesLM --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
+          ./dist/HeptagonesLM.exe --version
+          pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
+          ./dist/HeptagonesLM-Setup.exe --version
+
+      - name: Vérification rapide
+        run: |
+          cd dist
+          ./HeptagonesLM.exe demo --days 3 --output-dir verif
+          test -s verif/reports/*.xlsx
+
+      - name: Paquet de distribution
+        run: |
+          mkdir -p paquet/HeptagonesLM/sql paquet/HeptagonesLM/scripts
+          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/HeptagonesLM/
+          cp config/heptagoneslm.example.yaml paquet/HeptagonesLM/heptagoneslm.example.yaml
+          cp sql/sqlserver/*.sql paquet/HeptagonesLM/sql/
+          cp scripts/*.ps1 scripts/*.bat paquet/HeptagonesLM/scripts/
+          mkdir -p livrables
+          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe livrables/
+          (cd paquet && 7z a -tzip "../livrables/HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" HeptagonesLM > /dev/null)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: livrables
+          path: livrables/
+          if-no-files-found: error
+
+  publish:
+    name: Publication ${{ github.ref_name }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: livrables
+          path: livrables
+
+      - name: Empreintes SHA-256
+        run: |
+          cd livrables
+          sha256sum HeptagonesLM.exe HeptagonesLM-Setup.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
+          cat SHA256SUMS
+
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          cd livrables
+          gh release create "$GITHUB_REF_NAME" \
+            HeptagonesLM-Setup.exe HeptagonesLM.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
+            --title "HeptagonesLM $GITHUB_REF_NAME" --generate-notes \
+            --notes "Installation sur serveur : HeptagonesLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash HeptagonesLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
