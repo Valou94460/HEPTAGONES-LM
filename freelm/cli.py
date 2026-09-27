@@ -101,6 +101,10 @@ def cmd_collect(cfg: AppConfig, args) -> int:
     from freelm.service import CollectionService
 
     with _open_db(cfg) as db:
+        if not db.try_lock("freelm_collect"):
+            log.warning("Une collecte est déjà en cours : exécution ignorée")
+            print("Une collecte est déjà en cours : exécution ignorée")
+            return 0
         results = CollectionService(cfg, db).collect_all(only=args.server)
     failed = [r for r in results if r.status != "OK"]
     for r in results:

@@ -1,164 +1,247 @@
 # FreeLM
 
+[![CI](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
+![Plateformes](https://img.shields.io/badge/plateformes-Windows%20%7C%20Linux-lightgrey)
+![Base](https://img.shields.io/badge/base-SQL%20Server%20%7C%20SQLite-orange)
+[![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
+
 **Suivi et reporting open source de la consommation de licences FlexLM / FlexNet**
-(Autodesk, Ansys, MATLAB, et tout éditeur utilisant FlexNet Publisher).
+(Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher).
+Une alternative gratuite à OpenLM pour le reporting d'usage.
 
-FreeLM collecte périodiquement l'état des serveurs de licences (`lmutil lmstat`)
-et/ou lit leurs logs debug, historise la consommation dans SQL Server, et produit
-des rapports Excel : qui utilise quoi, quand, taux d'utilisation par produit, pics
-de contention et refus.
+FreeLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
+leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
+quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
+interface web et en exports Excel.
 
-- Pas d'agent sur les postes clients : collecte par tâche planifiée.
-- **Interface web locale** (`freelm web`) : rapports à la demande, filtres, graphiques,
-  exports Excel / CSV / JSON — et **`FreeLM.exe`** autonome pour Windows (double-clic).
-- Python 3.10+, dépendances minimales : `PyYAML`, `openpyxl`, `pyodbc`.
-- Architecture modulaire : d'autres gestionnaires (RLM…) peuvent être ajoutés.
+![Synthèse](docs/images/synthese.png)
 
-➡️ [Architecture, schéma de base et flux](docs/ARCHITECTURE.md) ·
-[Plan d'implémentation](docs/PLAN.md)
+## Sommaire
 
-## Interface web et FreeLM.exe
+- [Fonctionnalités](#fonctionnalités)
+- [Démarrage rapide](#démarrage-rapide)
+- [Installation en production](#installation-en-production)
+- [Utilisation](#utilisation)
+- [Interface web](#interface-web)
+- [Configuration](#configuration)
+- [Comparaison avec OpenLM](#comparaison-avec-openlm)
+- [Documentation](#documentation)
+- [Développement et tests](#développement-et-tests)
 
-```bash
-freelm -c freelm.yaml web --open      # sur votre base
-freelm web --demo --open              # sur des données simulées
-```
+## Fonctionnalités
 
-Ou, sans installer Python : télécharger **`FreeLM.exe`** (onglet *Actions* du
-dépôt › dernière exécution › artefact `FreeLM-windows`, ou `packaging/build_exe.ps1`)
-et double-cliquer. L'exécutable ouvre l'interface dans le navigateur sur le
-`freelm.yaml` placé à côté de lui (ou désigné par `FREELM_CONFIG`), à défaut sur
-des données de démonstration. Avec des arguments, il remplace la commande `freelm`
-(`FreeLM.exe -c freelm.yaml collect` dans le Planificateur de tâches).
-
-| Onglet | Contenu |
+| | |
 |---|---|
-| Synthèse | Indicateurs clés, taux d'occupation par produit, tableau complet |
-| Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
-| Répartition | Heures par utilisateur, poste, service, produit, serveur ou éditeur |
-| Croisement | Tableau croisé (utilisateur, poste ou service) × produit |
-| Profil horaire | Carte de chaleur heure × jour de semaine |
-| Contention / Refus | Jours saturés, refus DENIED détaillés |
-| Sessions | Données brutes filtrables |
-| Collectes | Journal et état des collectes |
+| **Collecte** | Sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug FlexLM (refus, sessions à la seconde). Aucun agent sur les postes clients. |
+| **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
+| **Interface web** | 9 rapports à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode sombre, liens partageables. |
+| **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
+| **FreeLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
+| **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, purge). |
+| **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
+| **Extensible** | Architecture à collecteurs : d'autres gestionnaires (RLM, LM-X…) s'ajoutent sans toucher au reste. |
 
-Filtres : période (préréglages ou dates), serveurs, produits, utilisateurs,
-services. L'URL conserve les filtres (lien partageable). Chaque onglet s'exporte
-en **Excel** (avec graphique natif), **CSV** (format Excel français) ou **JSON** ;
-**Rapport complet** produit le classeur 8 onglets filtré. L'interface est en
-lecture seule et n'écoute que sur le poste local par défaut (`--host 0.0.0.0`
-pour la partager sur le réseau : pas d'authentification, réseau de confiance
-uniquement).
+<table>
+<tr>
+<td><img src="docs/images/usage-temps.png" alt="Usage dans le temps"></td>
+<td><img src="docs/images/repartition-service.png" alt="Répartition par service"></td>
+</tr>
+<tr>
+<td align="center"><em>Taux d'occupation dans le temps</em></td>
+<td align="center"><em>Heures d'utilisation par service</em></td>
+</tr>
+</table>
 
-Services et noms complets : `freelm import-users users.csv` (export AD/RH,
-colonnes `username;display_name;department`).
+## Démarrage rapide
 
-## Essayer sans serveur de licences : environnement de démonstration
+### Essayer en 1 minute (Windows, sans rien installer)
+
+1. Télécharger **`FreeLM.exe`** depuis la page [Releases](https://github.com/Valou94460/FREE-LM/releases)
+   (ou, pour la dernière version de développement : onglet
+   [Actions](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml) › dernière exécution › artefact `FreeLM-windows`).
+2. Double-cliquer : l'interface s'ouvre dans le navigateur sur des **données de
+   démonstration** (3 serveurs simulés, ~45 utilisateurs, 90 jours).
+
+> Windows SmartScreen peut avertir au premier lancement (exécutable non signé) :
+> « Informations complémentaires » › « Exécuter quand même ».
+
+### Avec Python
 
 ```bash
-pip install .
-freelm demo --days 30          # simule 30 jours sur 3 serveurs, génère ./demo/reports/*.xlsx
-freelm -c demo/freelm.demo.yaml collect                  # collecte « en direct » (faux lmutil)
-freelm -c demo/freelm.demo.yaml report --period this-month
+pip install git+https://github.com/Valou94460/FREE-LM.git
+freelm web --demo --open          # interface sur données simulées
+freelm demo --days 30             # ou : base + rapport Excel de démonstration dans ./demo
 ```
 
-`freelm demo` simule trois serveurs (Autodesk, Ansys avec log debug, MATLAB), ~45
-utilisateurs, heures de bureau, week-ends et pénuries de jetons. Le simulateur
-produit de vraies sorties `lmstat` et de vrais logs FlexNet, analysés par les
-parsers de FreeLM : toute la chaîne est exercée (parsing, sessions, base,
-rapport). Le répertoire `demo/` contient aussi un faux `lmutil` et une
-configuration prête à l'emploi : on peut planifier `collect` dessus pour tester
-le Planificateur de tâches. Pour cibler SQL Server :
-`freelm demo --connection-string "DRIVER={ODBC Driver 18 for SQL Server};SERVER=...;DATABASE=FreeLM_TEST;..."`
-(les données des serveurs de démonstration y sont remplacées à chaque exécution :
-utiliser une base de test dédiée).
+## Installation en production
 
-La CI GitHub Actions exécute cette démo sous Linux, Windows et contre un vrai
-SQL Server 2022 ; les rapports produits sont téléchargeables dans l'onglet
-**Actions** › exécution › **Artifacts**.
+Prérequis sur le serveur FreeLM (Windows) :
 
-## Installation (serveur Windows)
+- accès réseau aux serveurs de licences (port `lmgrd` et ports des démons vendeurs) ;
+- `lmutil.exe` (fourni avec tout gestionnaire FlexLM, ex. Autodesk Network License Manager) ;
+- [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) ;
+- soit `FreeLM.exe`, soit Python 3.10+ (64 bits).
 
-Prérequis : Python 3.10+ (64 bits), [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server),
-et `lmutil.exe` (fourni avec tout gestionnaire FlexLM, ex. Autodesk Network License Manager).
+**1. Base de données** (une fois, par un DBA) :
+
+```powershell
+sqlcmd -S SQLSRV01 -i sql\sqlserver\00_create_database.sql   # base + compte de service
+```
+
+**2. Configuration** : copier [`config/freelm.example.yaml`](config/freelm.example.yaml)
+en `C:\FreeLM\freelm.yaml` et renseigner la base, `lmutil` et les serveurs.
+
+**3. Initialisation et vérification** :
 
 ```powershell
 cd C:\FreeLM
-git clone <url-du-depot> src
-py -3 -m venv venv
-.\venv\Scripts\pip install .\src
-copy src\config\freelm.example.yaml freelm.yaml   # puis éditer
+.\FreeLM.exe -c freelm.yaml init-db                    # crée les tables (ou sql\sqlserver\01_schema.sql)
+.\FreeLM.exe -c freelm.yaml test-server --server AUTODESK
+.\FreeLM.exe -c freelm.yaml collect
 ```
 
-Base de données :
+(avec Python : `py -3 -m venv venv`, `venv\Scripts\pip install .`, puis `venv\Scripts\freelm` à la place de `FreeLM.exe`)
+
+**4. Planification** :
 
 ```powershell
-# 1. (DBA) création de la base et du compte de service
-sqlcmd -S SQLSRV01 -i src\sql\sqlserver\00_create_database.sql
-# 2. création des tables (ou exécuter sql\sqlserver\01_schema.sql)
-.\venv\Scripts\freelm -c freelm.yaml init-db
+powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm"
 ```
 
-Vérification puis planification :
+Crée trois tâches : collecte toutes les 5 minutes, rapport Excel du mois précédent
+(généré une fois par mois, même si le 1er est manqué), purge hebdomadaire.
+
+**5. Référentiel** (recommandé) :
 
 ```powershell
-.\venv\Scripts\freelm -c freelm.yaml test-server --server AUTODESK
-.\venv\Scripts\freelm -c freelm.yaml collect
-powershell -ExecutionPolicy Bypass -File src\scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm"
-```
+# Services et noms complets depuis l'AD
+Get-ADUser -Filter * -Properties DisplayName,Department |
+  Select-Object SamAccountName,DisplayName,Department |
+  Export-Csv users.csv -NoTypeInformation -Encoding UTF8
+.\FreeLM.exe -c freelm.yaml import-users users.csv
 
-Le compte de service doit pouvoir joindre les ports lmgrd/démons vendeurs
-(pare-feu), lire les logs éventuels (partage SMB) et écrire dans la base.
+# Reprise de l'historique depuis des logs archivés
+.\FreeLM.exe -c freelm.yaml import-log --server ANSYS D:\archives\license_2026-08.log
+```
 
 ## Utilisation
 
 | Commande | Rôle |
 |---|---|
 | `freelm init-db` | Crée / complète le schéma, référence les serveurs du YAML |
-| `freelm collect [--server X]` | Une collecte (à planifier toutes les 5 min). Code retour 2 si un serveur est en échec |
-| `freelm report [--period last-month\|this-month\|last-week\|last-7d\|last-year]` | Rapport Excel |
-| `freelm report --from 2024-09-01 --to 2024-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
-| `freelm import-log --server X fichier1.log fichier2.log` | Reprise d'historique depuis des logs archivés |
+| `freelm collect [--server X]` | Une collecte (à planifier). Code retour 2 si un serveur est en échec |
+| `freelm web [--open] [--port 8765] [--host …] [--demo]` | Interface web |
+| `freelm report [--period last-month\|this-month\|last-week\|last-7d\|last-year]` | Rapport Excel complet |
+| `freelm report --from 2026-09-01 --to 2026-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
+| `freelm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
+| `freelm import-users users.csv` | Noms complets et services (export AD/RH) |
 | `freelm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
 | `freelm purge` | Applique la politique de rétention |
 | `freelm test-server --server X` | Interroge un serveur sans rien écrire |
 | `freelm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
-| `freelm ddl --dialect mssql` | Affiche le script SQL du schéma |
-| `freelm demo [--days N] [--connection-string ...]` | Environnement de démonstration simulé |
-| `freelm web [--open] [--port 8765] [--host ...] [--demo]` | Interface web (rapports, exports) |
-| `freelm import-users users.csv` | Noms complets et services des utilisateurs (export AD/RH) |
+| `freelm demo [--days N] [--connection-string …]` | Environnement de démonstration simulé |
+| `freelm ddl --dialect mssql` | Script SQL du schéma |
 
 Options globales : `-c freelm.yaml` (ou variable `FREELM_CONFIG`), `-v` (logs détaillés).
+`FreeLM.exe` accepte exactement les mêmes commandes.
+
+## Interface web
+
+```bash
+freelm -c freelm.yaml web --open
+```
+
+| Onglet | Contenu |
+|---|---|
+| Synthèse | Indicateurs clés, taux d'occupation par produit (moyen, au pic, heures ouvrées) |
+| Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
+| Répartition | Heures par utilisateur, poste, service, produit, serveur ou éditeur |
+| Croisement | Tableau croisé (utilisateur, poste ou service) × produit |
+| Profil horaire | Carte de chaleur heure × jour de semaine |
+| Contention | Jours avec saturation des jetons et/ou refus |
+| Refus | Détail des refus (DENIED) issus des logs |
+| Sessions | Données brutes filtrables |
+| Collectes | Journal et état de santé des collectes |
+
+- **Filtres** : période (préréglages ou dates), serveurs, produits, utilisateurs, services.
+  L'adresse de la page conserve les filtres : un lien partagé rouvre le même rapport.
+- **Exports** : bouton Excel / CSV / JSON sur chaque onglet, avec les filtres appliqués ;
+  « Rapport complet » produit le classeur 8 onglets.
+- **Sécurité** : lecture seule ; n'écoute que sur le poste local par défaut.
+  `--host 0.0.0.0` la rend accessible sur le réseau **sans authentification** :
+  réseau de confiance uniquement.
+
+<img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">
 
 ## Configuration
 
-Voir [`config/freelm.example.yaml`](config/freelm.example.yaml). L'essentiel :
+Exemple complet et commenté : [`config/freelm.example.yaml`](config/freelm.example.yaml).
 
 ```yaml
 database:
   connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;Trusted_Connection=yes;TrustServerCertificate=yes"
 lmutil_path: "C:/FreeLM/bin/lmutil.exe"
+
 servers:
   - name: AUTODESK
     port_at_host: "27000@licsrv1"
-    collectors: [lmstat]           # et/ou log
-    sessions_from: lmstat          # source des sessions : lmstat ou log
-products:
+    collectors: [lmstat]                 # sondage lmstat seul
+    sessions_from: lmstat
+  - name: ANSYS
+    port_at_host: "1055@licsrv2"
+    collectors: [lmstat, log]            # + log : refus et sessions à la seconde
+    sessions_from: log
+    log_path: "\\\\licsrv2\\ansys_logs$\\license.log"
+
+products:                                # feature FlexLM -> produit lisible
   - { pattern: "87545ACD_2024_*", product: "AutoCAD 2024", publisher: Autodesk }
+  - { pattern: "MATLAB", product: "MATLAB", publisher: MathWorks }
 ```
 
-## Développement
+**lmstat ou log ?** `lmstat` suffit pour les taux d'occupation et les sessions
+(précision : l'intervalle de sondage). Le **log** ajoute les refus et des sessions
+à la seconde : à activer dès que le fichier est accessible (partage réseau).
+
+## Comparaison avec OpenLM
+
+| | FreeLM | OpenLM |
+|---|:---:|:---:|
+| Coût de licence | Gratuit (MIT) | Payant |
+| Collecte FlexLM (lmstat + logs), sans agent client | ✅ | ✅ |
+| Historique SQL Server | ✅ | ✅ |
+| Rapports d'usage, contention, refus, par service | ✅ | ✅ |
+| Interface web + exports Excel / CSV | ✅ | ✅ |
+| Authentification / rôles | ❌ (lecture seule, poste local) | ✅ |
+| Alertes temps réel, libération de licences inactives | ❌ | ✅ |
+| Autres gestionnaires (RLM, DSLS, Sentinel…) | Extensible, à développer | ✅ |
+
+## Documentation
+
+| Document | Contenu |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
+| [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
+| [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation et évolutions prévues |
+| [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contribuer : environnement, tests, conventions |
+
+## Développement et tests
 
 ```bash
-pip install -e .[dev]
-python -m pytest          # ou : python -m unittest discover -s tests -t .
+git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
+pip install -e ".[dev]"
+python -m pytest                     # 50 tests, SQLite en mémoire, aucun serveur requis
+freelm web --demo --open             # interface sur données simulées
 ```
 
-Les tests utilisent SQLite en mémoire : aucun SQL Server ni serveur de licences
-n'est nécessaire. Pour un essai local complet, utiliser
-`connection_string: "sqlite:///freelm.db"` et `freelm import-log` sur
-`tests/fixtures/flexlm_debug.log`.
+La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Linux et
+Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
+l'interface dans un vrai navigateur (Playwright), démonstration contre un vrai
+SQL Server 2022, construction et vérification de `FreeLM.exe`. Une étiquette
+`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/FREE-LM/releases)
+avec l'exécutable.
 
 ## Licence
 
-MIT — voir [LICENSE](LICENSE).
+[MIT](LICENSE) — libre d'utilisation, de modification et de redistribution.

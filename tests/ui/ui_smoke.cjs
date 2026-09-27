@@ -61,6 +61,16 @@ const fs = require("fs");
         console.log(`export ${fmt} -> ${dl.suggestedFilename()} (${size} octets)`);
         if (size < 100) failures.push(`export ${fmt} vide`);
       }
+      // Navigation Précédent / Suivant entre onglets
+      await page.goto(`${base}/#type=summary&preset=all`);
+      await page.waitForSelector(".kpi");
+      await page.click('.tab[data-type="heatmap"]');
+      await page.waitForFunction(() => document.getElementById("table-title").textContent === "Profil horaire");
+      await page.goBack();
+      await page.waitForFunction(() => document.getElementById("table-title").textContent === "Synthèse par produit", null, { timeout: 10000 })
+        .catch(() => failures.push("bouton Précédent : retour à la Synthèse non effectué"));
+      console.log("précédent ->", await page.$eval("#table-title", e => e.textContent));
+
       await page.setViewportSize({ width: 390, height: 900 });
       await page.goto(`${base}/#type=summary`);
       await page.waitForSelector(".kpi");

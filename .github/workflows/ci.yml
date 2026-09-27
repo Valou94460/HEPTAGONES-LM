@@ -240,6 +240,20 @@ jobs:
           freelm -c demo-mssql/freelm.demo.yaml purge
           freelm -c demo-mssql/freelm.demo.yaml report --period last-7d -o demo-mssql/reports/FreeLM_mssql_7j.xlsx
 
+      - name: Verrou de collecte (deux collectes simultanées)
+        run: |
+          python - <<'EOF' &
+          import os, time, pyodbc
+          conn = pyodbc.connect(os.environ["FREELM_DB"], autocommit=True)
+          conn.execute("EXEC sp_getapplock @Resource = 'freelm_collect', @LockMode = 'Exclusive', @LockOwner = 'Session'")
+          open("lock_held", "w").close()
+          time.sleep(30)
+          EOF
+          for i in $(seq 1 30); do [ -f lock_held ] && break; sleep 1; done
+          freelm -c demo-mssql/freelm.demo.yaml collect | tee collect.out
+          grep -q "déjà en cours" collect.out
+          wait
+
       - name: Contrôle des vues SQL
         run: |
           python - <<'EOF'

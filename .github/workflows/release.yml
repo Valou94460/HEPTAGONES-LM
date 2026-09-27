@@ -1,0 +1,61 @@
+# Publication d'une version : `git tag v0.2.0 && git push origin v0.2.0`
+# -> construit FreeLM.exe, le vérifie et crée la release GitHub avec les fichiers.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  release:
+    name: Release ${{ github.ref_name }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Tests
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]" pyinstaller
+          python -m pytest -q
+
+      - name: Construction de FreeLM.exe
+        run: |
+          pyinstaller --noconfirm --clean --onefile --console --name FreeLM \
+            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" freelm/launcher.py
+          ./dist/FreeLM.exe --version
+
+      - name: Vérification rapide
+        run: |
+          cd dist
+          ./FreeLM.exe demo --days 3 --output-dir verif
+          test -s verif/reports/*.xlsx
+
+      - name: Paquet de distribution
+        run: |
+          mkdir -p paquet/FreeLM/sql paquet/FreeLM/scripts
+          cp dist/FreeLM.exe README.md LICENSE CHANGELOG.md paquet/FreeLM/
+          cp config/freelm.example.yaml paquet/FreeLM/freelm.example.yaml
+          cp sql/sqlserver/*.sql paquet/FreeLM/sql/
+          cp scripts/*.ps1 scripts/*.bat paquet/FreeLM/scripts/
+          cd paquet && 7z a -tzip "../FreeLM-${GITHUB_REF_NAME}-windows.zip" FreeLM > /dev/null
+
+      - name: Publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            "FreeLM-${GITHUB_REF_NAME}-windows.zip" dist/FreeLM.exe \
+            --title "FreeLM $GITHUB_REF_NAME" --generate-notes

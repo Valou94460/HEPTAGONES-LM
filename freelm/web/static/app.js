@@ -55,10 +55,16 @@
     for (const [k, v] of Object.entries(extra)) q.set(k, v);
     return q;
   }
+  let lastHash = "";
   function saveHash() {
     const q = toQuery();
     q.set("preset", state.preset);
-    history.replaceState(null, "", "#" + q.toString());
+    const hash = "#" + q.toString();
+    if (hash === location.hash) return;
+    // Une entrée d'historique par état : Précédent / Suivant naviguent entre les rapports.
+    if (location.hash) history.pushState(null, "", hash);
+    else history.replaceState(null, "", hash);
+    lastHash = hash;
   }
   function loadHash() {
     const q = new URLSearchParams(location.hash.slice(1));
@@ -177,12 +183,19 @@
     window.addEventListener("resize", () => { clearTimeout(resizeTimer); resizeTimer = setTimeout(() => current && renderChart(current), 150); });
 
     // Lien collé / navigation précédent-suivant : l'URL fait foi.
-    window.addEventListener("hashchange", () => {
+    const fromUrl = () => {
+      if (location.hash === lastHash) return;   // déjà affiché
+      lastHash = location.hash;
       loadHash();
       applyPreset();
       Object.values(multis).forEach(m => m.refreshLabel());
-      changed();
-    });
+      table.sortKey = null;
+      syncControls();
+      saveHash();
+      load();
+    };
+    window.addEventListener("popstate", fromUrl);
+    window.addEventListener("hashchange", fromUrl);
 
     applyPreset();
     changed();

@@ -1,0 +1,374 @@
+# Plan de test FreeLM
+
+| | |
+|---|---|
+| **Version testée** | 0.1.0 |
+| **Objet** | Valider FreeLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
+| **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/freelm.example.yaml) |
+
+## Sommaire
+
+1. [Stratégie](#1-stratégie)
+2. [Environnements](#2-environnements)
+3. [Critères d'entrée, de sortie et gravité](#3-critères-dentrée-de-sortie-et-gravité)
+4. [Tests automatisés](#4-tests-automatisés)
+5. [Cas de test fonctionnels](#5-cas-de-test-fonctionnels) (installation, configuration, collecte, données, rapports, interface, exécutable, exploitation)
+6. [Validation sur les serveurs réels](#6-validation-sur-les-serveurs-réels)
+7. [Performance](#7-performance)
+8. [Sécurité](#8-sécurité)
+9. [Robustesse](#9-robustesse)
+10. [Recette métier](#10-recette-métier)
+11. [Planning et procès-verbal](#11-planning-et-procès-verbal)
+
+**Utilisation** : chaque cas porte un identifiant (`COL-03`…) et une case de statut.
+Renseigner ✅ (conforme), ❌ (anomalie, avec le n° d'issue GitHub) ou ➖ (non applicable).
+Copier ce fichier par campagne de test (`recette_2026-10.md`) ou reporter les statuts
+dans un tableur.
+
+---
+
+## 1. Stratégie
+
+| Niveau | Quoi | Comment | Qui | Où |
+|---|---|---|---|---|
+| **N1 — Unitaire** | Parsers lmstat / log, reconstruction des sessions, calcul des indicateurs, paramètres de l'API | 50 tests automatisés (`python -m pytest`) | CI | E1 |
+| **N2 — Intégration** | Chaîne complète simulée : simulateur → parsers → base → rapports ; SQL Server réel ; exécutable Windows | Workflow CI (5 jobs) | CI | E1 |
+| **N3 — Bout en bout** | Interface web dans un vrai navigateur : onglets, filtres, exports | Playwright (`tests/ui/ui_smoke.cjs`) | CI | E1 |
+| **N4 — Recette fonctionnelle** | Cas de test manuels du § 5 sur les données de démonstration | Manuel | Admin applicatif | E2 |
+| **N5 — Validation réelle (VSR)** | Exactitude des données face aux serveurs de licences réels | Procédure du § 6 | Admin applicatif + admin licences | E3 |
+| **N6 — Recette métier** | Les rapports répondent aux questions des utilisateurs | Scénarios du § 10 | Responsables métier | E3 |
+| **N7 — Exploitation** | Tâches planifiées, reprise sur incident, purge, performance | § 5.8, 7, 9 | Admin système | E3 |
+
+Principe : les niveaux N1 à N3 tournent automatiquement à chaque modification ; la
+campagne manuelle (N4 à N7) se concentre sur ce qu'un automate ne peut pas juger —
+l'exactitude face à la réalité, l'installation sur **votre** infrastructure et
+l'utilité des rapports.
+
+## 2. Environnements
+
+| Id | Environnement | Composants | Données |
+|---|---|---|---|
+| **E1** | CI GitHub Actions | Ubuntu + Windows, Python 3.10 / 3.12, SQL Server 2022 (conteneur), Chromium | Simulateur, fixtures |
+| **E2** | Poste de test | `FreeLM.exe` ou Python, SQLite | `freelm demo` / `freelm web --demo` |
+| **E3** | Préproduction | Serveur Windows FreeLM, base SQL Server **dédiée au test** (`FreeLM_TEST`), accès en lecture aux serveurs de licences réels et à leurs logs | Réelles |
+| **E4** | Production | Idem E3, base `FreeLM` | Réelles |
+
+Prérequis E3 : compte de service (ex. `DOMAINE\svc_freelm`) ; ouverture pare-feu vers
+les ports `lmgrd` et des démons vendeurs ; partage en lecture des logs ; ODBC Driver 18 ;
+droits `db_datareader`, `db_datawriter`, `db_ddladmin` sur la base de test.
+
+Données de test à préparer pour E3 :
+- une sortie `lmutil lmstat -a -c <port@serveur> > lmstat_<serveur>.txt` par serveur ;
+- un extrait de log debug par serveur dont le log est accessible ;
+- 2 ou 3 utilisateurs volontaires pour les tests contrôlés (§ 6.3) ;
+- un export AD `users.csv` (§ 5.8).
+
+## 3. Critères d'entrée, de sortie et gravité
+
+**Entrée** : CI verte sur la version testée ; E3 disponible ; données de test prêtes.
+
+**Sortie (mise en production autorisée)** :
+- 100 % des cas **bloquants** (marqués 🔴) conformes ;
+- aucune anomalie bloquante ou majeure ouverte ;
+- validation réelle (§ 6) conforme sur chaque serveur de licences ;
+- procès-verbal (§ 11) signé.
+
+| Gravité | Définition | Exemple |
+|---|---|---|
+| **Bloquante** | Données fausses, perte de données, collecte ou interface inutilisable | Sessions non fermées, taux d'occupation faux |
+| **Majeure** | Fonction importante dégradée, contournement possible | Export Excel en erreur, un onglet vide |
+| **Mineure** | Gêne sans impact sur les données | Libellé tronqué, tri inversé |
+
+## 4. Tests automatisés
+
+Exécution locale : `pip install -e ".[dev]" && python -m pytest -v` (aucun serveur requis).
+En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
+
+### 4.1 Traçabilité
+
+| Fichier | Tests | Couvre |
+|---|---:|---|
+| `tests/test_lmstat_parser.py` | 7 | Totaux émis/utilisés, checkouts (user, poste, handle, début, nb jetons), utilisateur avec espaces, files d'attente, features non comptées / en erreur, changement d'année, serveur injoignable |
+| `tests/test_log_parser.py` | 7 | Types d'évènements, champs, passage de minuit, lignes TIMESTAMP, lignes sans date, préfixe date, lecture incrémentale (ligne partielle, pas de relecture), rotation |
+| `tests/test_collection.py` | 8 | Cycle de vie des sessions lmstat (ouverture, fermeture estimée), nouveau handle, démon vendeur arrêté, sondages et agrégats horaires, journal en cas d'échec, sessions et évènements depuis le log, reprise d'historique antérieur, rendu du script SQL Server, vues |
+| `tests/test_report.py` | 7 | Indicateurs (émis, pic, moyenne, taux, heures saturées, refus, utilisateurs, heures), profil horaire, contention, filtre serveur, mois précédent, export Excel (y compris période vide) |
+| `tests/test_simulation.py` | 9 | Déterminisme du simulateur, jamais plus de jetons utilisés qu'émis, log conforme au modèle, faux lmutil, sessions en base identiques au modèle (lmstat et log), durées exactes (log), configuration « en direct » |
+| `tests/test_web.py` | 12 | Paramètres (défauts, listes, validation), fichiers statiques et types MIME, métadonnées, les 9 rapports, filtres (serveur, utilisateur, produit), granularités, exports CSV / JSON / Excel (9 rapports + classeur complet), erreurs 400 / 404, import utilisateurs (format AD) |
+| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : 9 onglets en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
+
+### 4.2 Jobs de la CI
+
+| Job | Vérifie |
+|---|---|
+| Tests + démo (Linux, Windows × Python 3.10, 3.12) | Tests unitaires ; script SQL à jour ; démo 30 jours + rapport Excel ; collecte « en direct » via le faux lmutil ; relecture des classeurs ; rendu PDF (LibreOffice) |
+| Interface web (navigateur) | `tests/ui/ui_smoke.cjs` + captures d'écran publiées |
+| Exécutable Windows | Construction de `FreeLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
+| SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; vues SQL non vides ; relance de la démo |
+
+| Id | Cas | Résultat attendu | Statut |
+|---|---|---|:---:|
+| AUT-01 🔴 | Consulter la dernière exécution CI de la version testée | Tous les jobs verts | ☐ |
+| AUT-02 | Télécharger l'artefact `captures-interface-web` | Captures lisibles, cohérentes avec § 5.6 | ☐ |
+| AUT-03 | `python -m pytest` sur le poste de test (E2) | 50 tests passés (ou « skipped » uniquement si openpyxl absent) | ☐ |
+
+---
+
+## 5. Cas de test fonctionnels
+
+Sauf mention contraire : E2 avec `freelm web --demo` / `freelm demo`, puis rejoués
+sur E3 pour les cas marqués **[E3]**.
+
+### 5.1 Installation (INS)
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| INS-01 🔴 | Exécutable autonome | Copier `FreeLM.exe` sur un poste **sans Python** ; `FreeLM.exe --version` | Affiche `FreeLM 0.1.0` | ☐ |
+| INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `freelm --version` | Installation sans erreur, version affichée | ☐ |
+| INS-03 🔴 [E3] | Création de la base | DBA : `sqlcmd -S … -i sql\sqlserver\00_create_database.sql` (base de test) | Base et compte de service créés, rôles attribués | ☐ |
+| INS-04 🔴 [E3] | Création du schéma | `FreeLM.exe -c freelm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
+| INS-05 [E3] | Idempotence | Relancer `init-db` 2 fois | Aucune erreur, aucune donnée perdue, `schema_info` contient 1 ligne | ☐ |
+| INS-06 [E3] | Script SQL manuel | Exécuter `sql\sqlserver\01_schema.sql` sur une base vide, puis `init-db` | Schéma identique, `init-db` sans erreur | ☐ |
+| INS-07 [E3] | Pilote ODBC absent | Sur un poste sans ODBC Driver 18 : `init-db` | Message d'erreur explicite du pilote, code retour 1 | ☐ |
+
+### 5.2 Configuration (CFG)
+
+| Id | Étapes | Résultat attendu | Statut |
+|---|---|---|:---:|
+| CFG-01 | `-c` vers un fichier inexistant | « Fichier de configuration introuvable », code 1 | ☐ |
+| CFG-02 | Supprimer `database.connection_string` | « database.connection_string est obligatoire » | ☐ |
+| CFG-03 | Serveur sans `port_at_host` | « servers[i] : champ obligatoire manquant 'port_at_host' » | ☐ |
+| CFG-04 | Deux serveurs de même nom | « Nom de serveur en double » | ☐ |
+| CFG-05 | `sessions_from: log` sans le collecteur `log` | Erreur « ce collecteur n'est pas activé » | ☐ |
+| CFG-06 | Collecteur `log` sans `log_path` | « log_path est obligatoire » | ☐ |
+| CFG-07 | Mot de passe SQL via `${FREELM_DB_PASSWORD}` (variable d'environnement du compte de service) | Connexion réussie ; le mot de passe n'apparaît pas dans le YAML | ☐ |
+| CFG-08 | Règle produit `*_Toolbox` avec `vendor: MLM` | Seules les features MLM correspondantes prennent le produit | ☐ |
+| CFG-09 | Modifier une règle produit puis `apply-products` | Le nouveau libellé apparaît sur tout l'historique (interface, rapports) | ☐ |
+
+### 5.3 Collecte lmstat (COL)
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| COL-01 🔴 [E3] | Connexion à chaque serveur | `test-server --server X` pour chaque serveur | UP, démons vendeurs UP, liste des features avec `utilisés/émis` | ☐ |
+| COL-02 🔴 [E3] | Collecte nominale | `collect` | Une ligne `OK` par serveur/collecteur, code retour 0 ; lignes dans `usage_snapshot`, `usage_hourly`, `collection_run` | ☐ |
+| COL-03 🔴 [E3] | Serveur injoignable | Ajouter un serveur fictif `27000@inexistant` ; `collect` | Ce serveur `ERROR` (message lmgrd), **les autres `OK`**, code retour 2, échec visible dans l'onglet Collectes et le badge d'état | ☐ |
+| COL-04 | lmutil absent | `lmutil_path` erroné ; `collect` | `ERROR` « lmutil introuvable », pas de trace Python | ☐ |
+| COL-05 | Délai dépassé | `timeout_s: 1` sur un serveur lent / filtré | `ERROR` « délai dépassé (1s) » | ☐ |
+| COL-06 [E3] | Triade redondante | `port_at_host: "p@a:p@b:p@c"` | Collecte `OK` | ☐ |
+| COL-07 [E3] | Démon vendeur arrêté | Arrêter un démon (fenêtre de maintenance) pendant une session ouverte ; `collect` | Sessions de ce démon **restent ouvertes** (pas de fermeture à tort) | ☐ |
+| COL-08 | Features non comptées / en erreur | `parse-lmstat` sur une sortie contenant `Uncounted` et `Error:` | Émis vide pour la feature non comptée, erreur signalée pour l'autre, pas de plantage | ☐ |
+| COL-09 🔴 [E3] | Diagnostic de parsing | `parse-lmstat lmstat_<serveur>.txt` pour chaque sortie réelle | Toutes les features et tous les utilisateurs de la sortie texte sont présents, heures de début correctes | ☐ |
+
+### 5.4 Collecte des logs (LOG)
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| LOG-01 🔴 [E3] | Diagnostic de parsing | `parse-log <log réel>` | Évènements OUT / IN / DENIED avec date et heure correctes ; nb « ignorés faute de date » = 0 (ou uniquement en début de fichier) | ☐ |
+| LOG-02 🔴 [E3] | Lecture incrémentale | `collect` deux fois de suite | 2ᵉ exécution : 0 élément (ou seulement les nouveaux) — pas de doublon de refus ni de session | ☐ |
+| LOG-03 [E3] | Rotation / redémarrage de lmgrd | Redémarrer le service de licences (fenêtre de maintenance) puis `collect` | Rotation détectée (journal), lecture reprise au début du nouveau fichier, sessions ouvertes fermées (`server_down`) | ☐ |
+| LOG-04 | Partage inaccessible | Renommer temporairement `log_path` ; `collect` | `ERROR` « Log introuvable » pour le collecteur log, lmstat `OK` | ☐ |
+| LOG-05 [E3] | Reprise d'historique | `import-log --server X` sur 1 à 3 anciens logs (ordre chronologique) | Sessions et refus historiques visibles dans l'interface sur les périodes passées | ☐ |
+| LOG-06 | Passage de minuit | Session ouverte avant minuit, fermée après | Session sur deux jours, durée correcte | ☐ |
+
+### 5.5 Exactitude des données (DAT)
+
+À dérouler en démonstration (E2) : le simulateur connaissant la vérité, on peut
+comparer. La validation sur les serveurs réels fait l'objet du § 6.
+
+| Id | Étapes | Résultat attendu | Statut |
+|---|---|---|:---:|
+| DAT-01 🔴 | Onglet Synthèse, 30 derniers jours | Pour chaque produit : pic ≤ jetons émis ; taux au pic = pic / émis ; heures saturées > 0 ⇔ taux au pic = 100 % | ☐ |
+| DAT-02 | Profil horaire | Heures ouvrées (8 h–18 h) nettement plus chargées ; nuits et week-ends quasi nuls | ☐ |
+| DAT-03 | Refus | Refus uniquement sur ANSYS (seul serveur avec log dans la démo) | ☐ |
+| DAT-04 | Répartition par utilisateur → filtrer un utilisateur → Sessions | Total d'heures de Répartition = somme de la colonne « Heures (période) » des sessions | ☐ |
+| DAT-05 | Export CSV de Sessions → somme dans Excel | Égal au total affiché dans l'interface | ☐ |
+| DAT-06 | Même période : KPI « Heures d'utilisation » (Synthèse) vs total Répartition par produit | Identiques | ☐ |
+
+### 5.6 Interface web (WEB)
+
+Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| WEB-01 🔴 | Ouverture | Lancer l'interface | Page chargée, badge « Collectes OK », plage des données affichée | ☐ |
+| WEB-02 🔴 | 9 onglets | Cliquer chaque onglet | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
+| WEB-03 | Préréglages de période | Tester 7 j, 30 j, mois en cours, mois précédent, année, toutes les données | Dates « Du / Au » cohérentes, données rechargées | ☐ |
+| WEB-04 | Dates personnalisées | Saisir des dates | Préréglage passe à « Personnalisée », données de la période | ☐ |
+| WEB-05 | Début après la fin | Du > Au | Message « La date de début doit précéder la date de fin » | ☐ |
+| WEB-06 🔴 | Filtres multiples | Serveurs = ANSYS ; Produits = 2 produits ; Utilisateurs = 1 ; Services = 1 | Tableaux et graphiques limités à la sélection ; « Tout effacer » rétablit | ☐ |
+| WEB-07 | Recherche dans un filtre | Taper « ans » dans Produits | Liste filtrée ; « Tout cocher » ne coche que les éléments visibles | ☐ |
+| WEB-08 | Note sur les filtres utilisateurs | Filtre utilisateur actif sur Synthèse | Note : les taux restent des compteurs globaux | ☐ |
+| WEB-09 | Usage dans le temps | Pas heure / jour / semaine / mois × pic / moyenne / taux | Axe et courbes adaptés ; > 8 produits → note « graphique limité », tableau complet | ☐ |
+| WEB-10 | Couleur stable | Filtrer 3 produits puis en retirer 1 | Les 2 restants gardent leur couleur | ☐ |
+| WEB-11 | Infobulles | Survoler courbes, barres, cellules de la carte de chaleur | Valeurs exactes et libellés affichés | ☐ |
+| WEB-12 | Répartition et Croisement | Changer « Par » (utilisateur, poste, service, produit, serveur, éditeur) | Regroupement correct ; « (non renseigné) » si service absent | ☐ |
+| WEB-13 | Tableau | Tri par clic sur en-tête (asc/desc) ; recherche ; « Afficher plus » (Sessions) | Tri correct (numérique pour les nombres) ; filtrage immédiat ; compteur « N / M lignes » | ☐ |
+| WEB-14 🔴 | Lien partageable | Régler des filtres, copier l'URL, l'ouvrir dans un autre navigateur | Même onglet, mêmes filtres, mêmes données | ☐ |
+| WEB-15 | Précédent / Suivant | Changer d'onglet puis bouton Précédent du navigateur | Retour à l'onglet et aux filtres précédents | ☐ |
+| WEB-16 | Période sans données | Année précédente sur la démo | « Aucune donnée pour ces filtres », pas d'erreur | ☐ |
+| WEB-17 | Mode sombre | Système en thème sombre | Interface et graphiques lisibles | ☐ |
+| WEB-18 | Largeur mobile / fenêtre étroite | Réduire la fenêtre à ~400 px | Pas de défilement horizontal de la page | ☐ |
+| WEB-19 | Navigateurs | Edge et Chrome (et Firefox si utilisé) | Comportement identique | ☐ |
+| WEB-20 | Port occupé | Lancer deux instances | La 2ᵉ utilise le port suivant (8766) et l'indique | ☐ |
+| WEB-21 | Badge d'état en échec | Provoquer COL-03 puis recharger | Badge « ⚠ 1 collecteur(s) en échec » ; clic → onglet Collectes | ☐ |
+
+### 5.7 Exports (EXP)
+
+| Id | Étapes | Résultat attendu | Statut |
+|---|---|---|:---:|
+| EXP-01 🔴 | Excel sur chaque onglet | Fichier `FreeLM_<rapport>_<début>_<fin>.xlsx` ; s'ouvre dans Excel sans réparation ; titre, filtres appliqués, tableau Excel, graphique natif (onglet « Graphique ») | ☐ |
+| EXP-02 🔴 | CSV | S'ouvre par double-clic dans Excel français : colonnes séparées, accents corrects, décimales à virgule, pourcentages en % | ☐ |
+| EXP-03 | JSON | Fichier valide, mêmes lignes que l'écran | ☐ |
+| EXP-04 🔴 | Rapport complet | Classeur 8 onglets (Synthèse, Usage quotidien, Utilisateurs, Profil horaire, Contention, Refus, Sessions, À propos), filtres serveurs/produits appliqués | ☐ |
+| EXP-05 | Cohérence export / écran | Comparer 5 lignes au hasard | Valeurs identiques (hors arrondi d'affichage) | ☐ |
+| EXP-06 | Tableau croisé dynamique | Dans l'export complet, onglet Sessions : Insertion › Tableau croisé dynamique | TCD créé sur le Tableau Excel sans retraitement | ☐ |
+| EXP-07 | Rapport en ligne de commande | `report --period last-month` puis `report --from … --to … --server …` | Fichiers dans `reporting.output_dir`, contenu conforme à la période | ☐ |
+| EXP-08 | `--skip-existing` | Relancer `report --period last-month --skip-existing` | « Rapport déjà présent, rien à faire », fichier inchangé | ☐ |
+| EXP-09 | Erreur d'export visible | (E2 Python sans openpyxl) cliquer Excel | Message « Export impossible : Module manquant : openpyxl » | ☐ |
+
+### 5.8 Exécutable, planification, référentiel, maintenance (EXE / PLN / USR / MNT)
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| EXE-01 🔴 | Double-clic sans configuration | Double-clic sur `FreeLM.exe` dans un dossier vide | Console « Mode démonstration… », navigateur ouvert sur l'interface | ☐ |
+| EXE-02 🔴 [E3] | Double-clic avec configuration | Placer `freelm.yaml` à côté de l'exe, double-clic | Interface sur les **données réelles** | ☐ |
+| EXE-03 | Fermeture | Fermer la console | Interface arrêtée (page injoignable) | ☐ |
+| EXE-04 | SmartScreen / antivirus | Premier lancement sur un poste standard | Avertissement éventuel contournable ; pas de blocage antivirus (sinon : liste blanche) | ☐ |
+| PLN-01 🔴 [E3] | Enregistrement des tâches | `scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount DOMAINE\svc_freelm` | 3 tâches sous `\FreeLM\` dans le Planificateur | ☐ |
+| PLN-02 🔴 [E3] | Collecte toutes les 5 min | Attendre 30 min | 6 exécutions `OK` par collecteur dans l'onglet Collectes ; pas de chevauchement | ☐ |
+| PLN-03 [E3] | Droits du compte de service | Tâche exécutée sans session ouverte | Collecte OK (accès réseau lmgrd, partage des logs, SQL Server en authentification Windows) | ☐ |
+| PLN-04 [E3] | Rapport mensuel | Exécuter manuellement la tâche « Rapport mensuel » deux fois | Rapport du mois précédent créé une seule fois | ☐ |
+| PLN-05 [E3] | Redémarrage du serveur FreeLM | Redémarrer la machine | Tâches reprennent sans intervention | ☐ |
+| USR-01 [E3] | Import AD | Export `Get-ADUser … | Export-Csv users.csv` ; `import-users users.csv` | « N mis à jour, M créés » ; services visibles dans le filtre Services et la Répartition par service | ☐ |
+| USR-02 | Colonnes françaises / séparateur `;` / encodage ANSI | CSV `utilisateur;nom;service` enregistré par Excel | Import correct, accents conservés | ☐ |
+| USR-03 | Colonne identifiant absente | CSV sans colonne reconnue | Message listant les noms de colonnes attendus | ☐ |
+| MNT-01 [E3] | Purge | `retention.snapshots_days: 1` (base de test) ; `purge` | Sondages bruts anciens supprimés ; **agrégats horaires et rapports inchangés** | ☐ |
+| MNT-02 [E3] | Sauvegarde / restauration | Sauvegarde SQL puis restauration sur une autre base | Interface fonctionnelle sur la base restaurée | ☐ |
+| MNT-03 | Mise à jour de version | Remplacer l'exe / réinstaller le paquet, `init-db` | Données conservées, interface fonctionnelle | ☐ |
+
+---
+
+## 6. Validation sur les serveurs réels
+
+Objectif : prouver que les chiffres de FreeLM sont **ceux de la réalité**, pour chaque
+serveur de licences (Autodesk, Ansys, MATLAB…). Environnement E3, collecte planifiée
+active depuis au moins 24 h.
+
+### 6.1 Contrôle instantané (par serveur)
+
+| Id | Étapes | Critère d'acceptation | Statut |
+|---|---|---|:---:|
+| VSR-01 🔴 | À un instant T : `lmutil lmstat -a -c <serveur>` manuellement, puis `collect` ; comparer avec l'onglet Sessions (filtre serveur, période du jour, sessions « en cours ») | Même liste d'utilisateurs / postes / features ; même nombre de jetons en cours | ☐ |
+| VSR-02 🔴 | Comparer « Jetons émis » (Synthèse) avec le fichier de licences / l'outil éditeur | Identique pour chaque feature | ☐ |
+| VSR-03 | Vérifier le mapping produit | Chaque feature suivie a un produit lisible (sinon compléter `products:`) ; `SELECT name, vendor FROM feature WHERE product IS NULL` vide pour les features utiles | ☐ |
+
+### 6.2 Contrôle sur une journée
+
+| Id | Étapes | Critère d'acceptation | Statut |
+|---|---|---|:---:|
+| VSR-04 🔴 | Serveur avec log : compter les refus de la veille dans le log (`findstr /C:"DENIED:" license.log` sur la journée) | Égal au nombre de refus de l'onglet Refus pour ce jour | ☐ |
+| VSR-05 🔴 | Serveur avec log : compter les `OUT:` de la veille | Égal au nombre de sessions du jour (source log) | ☐ |
+| VSR-06 | Pic de la journée vs relevés lmstat manuels à 3 moments de forte charge | Pic FreeLM ≥ chacun des relevés et ≤ jetons émis | ☐ |
+| VSR-07 | Si OpenLM (ou un autre outil) est encore en service : comparer pic journalier et heures par produit sur 1 semaine | Écart de pic ≤ 1 jeton ; écart d'heures ≤ 5 % | ☐ |
+
+### 6.3 Test contrôlé avec un utilisateur volontaire
+
+| Id | Étapes | Critère d'acceptation | Statut |
+|---|---|---|:---:|
+| VSR-08 🔴 | L'utilisateur ouvre le logiciel à une heure notée (ex. 10:00), le ferme à 10:45 | Session visible : début à la minute près ; fin ± intervalle de sondage (lmstat) ou à la seconde (log) | ☐ |
+| VSR-09 | Deux postes du même utilisateur simultanément | Deux sessions distinctes | ☐ |
+| VSR-10 | Laisser le logiciel inactif jusqu'au délai d'inactivité (si configuré) | Session fermée, motif « inactive » (log) | ☐ |
+| VSR-11 | Prendre le dernier jeton disponible d'une feature (ou simuler en heure creuse), puis tenter un 2ᵉ lancement | Heure saturée comptée ; refus enregistré (si log) | ☐ |
+
+## 7. Performance
+
+| Id | Mesure | Seuil d'acceptation | Mesuré | Statut |
+|---|---|---|---|:---:|
+| PRF-01 🔴 [E3] | Durée de `collect` (tous serveurs) | < 60 s, et nettement < intervalle de planification | | ☐ |
+| PRF-02 [E3] | Première lecture d'un gros log (> 100 Mo) | Se termine ; exécutions suivantes < 10 s | | ☐ |
+| PRF-03 [E3] | Interface, onglet Synthèse sur 1 an | < 5 s | | ☐ |
+| PRF-04 [E3] | Onglet Sessions sur 1 mois | < 5 s ; défilement fluide | | ☐ |
+| PRF-05 [E3] | Rapport complet sur 1 an | < 2 min | | ☐ |
+| PRF-06 [E3] | Volume de base après 1 mois | Conforme à l'estimation (≈ 60 000 sondages / jour pour 200 features à 5 min) ; extrapolation sur 3 ans < capacité de l'instance | | ☐ |
+
+Aide : `freelm demo --days 365 --connection-string "<base de test>"` produit un an de
+données simulées pour mesurer PRF-03 à PRF-05 avant d'avoir un an d'historique réel.
+
+## 8. Sécurité
+
+| Id | Étapes | Résultat attendu | Statut |
+|---|---|---|:---:|
+| SEC-01 🔴 | `netstat -ano | findstr 8765` avec `freelm web` par défaut | Écoute sur `127.0.0.1` uniquement | ☐ |
+| SEC-02 | Depuis un autre poste : `http://<serveur>:8765/` | Injoignable (sauf `--host 0.0.0.0` explicite) | ☐ |
+| SEC-03 🔴 | Lecture seule | Aucune action de l'interface ne modifie la base (vérifier `SELECT COUNT(*)` des tables avant / après une session d'utilisation) | ☐ |
+| SEC-04 | Injection | Paramètres forgés dans l'URL : `server=' OR 1=1 --`, `type=../../etc`, `start=2026-01-01;DROP` | Réponse 400 ou résultat vide ; aucune erreur SQL | ☐ |
+| SEC-05 | Traversée de répertoire | `http://localhost:8765/../freelm.yaml`, `/static/../../freelm.yaml` | 404 | ☐ |
+| SEC-06 | Secrets | Parcourir `freelm.log` et l'onglet Collectes | Aucun mot de passe affiché | ☐ |
+| SEC-07 [E3] | Moindre privilège | Retirer `db_ddladmin` après `init-db` | Collecte et interface fonctionnent | ☐ |
+| SEC-08 | Données personnelles | Identifier les destinataires des rapports (noms, services, horaires) ; informer le DPO | Traitement déclaré / validé (RGPD) | ☐ |
+
+## 9. Robustesse
+
+| Id | Situation provoquée | Résultat attendu | Statut |
+|---|---|---|:---:|
+| ROB-01 🔴 [E3] | SQL Server arrêté pendant une collecte | Échec journalisé dans `freelm.log`, code retour 1 ; collecte suivante normale une fois SQL Server revenu | ☐ |
+| ROB-02 [E3] | Serveur de licences arrêté 1 h | Collectes `ERROR` pendant l'arrêt ; sessions non fermées à tort ; reprise automatique | ☐ |
+| ROB-03 [E3] | Collecte interrompue (tâche désactivée) 1 journée | À la reprise, sessions disparues fermées avec une fin estimée ≤ 30 min après leur dernière observation | ☐ |
+| ROB-04 | Changement d'heure (fin octobre / fin mars) | Pas de doublon ni de session négative autour de 2 h–3 h | ☐ |
+| ROB-05 | Caractères accentués / cp1252 dans les noms (logs, AD) | Affichage correct dans l'interface et les exports | ☐ |
+| ROB-06 [E3] | Disque plein sur le serveur FreeLM | Message d'erreur, pas de corruption de la base | ☐ |
+| ROB-07 [E3] | Deux collectes simultanées (lancement manuel pendant la tâche planifiée) | La 2ᵉ s'arrête aussitôt avec « Une collecte est déjà en cours : exécution ignorée » (verrou SQL Server) ; aucune session en double | ☐ |
+
+## 10. Recette métier
+
+Scénarios à dérouler **par les utilisateurs des rapports** (responsable CAO / simulation,
+achats, DSI) sur les données réelles (E3), après au moins 2 semaines de collecte.
+
+| Id | Question métier | Où trouver la réponse | Réponse obtenue et jugée fiable ? | Statut |
+|---|---|---|---|:---:|
+| MET-01 | Combien de licences de <produit> sont réellement nécessaires ? | Synthèse (pic, taux au pic, heures saturées) + Usage dans le temps (pic / jour) | | ☐ |
+| MET-02 | Quelles licences sont sous-utilisées (pistes d'économie) ? | Synthèse triée par taux moyen croissant | | ☐ |
+| MET-03 | Qui utilise <produit>, et combien de temps ? | Répartition par utilisateur, filtre produit | | ☐ |
+| MET-04 | Quels services consomment le plus (refacturation) ? | Répartition / Croisement par service | | ☐ |
+| MET-05 | Quand y a-t-il pénurie ? | Contention, Refus, Profil horaire | | ☐ |
+| MET-06 | Le rapport mensuel est-il exploitable tel quel (comité, direction) ? | Rapport complet Excel | | ☐ |
+| MET-07 | Les données peuvent-elles être retravaillées dans Excel ? | Export CSV / Sessions + tableau croisé dynamique | | ☐ |
+
+## 11. Planning et procès-verbal
+
+### 11.1 Planning indicatif
+
+| Étape | Contenu | Durée |
+|---|---|---|
+| J1 | Vérifications automatisées (§ 4), recette sur la démo (§ 5, E2) | ½ jour |
+| J2 | Installation E3 (INS, CFG, COL-01/09, LOG-01), planification | 1 jour |
+| J3 → J4 | Collecte en continu ; validation réelle § 6.1 et 6.2 | 2 jours (dont 1 jour de collecte) |
+| J5 | Tests contrôlés § 6.3, sécurité, robustesse | 1 jour |
+| J5 → J15 | Collecte continue (≥ 2 semaines) | — |
+| J15 | Performance sur l'historique, recette métier § 10 | 1 jour |
+| J16 | Bilan, procès-verbal, décision de mise en production | ½ jour |
+
+### 11.2 Suivi des anomalies
+
+Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/FREE-LM/issues/new/choose)
+(modèle « Signaler un bug ») avec l'identifiant du cas (ex. `[COL-03]`), la gravité et
+les journaux (`freelm.log`, lancé avec `-v`). Pour un problème de parsing, joindre la
+sortie `lmstat` ou l'extrait de log **anonymisé** : il deviendra un test automatisé.
+
+### 11.3 Procès-verbal de recette
+
+| Élément | Valeur |
+|---|---|
+| Version testée | |
+| Période de la campagne | |
+| Cas exécutés / conformes / en anomalie / non applicables | / / / |
+| Cas bloquants 🔴 conformes | / |
+| Anomalies ouvertes (bloquantes / majeures / mineures) | / / |
+| Réserves | |
+| **Décision** | ☐ Mise en production autorisée ☐ Autorisée avec réserves ☐ Refusée |
+
+| Rôle | Nom | Date | Signature |
+|---|---|---|---|
+| Administrateur applicatif (FreeLM) | | | |
+| Administrateur des licences | | | |
+| Responsable métier | | | |
+| Responsable sécurité / DPO | | | |

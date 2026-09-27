@@ -90,6 +90,24 @@ class Database:
         cur = self.execute(f"INSERT INTO {table} ({cols}) VALUES ({marks})", list(values.values()))
         return int(cur.lastrowid)
 
+    def try_lock(self, name: str) -> bool:
+        """Verrou applicatif exclusif, tenu jusqu'à la fermeture de la connexion.
+
+        Empêche deux collectes simultanées (tâche planifiée + lancement manuel)
+        de créer des sessions en double. SQL Server : ``sp_getapplock`` ;
+        SQLite (tests, démonstration) : toujours accordé.
+        """
+        if self.dialect != "mssql":
+            return True
+        code = self.scalar(
+            "SET NOCOUNT ON; DECLARE @r INT; "
+            "EXEC @r = sp_getapplock @Resource = ?, @LockMode = 'Exclusive', "
+            "@LockOwner = 'Session', @LockTimeout = 0; SELECT @r",
+            [name],
+        )
+        self.conn.commit()
+        return code is not None and int(code) >= 0
+
     # -- transactions ----------------------------------------------------
 
     def commit(self) -> None:

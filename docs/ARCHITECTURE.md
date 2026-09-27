@@ -2,9 +2,10 @@
 
 ## 1. Vue d'ensemble
 
-FreeLM est un outil **en ligne de commande**, sans interface graphique ni agent
-sur les postes clients. Il tourne sur un serveur Windows (ou n'importe quelle
-machine avec Python 3.10+) via le Planificateur de tâches :
+FreeLM tourne sur un serveur Windows (ou n'importe quelle machine avec Python
+3.10+), **sans agent sur les postes clients**. La collecte est une commande
+planifiée (Planificateur de tâches) ; la restitution passe par une interface web
+locale en lecture seule (`freelm web` ou `FreeLM.exe`) et des exports Excel :
 
 ```mermaid
 flowchart LR
@@ -17,6 +18,7 @@ flowchart LR
     subgraph "Serveur FreeLM (tâches planifiées)"
         C1[collect<br/>toutes les 5 min]
         R1[report<br/>mensuel]
+        W1[web<br/>interface]
         P1[purge<br/>hebdo]
     end
 
@@ -28,6 +30,7 @@ flowchart LR
     L2 -- "lecture incrémentale" --> C1
     C1 --> DB
     DB --> R1 --> X
+    DB --> W1 -- "exports xlsx/csv/json" --> X
     P1 --> DB
 ```
 
