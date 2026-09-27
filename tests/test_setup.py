@@ -137,6 +137,16 @@ class WindowsScriptsTest(unittest.TestCase):
         self.assertEqual(secret, "valeur-secrète")
         os.environ.pop("FREELM_TEST_VAR", None)
 
+    def test_powershell_errors_are_readable(self):
+        from freelm.setup.system import Result, _clixml_errors
+        err = ('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
+               '<S S="Error">Get-Item : Cannot find drive. A drive with the name &apos;Cert&apos; does not exist._x000D__x000A_</S>'
+               '<S S="Error">    + CategoryInfo : ObjectNotFound_x000D__x000A_</S></Objs>')
+        self.assertEqual(Result(1, "", _clixml_errors(err)).message,
+                         "Get-Item : Cannot find drive. A drive with the name 'Cert' does not exist.")
+        self.assertEqual(Result(1, "ligne 1\nligne 2", "").message, "ligne 2")
+        self.assertEqual(Result(1).message, "code 1")
+
     def test_make_system_requires_windows_or_simulation(self):
         import os
         if os.name != "nt":

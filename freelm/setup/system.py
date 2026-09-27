@@ -62,7 +62,13 @@ class Result:
 
     @property
     def message(self) -> str:
-        text = (self.err or self.out or "").strip()
+        """Ligne d'erreur utile : première ligne significative de l'erreur, sinon fin de la sortie."""
+        if self.err.strip():
+            lines = [line.strip() for line in self.err.splitlines() if line.strip()
+                     and not line.strip().startswith(("+", "At line", "Au caractère", "At char"))]
+            if lines:
+                return lines[0][:500]
+        text = self.out.strip()
         return text.splitlines()[-1][:500] if text else f"code {self.code}"
 
 
@@ -180,13 +186,16 @@ class WindowsSystem(System):
 
     PREAMBLE = ("$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
                 "[Console]::OutputEncoding = [Text.Encoding]::UTF8\n"
-                # lecteur Cert: absent des sessions non interactives tant que le module n'est pas chargé
-                "Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue\n")
+                # lecteur Cert: : module de sécurité chargé explicitement (sans bloquer s'il manque)
+                "try { Import-Module Microsoft.PowerShell.Security -ErrorAction Stop } catch { }\n")
 
     def ps(self, script: str, secret: str | None = None, timeout: int = 600) -> Result:
         full = self.PREAMBLE + "try {\n" + script + "\n} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
         encoded = base64.b64encode(full.encode("utf-16-le")).decode("ascii")
         env = dict(os.environ)
+        # Lancé depuis PowerShell 7, PSModulePath désigne des modules incompatibles avec Windows
+        # PowerShell 5.1 (Microsoft.PowerShell.Security, lecteur Cert:…) : chemin par défaut rétabli.
+        env.pop("PSModulePath", None)
         if secret is not None:
             env[SECRET_ENV] = secret
         try:
@@ -197,11 +206,7 @@ class WindowsSystem(System):
                                   stdin=subprocess.DEVNULL)
         except subprocess.TimeoutExpired:
             return Result(124, "", f"délai dépassé ({timeout} s)")
-        dec = lambda b: b.decode("utf-8", "replace") if b else ""
-        err = dec(proc.stderr)
-        # PowerShell écrit parfois un en-tête CLIXML de progression sur stderr
-        err = "\n".join(line for line in err.splitlines() if not line.startswith(("#< CLIXML", "<Objs")))
-        return Result(proc.returncode, dec(proc.stdout), err)
+        return Result(proc.returncode, _decode(proc.stdout), _clixml_errors(_decode(proc.stderr)))
 
     def ps_json(self, script: str, secret: str | None = None, timeout: int = 600):
         r = self.ps(script, secret, timeout)
@@ -524,6 +529,17 @@ New-NetFirewallRule -DisplayName {ps_quote(name)} -Direction Inbound -Protocol T
         finally:
             conn.close()
         return done
+
+
+def _clixml_errors(err: str) -> str:
+    """Erreurs PowerShell sérialisées (CLIXML, sortie d'erreur redirigée) -> texte lisible."""
+    if "#< CLIXML" not in err:
+        return err
+    parts = re.findall(r'<S S="Error">(.*?)</S>', err, re.S)
+    text = "".join(parts)
+    text = re.sub(r"_x([0-9A-Fa-f]{4})_", lambda m: chr(int(m.group(1), 16)), text)
+    text = text.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"').replace("&apos;", "'").replace("&amp;", "&")
+    return "\n".join(line.rstrip() for line in text.splitlines() if line.strip())
 
 
 def _decode(data: bytes | None) -> str:
