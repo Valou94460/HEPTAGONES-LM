@@ -65,6 +65,8 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   l'authentification, qui ignore aussi tout en-tête `X-Remote-User` envoyé par le navigateur.
   L'assistant installe ASP.NET 4.x et configure le pool en .NET v4.0 ; procédure manuelle mise à
   jour dans `docs/AUTHENTIFICATION.md`.
+- **Réinstallation / mise à jour** avec l'assistant : les tâches et processus FreeLM en cours sont
+  arrêtés avant le remplacement de `FreeLM.exe` (fichier verrouillé), puis relancés.
 
 ## [0.1.0] — 2026-09-27
 

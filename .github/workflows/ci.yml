@@ -287,6 +287,10 @@ jobs:
         run: |
           .\livrables\dist\FreeLM-Setup.exe setup --answers answers.json
           if ($LASTEXITCODE -ne 0) { throw "Réinstallation : code $LASTEXITCODE" }
+          # FreeLM relancé après la mise à jour de l'exécutable, SSO toujours opérationnel
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://freelm.ci.local/api/me
+          Write-Host "[$code] $(Get-Content me.json -Raw)"
+          if ($code -ne "200" -or (Get-Content me.json -Raw | ConvertFrom-Json).user -ne "ci_lecteur") { throw "SSO après réinstallation" }
 
       - name: Journaux d'installation
         if: always()

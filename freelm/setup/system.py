@@ -119,6 +119,7 @@ class System:
     def grant_batch_logon(self, account: str) -> bool: raise NotImplementedError
     def start_task(self, name: str) -> None: raise NotImplementedError
     def stop_task(self, name: str) -> None: raise NotImplementedError
+    def stop_freelm(self, exe_path: str) -> int: raise NotImplementedError
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict: raise NotImplementedError
     def firewall_rule(self, name: str, port: int) -> None: raise NotImplementedError
 
@@ -379,7 +380,14 @@ $i = $t | Get-ScheduledTaskInfo
         if os.path.abspath(src).lower() == os.path.abspath(dst).lower():
             return
         os.makedirs(os.path.dirname(dst), exist_ok=True)
-        shutil.copy2(src, dst)
+        for attempt in range(15):          # fichier encore verrouillé quelques instants après un arrêt
+            try:
+                shutil.copy2(src, dst)
+                return
+            except PermissionError:
+                if attempt == 14:
+                    raise SetupError(f"{dst} est utilisé par un autre processus (FreeLM en cours d'exécution ?)")
+                time.sleep(1)
 
     def exists(self, path: str) -> bool:
         return os.path.exists(path)
@@ -454,6 +462,19 @@ Remove-Item $export, $import -ErrorAction SilentlyContinue
 
     def stop_task(self, name: str) -> None:
         self.ps(f"Stop-ScheduledTask -TaskPath {ps_quote(TASK_FOLDER)} -TaskName {ps_quote(name)} -ErrorAction SilentlyContinue")
+
+    def stop_freelm(self, exe_path: str) -> int:
+        """Arrête les tâches FreeLM en cours et les processus de cet exécutable (mise à jour)."""
+        data = self.ps_json(f"""
+Get-ScheduledTask -TaskPath {ps_quote(TASK_FOLDER)} -ErrorAction SilentlyContinue |
+    Where-Object {{ $_.State -eq 'Running' }} | Stop-ScheduledTask -ErrorAction SilentlyContinue
+$target = {ps_quote(exe_path)}
+$procs = @(Get-Process -ErrorAction SilentlyContinue | Where-Object {{ $_.Path -and ($_.Path -ieq $target) }})
+$procs | Stop-Process -Force -ErrorAction SilentlyContinue
+$procs | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
+[pscustomobject]@{{ stopped = $procs.Count }} | ConvertTo-Json -Compress
+""", timeout=120) or {}
+        return int(data.get("stopped") or 0)
 
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict:
         return self.ps_json(iis.configure_site_script(a, physical_path), timeout=600) or {}
@@ -742,6 +763,12 @@ class SimulatedSystem(System):
     def stop_task(self, name: str) -> None:
         if name in self.tasks:
             self.tasks[name]["state"] = "Ready"
+
+    def stop_freelm(self, exe_path: str) -> int:
+        running = [t for t in self.tasks.values() if t.get("state") == "Running"]
+        for t in running:
+            t["state"] = "Ready"
+        return len(running)
 
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict:
         self._step("configure_iis_site", 3)

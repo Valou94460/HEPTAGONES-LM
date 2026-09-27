@@ -227,6 +227,16 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(inst.status, "done")
         self.assertNotIn("db_create", s.calls[calls_before:])            # reprise sans rejouer le début
 
+    def test_reinstall_stops_running_freelm(self):
+        s, a = ready_system(), answers()
+        first = Installer(s, a); first.start(); first.wait(30)
+        self.assertEqual(s.tasks["FreeLM - Interface web"]["state"], "Running")
+        self.assertIn(iis.MODULE_NAME, s.read_text(a.path("iis", "App_Code", f"{iis.MODULE_NAME}.cs")))
+        second = Installer(s, a); second.start(); second.wait(30)
+        self.assertEqual(second.status, "done", second.error)
+        self.assertIn("arrêté", second.report_text())                   # exécutable libéré avant la copie
+        self.assertEqual(s.tasks["FreeLM - Interface web"]["state"], "Running")
+
     def test_plan_depends_on_mode(self):
         local = [st.id for st in build_plan(answers(web_mode="local"))]
         self.assertNotIn("iis_site", local)

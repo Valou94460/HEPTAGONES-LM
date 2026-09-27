@@ -77,6 +77,10 @@ def step_binaries(ctx: Context) -> str:
     source = system.runtime_source()
     if source or system.simulated:
         target = a.path("FreeLM.exe")
+        if system.exists(target):          # réinstallation / mise à jour : libérer l'exécutable
+            stopped = system.stop_freelm(target)
+            if stopped:
+                ctx.log(f"FreeLM en cours d'exécution arrêté ({stopped} processus) ; relancé en fin d'installation")
         system.copy_file(source or "FreeLM.exe", target)
         ctx.log(f"FreeLM {__version__} copié dans {target}")
         return f"FreeLM.exe {__version__} installé"
