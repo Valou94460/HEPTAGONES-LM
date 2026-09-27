@@ -94,7 +94,12 @@ class IisTest(unittest.TestCase):
     def test_web_config(self):
         xml = iis.web_config(answers(web_port=8800))
         self.assertIn('url="http://127.0.0.1:8800/{R:1}"', xml)
-        self.assertIn('name="HTTP_X_REMOTE_USER" value="{LOGON_USER}"', xml)
+        # utilisateur transmis par le module ASP.NET (après l'authentification), pas par URL Rewrite
+        self.assertIn('<add name="FreeLMUserHeader" type="FreeLMUserHeader" />', xml)
+        self.assertNotIn("LOGON_USER", xml)
+        self.assertIn("PostAuthenticateRequest", iis.USER_MODULE_CS)
+        self.assertIn('Headers.Remove(Header)', iis.USER_MODULE_CS)
+        self.assertIn('"X-Remote-User"', iis.USER_MODULE_CS)
         self.assertIn('roles="ENTREPRISE\\GG_FreeLM_Lecteurs"', xml)
         self.assertNotIn("<authorization>", iis.web_config(answers(access_group="")))
         import xml.dom.minidom

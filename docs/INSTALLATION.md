@@ -93,7 +93,7 @@ Chaque étape est **idempotente** : relancer l'assistant (ou « Réessayer ») n
 | Base | Création de la base (récupération SIMPLE), de la connexion Windows du compte de service, rôles `db_datareader` / `db_datawriter` |
 | Schéma | `FreeLM.exe init-db` |
 | Première collecte | `FreeLM.exe collect` : chaque serveur de licences est interrogé |
-| IIS | Rôles et modules manquants, pool sans code managé, site HTTPS (liaison SNI + certificat), authentification Windows seule, proxy ARR, variable `HTTP_X_REMOTE_USER`, autorisation du groupe, `web.config` de relais vers FreeLM (écoute locale) |
+| IIS | Rôles et modules manquants, pool .NET v4.0 (pipeline intégré), site HTTPS (liaison SNI + certificat), authentification Windows seule, proxy ARR, module `FreeLMUserHeader` (en-tête `X-Remote-User` posé après l'authentification), autorisation du groupe, `web.config` de relais vers FreeLM (écoute locale) |
 | Tâches | Collecte, rapport mensuel, envoi des e-mails, purge, interface web permanente, sous le compte de service |
 | Pare-feu | Règle entrante sur le port HTTPS (profils Domaine et Privé) |
 | Démarrage | Lancement de l'interface et attente de sa réponse |

@@ -80,26 +80,66 @@ L'utilisateur peut saisir `jdupont`, `ENTREPRISE\jdupont` ou `jdupont@entreprise
 IIS authentifie l'utilisateur de manière transparente (Kerberos/NTLM) et transmet son
 nom à FreeLM, qui n'écoute que sur la boucle locale.
 
-1. Installer IIS avec **Authentification Windows**, puis les modules
+> **Le plus simple : `FreeLM-Setup.exe`** réalise toutes ces étapes et vérifie le
+> résultat (voir [INSTALLATION.md](INSTALLATION.md)). Procédure manuelle ci-dessous.
+
+1. Installer IIS avec **Authentification Windows**, **Autorisation d'URL** et
+   **ASP.NET 4.x**, puis les modules
    [URL Rewrite](https://www.iis.net/downloads/microsoft/url-rewrite) et
    [Application Request Routing](https://www.iis.net/downloads/microsoft/application-request-routing)
    (ARR › *Server Proxy Settings* › *Enable proxy*).
-2. Créer un site HTTPS (certificat du § 3, lié dans IIS) ; *Authentification* :
-   **Windows activé, Anonyme désactivé**.
-3. *URL Rewrite* › *View Server Variables* › ajouter `HTTP_X_REMOTE_USER`.
+2. Créer un site HTTPS (certificat du § 3, lié dans IIS), pool **.NET CLR v4.0,
+   pipeline intégré** ; *Authentification* : **Windows activé, Anonyme désactivé**.
+3. Déposer le module d'identité `App_Code\FreeLMUserHeader.cs` dans le dossier du site.
+   Il pose l'en-tête `X-Remote-User` **après** l'authentification et supprime toute
+   valeur envoyée par le navigateur.
+
+   > Ne pas utiliser de variable serveur `{LOGON_USER}` dans la règle URL Rewrite.
+   > Les règles s'exécutent *avant* l'authentification Windows : la valeur serait
+   > toujours vide et FreeLM répondrait « Authentification requise ».
+
+   ```csharp
+   using System.Web;
+
+   public class FreeLMUserHeader : IHttpModule
+   {
+       const string Header = "X-Remote-User";
+
+       public void Init(HttpApplication app)
+       {
+           app.BeginRequest += (s, e) => ((HttpApplication)s).Context.Request.Headers.Remove(Header);
+           app.PostAuthenticateRequest += (s, e) =>
+           {
+               HttpContext ctx = ((HttpApplication)s).Context;
+               ctx.Request.Headers.Remove(Header);
+               if (ctx.User != null && ctx.User.Identity != null && ctx.User.Identity.IsAuthenticated)
+                   ctx.Request.Headers.Set(Header, ctx.User.Identity.Name);
+           };
+       }
+
+       public void Dispose() { }
+   }
+   ```
+
 4. `web.config` du site :
 
    ```xml
    <configuration>
      <system.webServer>
+       <security>
+         <authorization>
+           <clear />
+           <add accessType="Allow" roles="ENTREPRISE\GG_FreeLM_Lecteurs" />
+         </authorization>
+       </security>
+       <modules>
+         <remove name="FreeLMUserHeader" />
+         <add name="FreeLMUserHeader" type="FreeLMUserHeader" />
+       </modules>
        <rewrite>
          <rules>
            <rule name="FreeLM" stopProcessing="true">
              <match url="(.*)" />
-             <serverVariables>
-               <!-- écrase toute valeur envoyée par le navigateur -->
-               <set name="HTTP_X_REMOTE_USER" value="{LOGON_USER}" />
-             </serverVariables>
              <action type="Rewrite" url="http://127.0.0.1:8765/{R:1}" />
            </rule>
          </rules>
@@ -122,8 +162,9 @@ nom à FreeLM, qui n'écoute que sur la boucle locale.
        allowed_users: []        # vide = tout utilisateur authentifié par IIS
    ```
 
-   Restreindre l'accès à un groupe : *Règles d'autorisation* IIS (autoriser le groupe
-   `GG_FreeLM_Lecteurs`, refuser les autres) ou liste `allowed_users`.
+   La section `<authorization>` du `web.config` réserve l'accès au groupe
+   `GG_FreeLM_Lecteurs` (supprimer la section pour tout utilisateur authentifié) ;
+   la liste `allowed_users` de FreeLM permet un filtrage supplémentaire.
 
 ## 3. Certificat HTTPS
 

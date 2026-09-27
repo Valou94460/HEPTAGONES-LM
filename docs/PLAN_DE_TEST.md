@@ -319,7 +319,7 @@ Sur un serveur Windows de recette vierge, avec `FreeLM-Setup.exe`.
 | INST-05 | Compte de service | Tester un compte inconnu, puis un mauvais mot de passe, puis le bon | Erreur explicite, puis « mot de passe valide » | ☐ |
 | INST-06 🔴 | Base | Tester l'instance ; installer avec « Créer la base » | Base créée (SIMPLE), connexion Windows du compte de service, rôles lecture / écriture | ☐ |
 | INST-07 | Licences | Tester chaque serveur ; tester une adresse erronée | Nombre de features et de jetons ; erreur « injoignable » | ☐ |
-| INST-08 🔴 | IIS | Mode IIS, certificat du magasin, groupe AD | Site HTTPS démarré, authentification Windows seule, accès limité au groupe | ☐ |
+| INST-08 🔴 | IIS | Mode IIS, certificat du magasin, groupe AD | Site HTTPS démarré, authentification Windows seule, accès limité au groupe ; un membre du groupe arrive connecté sous son nom (en-tête `X-Remote-User` forgé par le navigateur ignoré) | ☐ |
 | INST-09 🔴 | Progression | Lancer l'installation | Barre de 0 à 100 %, étapes cochées, journal détaillé | ☐ |
 | INST-10 | Reprise | Provoquer un échec (compte sans droit), corriger, « Réessayer » | Reprise à l'étape en échec, installation terminée | ☐ |
 | INST-11 🔴 | Vérification | Fin d'installation | Tous les contrôles verts ; « Ouvrir FreeLM » ouvre l'interface sans saisie de mot de passe | ☐ |

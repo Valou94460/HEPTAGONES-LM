@@ -224,7 +224,10 @@ jobs:
           $secure = ConvertTo-SecureString $env:SVC_PWD -AsPlainText -Force
           New-LocalUser -Name svc_freelm -Password $secure -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
           New-LocalGroup -Name FreeLM_Lecteurs | Out-Null
-          Add-LocalGroupMember -Group FreeLM_Lecteurs -Member $env:USERNAME
+          # Utilisateur de test membre du groupe (connexion NTLM avec identifiants explicites :
+          # en boucle locale, NTLM réutiliserait sinon le jeton de session du runner, antérieur au groupe)
+          New-LocalUser -Name ci_lecteur -Password $secure -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -Group FreeLM_Lecteurs -Member ci_lecteur
           $cert = New-SelfSignedCertificate -DnsName "freelm.ci.local" -CertStoreLocation Cert:\LocalMachine\My
           Get-ChildItem Cert:\LocalMachine\My | Format-Table Thumbprint, Subject, HasPrivateKey
           Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 freelm.ci.local"
@@ -252,25 +255,24 @@ jobs:
         run: |
           Get-ScheduledTask -TaskPath "\FreeLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
           & "$env:windir\system32\inetsrv\appcmd.exe" list site
-          # Diagnostic : poignée de main NTLM, journalisation IIS, puis essai sans restriction de groupe
-          Write-Host "Utilisateur : $env:USERDOMAIN\$env:USERNAME"
-          Get-LocalGroupMember FreeLM_Lecteurs | Format-Table Name, PrincipalSource
-          Get-WindowsFeature Web-Http-Logging, Web-Http-Tracing | Format-Table Name, InstallState
-          & "$env:windir\system32\inetsrv\appcmd.exe" list config FreeLM -section:system.webServer/security/authorization
-          curl.exe -skv --ntlm -u : https://freelm.ci.local/api/me 2>&1 | Select-String '^[<>] (GET|HTTP|WWW-Auth|Authorization)|^\* (Server auth|NTLM|Negotiate)' | ForEach-Object { ($_.Line -replace '(NTLM|Negotiate) [A-Za-z0-9+/=]{20,}', '$1 <jeton>') }
-          $cfg = "$env:windir\system32\inetsrv\appcmd.exe"
-          & $cfg set config FreeLM -section:system.webServer/security/authorization /-"[accessType='Allow',roles='$env:COMPUTERNAME\FreeLM_Lecteurs']" 2>&1 | Out-Host
-          & $cfg set config FreeLM -section:system.webServer/security/authorization /+"[accessType='Allow',users='*']" 2>&1 | Out-Host
-          Write-Host "Sans restriction de groupe :"; curl.exe -sk --ntlm -u : -w " [%{http_code}]`n" https://freelm.ci.local/api/me
-          Write-Host "Avec en-tête forcé (contrôle) :"; curl.exe -sk --ntlm -u : -H "X-Remote-User: pirate" -w " [%{http_code}]`n" https://freelm.ci.local/api/me
-          netsh http flush logbuffer | Out-Null; Start-Sleep 2
-          Get-ChildItem C:\inetpub\logs\LogFiles -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "== $($_.FullName)"; Get-Content $_.FullName -Tail 12 }
-          # Authentification unique : IIS (Windows) -> FreeLM (en-tête X-Remote-User)
-          $meta = Invoke-RestMethod "https://freelm.ci.local/api/meta" -UseDefaultCredentials -SkipCertificateCheck
-          if (-not $meta.version) { throw "API FreeLM inaccessible via IIS" }
-          $me = Invoke-RestMethod "https://freelm.ci.local/api/me" -UseDefaultCredentials -SkipCertificateCheck
-          Write-Host "Utilisateur vu par FreeLM via IIS : $($me.user) ($($me.auth))"
-          if ($me.auth -ne "header" -or -not $me.user) { throw "Authentification unique non transmise" }
+          # Authentification unique : IIS (Windows) -> module FreeLMUserHeader -> FreeLM (en-tête X-Remote-User)
+          $url = "https://freelm.ci.local/api/me"
+          function Get-Me([string[]]$extra) {
+            $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" @extra -o me.json -w "%{http_code}" $url
+            $body = Get-Content me.json -Raw
+            Write-Host "[$code] $body"
+            if ($code -ne "200") { throw "GET /api/me via IIS : $code" }
+            return $body | ConvertFrom-Json
+          }
+          $me = Get-Me @()
+          if ($me.auth -ne "header" -or $me.user -ne "ci_lecteur") { throw "Authentification unique non transmise" }
+          # En-tête forgé par le client : ignoré (remplacé par l'utilisateur authentifié)
+          $me = Get-Me @("-H", "X-Remote-User: administrateur")
+          if ($me.user -ne "ci_lecteur") { throw "en-tête X-Remote-User du client accepté" }
+          # Authentifié mais hors du groupe autorisé : refus par IIS
+          $code = curl.exe -sk --ntlm -u "svc_freelm:$env:SVC_PWD" -o NUL -w "%{http_code}" $url
+          Write-Host "Hors du groupe : $code"
+          if ($code -ne "401") { throw "accès accordé hors du groupe ($code)" }
           # Sans identifiants : refus par IIS
           try { Invoke-WebRequest "https://freelm.ci.local/" -SkipCertificateCheck -ErrorAction Stop; throw "accès anonyme accepté" }
           catch { if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw $_ } }

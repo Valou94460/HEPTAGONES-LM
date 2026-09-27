@@ -3,6 +3,11 @@
 IIS authentifie l'utilisateur (Kerberos / NTLM), vérifie le groupe autorisé puis
 relaie la requête à FreeLM (écoute locale) avec l'en-tête ``X-Remote-User``
 (module URL Rewrite + Application Request Routing en mode proxy).
+
+L'en-tête est posé par un petit module ASP.NET (``App_Code``) *après*
+l'authentification : les règles URL Rewrite s'exécutent avant celle-ci, une
+variable ``{LOGON_USER}`` y serait toujours vide. Le module supprime aussi tout
+en-tête ``X-Remote-User`` envoyé par le navigateur.
 """
 
 from __future__ import annotations
@@ -17,6 +22,7 @@ FEATURES = [
     ("Web-Server", "IIS-WebServerRole", "Serveur Web IIS"),
     ("Web-Windows-Auth", "IIS-WindowsAuthentication", "Authentification Windows"),
     ("Web-Url-Auth", "IIS-URLAuthorization", "Autorisation d'URL (restriction par groupe)"),
+    ("Web-Asp-Net45", "IIS-ASPNET45", "ASP.NET 4.x (transmission de l'utilisateur à FreeLM)"),
     ("Web-Mgmt-Console", "IIS-ManagementConsole", "Console de gestion IIS"),
     ("Web-Scripting-Tools", "IIS-ManagementScriptingTools", "Outils de script IIS (PowerShell)"),
 ]
@@ -37,7 +43,35 @@ MODULES = {
     },
 }
 
-HEADER_VARIABLE = "HTTP_X_REMOTE_USER"
+HEADER_NAME = "X-Remote-User"
+MODULE_NAME = "FreeLMUserHeader"
+
+# Module ASP.NET compilé par IIS au premier appel (dossier App_Code du site).
+USER_MODULE_CS = f"""// Généré par l'assistant d'installation FreeLM.
+// Transmet l'utilisateur authentifié par IIS (Windows) à FreeLM dans l'en-tête {HEADER_NAME}.
+// Les règles URL Rewrite s'exécutent avant l'authentification : ce module intervient après.
+using System.Web;
+
+public class {MODULE_NAME} : IHttpModule
+{{
+    const string Header = "{HEADER_NAME}";
+
+    public void Init(HttpApplication app)
+    {{
+        // Jamais de valeur fournie par le navigateur
+        app.BeginRequest += (s, e) => ((HttpApplication)s).Context.Request.Headers.Remove(Header);
+        app.PostAuthenticateRequest += (s, e) =>
+        {{
+            HttpContext ctx = ((HttpApplication)s).Context;
+            ctx.Request.Headers.Remove(Header);
+            if (ctx.User != null && ctx.User.Identity != null && ctx.User.Identity.IsAuthenticated)
+                ctx.Request.Headers.Set(Header, ctx.User.Identity.Name);
+        }};
+    }}
+
+    public void Dispose() {{ }}
+}}
+"""
 
 
 def ps_quote(value) -> str:
@@ -46,7 +80,7 @@ def ps_quote(value) -> str:
 
 
 def web_config(a: Answers) -> str:
-    """web.config du site : autorisation par groupe et relais vers FreeLM."""
+    """web.config du site : autorisation par groupe, module d'identité et relais vers FreeLM."""
     auth = ""
     if a.access_group:
         auth = (
@@ -60,13 +94,14 @@ def web_config(a: Answers) -> str:
         "     puis relaie vers FreeLM qui n'écoute que sur la boucle locale. -->\n"
         "<configuration>\n  <system.webServer>\n"
         f"{auth}"
+        "    <modules>\n"
+        f"      <!-- App_Code\\{MODULE_NAME}.cs : en-tête {HEADER_NAME} posé après l'authentification -->\n"
+        f'      <remove name="{MODULE_NAME}" />\n'
+        f'      <add name="{MODULE_NAME}" type="{MODULE_NAME}" />\n'
+        "    </modules>\n"
         "    <rewrite>\n      <rules>\n"
         '        <rule name="FreeLM" stopProcessing="true">\n'
         '          <match url="(.*)" />\n'
-        "          <serverVariables>\n"
-        "            <!-- écrase toute valeur envoyée par le navigateur -->\n"
-        f'            <set name="{HEADER_VARIABLE}" value="{{LOGON_USER}}" />\n'
-        "          </serverVariables>\n"
         f'          <action type="Rewrite" url={quoteattr(target)} />\n'
         "        </rule>\n      </rules>\n    </rewrite>\n"
         '    <httpProtocol>\n      <customHeaders>\n        <remove name="X-Powered-By" />\n'
@@ -150,7 +185,8 @@ $store = New-Object System.Security.Cryptography.X509Certificates.X509Store('My'
 $found = $store.Certificates.Find('FindByThumbprint', $thumb, $false).Count; $store.Close()
 if ($found -eq 0) {{ throw "Certificat $thumb introuvable dans LocalMachine\\My" }}
 if (-not (Test-Path "IIS:\\AppPools\\$pool")) {{ New-WebAppPool -Name $pool | Out-Null }}
-Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedRuntimeVersion -Value ''
+Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedRuntimeVersion -Value 'v4.0'
+Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedPipelineMode -Value 'Integrated'
 Set-ItemProperty "IIS:\\AppPools\\$pool" -Name startMode -Value 'AlwaysRunning'
 if (-not (Get-Website -Name $site)) {{
     New-Website -Name $site -PhysicalPath $path -ApplicationPool $pool -Port $port -HostHeader $hostName -Ssl -SslFlags 1 | Out-Null
@@ -173,12 +209,6 @@ Set-WebConfigurationProperty -PSPath {apphost} -Location $site -Filter 'system.w
 # ARR en mode proxy, en-tête Host conservé (contrôle anti « DNS rebinding » de FreeLM)
 Set-WebConfigurationProperty -PSPath {apphost} -Filter 'system.webServer/proxy' -Name enabled -Value $true
 Set-WebConfigurationProperty -PSPath {apphost} -Filter 'system.webServer/proxy' -Name preserveHostHeader -Value $true
-# Variable serveur autorisée pour transmettre l'utilisateur authentifié
-$filter = 'system.webServer/rewrite/allowedServerVariables'
-$existing = Get-WebConfigurationProperty -PSPath {apphost} -Location $site -Filter "$filter/add[@name='{HEADER_VARIABLE}']" -Name name -ErrorAction SilentlyContinue
-if (-not $existing) {{
-    Add-WebConfigurationProperty -PSPath {apphost} -Location $site -Filter $filter -Name '.' -Value @{{ name = '{HEADER_VARIABLE}' }}
-}}
 Start-WebAppPool -Name $pool -ErrorAction SilentlyContinue
 Start-Website -Name $site -ErrorAction SilentlyContinue
 [pscustomobject]@{{ state = (Get-Website -Name $site).State }} | ConvertTo-Json -Compress

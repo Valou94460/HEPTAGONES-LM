@@ -58,6 +58,14 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   et `ldap_validate_cert: false`, exemples en `Encrypt=yes`, retrait de `db_ddladmin` documenté.
 - Publication : construction sans droit d'écriture, empreintes `SHA256SUMS` jointes à la release.
 
+### Corrigé
+- **Authentification unique derrière IIS** : l'utilisateur Windows n'était pas transmis à FreeLM
+  (variable `{LOGON_USER}` évaluée par URL Rewrite *avant* l'authentification, donc vide). Il est
+  désormais transmis par un module ASP.NET (`App_Code\FreeLMUserHeader.cs`) exécuté après
+  l'authentification, qui ignore aussi tout en-tête `X-Remote-User` envoyé par le navigateur.
+  L'assistant installe ASP.NET 4.x et configure le pool en .NET v4.0 ; procédure manuelle mise à
+  jour dans `docs/AUTHENTIFICATION.md`.
+
 ## [0.1.0] — 2026-09-27
 
 Première version.

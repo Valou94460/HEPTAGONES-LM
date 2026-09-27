@@ -177,7 +177,9 @@ def step_iis_site(ctx: Context) -> str:
     a, system = ctx.a, ctx.system
     physical = a.path("iis")
     system.write_text(a.path("iis", "web.config"), iis.web_config(a))
-    ctx.log(f"web.config écrit (relais vers http://127.0.0.1:{a.web_port})")
+    system.write_text(a.path("iis", "App_Code", f"{iis.MODULE_NAME}.cs"), iis.USER_MODULE_CS)
+    ctx.log(f"web.config écrit (relais vers http://127.0.0.1:{a.web_port}, utilisateur transmis "
+            f"par le module {iis.MODULE_NAME})")
     res = system.configure_iis_site(a, physical)
     ctx.log(f"Site « {a.iis_site} » : https://{a.public_host}:{a.iis_port} ({res.get('state', '?')})")
     if a.access_group:
