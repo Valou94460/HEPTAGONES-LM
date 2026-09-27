@@ -119,11 +119,14 @@ jobs:
 
       - name: Pilote ODBC Driver 18 for SQL Server
         run: |
-          if ! odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server"; then
-            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
-            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          if ! (command -v odbcinst > /dev/null && odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server"); then
+            # Dépôt Microsoft : souvent déjà présent sur les runners GitHub
+            if ! grep -rqs "packages.microsoft.com" /etc/apt/sources.list /etc/apt/sources.list.d/; then
+              curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --batch --yes --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+              curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+            fi
             sudo apt-get update -qq
-            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18 unixodbc
           fi
           odbcinst -q -d
 
