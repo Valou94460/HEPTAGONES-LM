@@ -252,19 +252,19 @@ jobs:
         run: |
           Get-ScheduledTask -TaskPath "\FreeLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
           & "$env:windir\system32\inetsrv\appcmd.exe" list site
-          # Diagnostic : plusieurs clients, journal IIS (sous-statut) et échecs d'ouverture de session
-          Write-Host "Utilisateur : $env:USERDOMAIN\$env:USERNAME"; whoami /groups | Select-String FreeLM
-          $r = Invoke-WebRequest "https://freelm.ci.local/api/me" -UseDefaultCredentials -SkipCertificateCheck -SkipHttpErrorCheck
-          Write-Host "pwsh 7 : $($r.StatusCode) $($r.Content)"
-          powershell -NoProfile -Command "[Net.ServicePointManager]::ServerCertificateValidationCallback = { `$true }; try { (Invoke-WebRequest 'https://freelm.ci.local/api/me' -UseDefaultCredentials -UseBasicParsing).Content } catch { 'PS 5.1 : ' + `$_.Exception.Message }"
-          Write-Host "curl --ntlm :"; curl.exe -sk --ntlm -u : -w " [%{http_code}]`n" https://freelm.ci.local/api/me
-          Write-Host "curl --negotiate :"; curl.exe -sk --negotiate -u : -w " [%{http_code}]`n" https://freelm.ci.local/api/me
-          Write-Host "curl --ntlm svc_freelm :"; curl.exe -sk --ntlm -u "svc_freelm:$env:SVC_PWD" -w " [%{http_code}]`n" https://freelm.ci.local/api/me
-          netsh http flush logbuffer | Out-Null
+          # Diagnostic : poignée de main NTLM, journalisation IIS, puis essai sans restriction de groupe
+          Write-Host "Utilisateur : $env:USERDOMAIN\$env:USERNAME"
+          Get-LocalGroupMember FreeLM_Lecteurs | Format-Table Name, PrincipalSource
+          Get-WindowsFeature Web-Http-Logging, Web-Http-Tracing | Format-Table Name, InstallState
+          & "$env:windir\system32\inetsrv\appcmd.exe" list config FreeLM -section:system.webServer/security/authorization
+          curl.exe -skv --ntlm -u : https://freelm.ci.local/api/me 2>&1 | Select-String '^[<>] (GET|HTTP|WWW-Auth|Authorization)|^\* (Server auth|NTLM|Negotiate)' | ForEach-Object { ($_.Line -replace '(NTLM|Negotiate) [A-Za-z0-9+/=]{20,}', '$1 <jeton>') }
+          $cfg = "$env:windir\system32\inetsrv\appcmd.exe"
+          & $cfg set config FreeLM -section:system.webServer/security/authorization /-"[accessType='Allow',roles='$env:COMPUTERNAME\FreeLM_Lecteurs']" 2>&1 | Out-Host
+          & $cfg set config FreeLM -section:system.webServer/security/authorization /+"[accessType='Allow',users='*']" 2>&1 | Out-Host
+          Write-Host "Sans restriction de groupe :"; curl.exe -sk --ntlm -u : -w " [%{http_code}]`n" https://freelm.ci.local/api/me
+          Write-Host "Avec en-tête forcé (contrôle) :"; curl.exe -sk --ntlm -u : -H "X-Remote-User: pirate" -w " [%{http_code}]`n" https://freelm.ci.local/api/me
+          netsh http flush logbuffer | Out-Null; Start-Sleep 2
           Get-ChildItem C:\inetpub\logs\LogFiles -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "== $($_.FullName)"; Get-Content $_.FullName -Tail 12 }
-          Get-WinEvent -FilterHashtable @{ LogName = 'Security'; Id = 4625 } -MaxEvents 3 -ErrorAction SilentlyContinue | ForEach-Object { $_.Message -split "`n" | Select-String 'Account Name|Failure Reason|Status|Sub Status|Logon Type|Authentication Package' }
-          & "$env:windir\system32\inetsrv\appcmd.exe" list config FreeLM -section:system.webServer/security/authentication/windowsAuthentication
-          Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa | Select-Object DisableLoopbackCheck, LmCompatibilityLevel, RestrictSendingNTLMTraffic | Format-List
           # Authentification unique : IIS (Windows) -> FreeLM (en-tête X-Remote-User)
           $meta = Invoke-RestMethod "https://freelm.ci.local/api/meta" -UseDefaultCredentials -SkipCertificateCheck
           if (-not $meta.version) { throw "API FreeLM inaccessible via IIS" }
