@@ -278,8 +278,13 @@ jobs:
           catch { if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw $_ } }
           # Collecte planifiée exécutée par le compte de service
           Start-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte"
-          Start-Sleep 20
-          $info = Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte" | Get-ScheduledTaskInfo
+          # Attente de la fin réelle de la tâche (démarrage de l'exécutable variable selon l'antivirus)
+          $task = Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte"
+          for ($i = 0; $i -lt 90; $i++) {
+            Start-Sleep 2
+            $info = $task | Get-ScheduledTaskInfo
+            if ((Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte").State -ne "Running" -and $info.LastTaskResult -ne 267009) { break }
+          }
           Write-Host "Collecte planifiée : dernier résultat $($info.LastTaskResult)"
           if ($info.LastTaskResult -ne 0) { Get-Content C:\HeptagonesLM\logs\heptagoneslm.log -Tail 40; throw "collecte planifiée en échec" }
 
