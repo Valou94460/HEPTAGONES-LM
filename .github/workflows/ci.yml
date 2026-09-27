@@ -252,6 +252,13 @@ jobs:
         run: |
           Get-ScheduledTask -TaskPath "\FreeLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
           & "$env:windir\system32\inetsrv\appcmd.exe" list site
+          # Diagnostic : réponse brute via IIS (statut, en-têtes, corps), puis journal IIS
+          $r = Invoke-WebRequest "https://freelm.ci.local/api/me" -UseDefaultCredentials -SkipCertificateCheck -SkipHttpErrorCheck
+          Write-Host "GET /api/me via IIS : $($r.StatusCode)"
+          $r.Headers.GetEnumerator() | ForEach-Object { Write-Host "  $($_.Key): $($_.Value)" }
+          Write-Host $r.Content
+          Get-ChildItem C:\inetpub\logs\LogFiles -Recurse -Filter *.log -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "== $($_.FullName)"; Get-Content $_.FullName -Tail 15 }
+          Get-Content C:\FreeLM\logs\*.log -Tail 20 -ErrorAction SilentlyContinue
           # Authentification unique : IIS (Windows) -> FreeLM (en-tête X-Remote-User)
           $meta = Invoke-RestMethod "https://freelm.ci.local/api/meta" -UseDefaultCredentials -SkipCertificateCheck
           if (-not $meta.version) { throw "API FreeLM inaccessible via IIS" }
