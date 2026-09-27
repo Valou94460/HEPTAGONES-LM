@@ -97,7 +97,7 @@ class HostHeaderTest(_Server):
 class RobustnessTest(_Server):
     """M1, M2, L1, L2 — déni de service et fuites d'information."""
 
-    web = {"request_timeout_s": 1, "max_connections": 3}
+    web = {"request_timeout_s": 1}
 
     def test_negative_content_length(self):
         s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
@@ -114,22 +114,6 @@ class RobustnessTest(_Server):
         self.assertEqual(data, b"")
         self.assertLess(time.time() - start, 4)
 
-    def test_connection_cap(self):
-        idle = [socket.create_connection(("127.0.0.1", self.port)) for _ in range(3)]
-        time.sleep(0.2)
-        s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
-        s.sendall(b"GET /api/meta HTTP/1.1\r\nHost: localhost\r\n\r\n")
-        try:
-            refused = s.recv(100) == b""
-        except ConnectionResetError:
-            refused = True
-        s.close()
-        for c in idle:
-            c.close()
-        self.assertTrue(refused, "la 4e connexion aurait dû être refusée")
-        time.sleep(1.5)  # les emplacements se libèrent
-        self.assertEqual(self.get("/api/meta")[0], 200)
-
     def test_no_version_in_server_header(self):
         _, r, _ = self.get("/login.html")
         self.assertEqual(r.getheader("Server").strip(), "FreeLM")
@@ -142,6 +126,42 @@ class RobustnessTest(_Server):
 
     def test_date_overflow_is_client_error(self):
         self.assertEqual(self.get("/api/report?type=summary&start=9999-12-30&end=9999-12-31")[0], 400)
+
+
+class ConnectionCapTest(_Server):
+    """M2 — plafond de requêtes simultanées (serveur dédié : n'influence pas les autres tests)."""
+
+    web = {"request_timeout_s": 1, "max_connections": 3}
+
+    def test_connection_cap(self):
+        idle = [socket.create_connection(("127.0.0.1", self.port)) for _ in range(3)]
+        time.sleep(0.3)
+        s = socket.create_connection(("127.0.0.1", self.port), timeout=5)
+        s.sendall(b"GET /api/meta HTTP/1.1\r\nHost: localhost\r\n\r\n")
+        try:
+            refused = s.recv(100) == b""
+        except ConnectionError:
+            refused = True
+        s.close()
+        for c in idle:
+            try:
+                c.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+            c.close()
+        self.assertTrue(refused, "la 4e connexion aurait dû être refusée")
+        # Les emplacements se libèrent (au plus tard à l'expiration du délai de requête) ;
+        # sous Windows la libération peut prendre quelques secondes : attente bornée.
+        deadline = time.time() + 15
+        while True:
+            try:
+                status = self.get("/api/meta")[0]
+                break
+            except ConnectionError:
+                if time.time() > deadline:
+                    raise
+                time.sleep(0.2)
+        self.assertEqual(status, 200)
 
 
 class AuditLogInjectionTest(_Server):
