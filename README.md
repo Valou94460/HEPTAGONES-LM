@@ -306,6 +306,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 
 | Document | Contenu |
 |---|---|
+| [docs/DEX_FreeLM.docx](docs/DEX_FreeLM.docx) | **Dossier d'exploitation (Word)** : architecture, installation, exploitation, supervision, guide de l'interface illustré, sauvegarde, sécurité, incidents, maintenance, PRA |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |

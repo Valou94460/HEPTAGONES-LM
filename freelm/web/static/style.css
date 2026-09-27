@@ -151,7 +151,7 @@ input[type="search"] { width: 240px; }
 .ms-button.active .ms-label { color: var(--accent); }
 .ms-button::after { content: "▾"; color: var(--muted); font-size: 11px; }
 .ms-panel {
-  position: absolute; z-index: 30; top: 40px; left: 0; width: 290px; max-height: 380px;
+  position: absolute; z-index: 30; top: 40px; left: 0; width: 290px; max-width: calc(100vw - 32px); max-height: 380px;
   display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--border);
   border-radius: 12px; box-shadow: var(--shadow-lg); padding: 10px;
 }
@@ -197,7 +197,7 @@ main#view { padding: 18px 28px 32px; display: flex; flex-direction: column; gap:
 
 /* KPI */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
-.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; }
 .kpis:empty { display: none; }
 .kpi, .kpi-card {
   background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow);

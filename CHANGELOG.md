@@ -19,6 +19,7 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   `reporting.currency`), économies potentielles, coût par heure d'usage, recommandation ;
   colonne coût dans la répartition (refacturation par service).
 - **Dates d'expiration** lues dans la sortie `lmstat` (colonne `feature.expires_on`, schéma v3).
+- **Dossier d'exploitation** `docs/DEX_FreeLM.docx` (Word, 58 pages, captures d'écran et schémas).
 - **Nouvelle interface** : barre latérale de navigation, filtres en pastilles, préréglages de
   période en un clic, cartes et jauges, graphiques en aires, thème Auto / Clair / Sombre
   mémorisé, menu en tiroir sur mobile.

@@ -202,6 +202,9 @@
       });
       panel.querySelector('[data-a="none"]').addEventListener("click", () => { state[key] = []; refreshLabel(); render(); changed(); });
       container.appendChild(panel);
+      // Panneau aligné à droite de la pastille s'il déborderait de la fenêtre.
+      const box = panel.getBoundingClientRect();
+      if (box.right > window.innerWidth - 8) { panel.style.left = "auto"; panel.style.right = "0"; }
       button.setAttribute("aria-expanded", "true");
       render();
       search.focus();
