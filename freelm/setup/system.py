@@ -110,6 +110,7 @@ class System:
     def grant(self, path: str, account: str, rights: str) -> None: raise NotImplementedError
     def set_machine_env(self, name: str, value: str) -> None: raise NotImplementedError
     def register_task(self, spec: TaskSpec, account: str, password: str) -> None: raise NotImplementedError
+    def grant_batch_logon(self, account: str) -> bool: raise NotImplementedError
     def start_task(self, name: str) -> None: raise NotImplementedError
     def stop_task(self, name: str) -> None: raise NotImplementedError
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict: raise NotImplementedError
@@ -187,8 +188,11 @@ class WindowsSystem(System):
         if secret is not None:
             env[SECRET_ENV] = secret
         try:
+            # stdin fermé : sinon Windows PowerShell attend la fin d'une entrée standard héritée
+            # (tâche planifiée, CI, service) et ne se termine jamais.
             proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-                                   "-EncodedCommand", encoded], capture_output=True, timeout=timeout, env=env)
+                                   "-EncodedCommand", encoded], capture_output=True, timeout=timeout, env=env,
+                                  stdin=subprocess.DEVNULL)
         except subprocess.TimeoutExpired:
             return Result(124, "", f"délai dépassé ({timeout} s)")
         dec = lambda b: b.decode("utf-8", "replace") if b else ""
@@ -338,7 +342,7 @@ $i = $t | Get-ScheduledTaskInfo
         full_env = dict(os.environ)
         full_env.update(env or {})
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env)
+            proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env, stdin=subprocess.DEVNULL)
         except FileNotFoundError:
             return Result(127, "", f"programme introuvable : {cmd[0]}")
         except subprocess.TimeoutExpired:
@@ -408,6 +412,30 @@ Register-ScheduledTask -TaskName {ps_quote(spec.name)} -TaskPath {ps_quote(TASK_
         r = self.ps(script, secret=password)
         if not r.ok:
             raise SetupError(f"Tâche « {spec.name} » : {r.message}")
+
+    def grant_batch_logon(self, account: str) -> bool:
+        """Droit « Ouvrir une session en tant que tâche » (SeBatchLogonRight), requis pour les tâches planifiées.
+
+        Renvoie True si le droit a été ajouté, False s'il était déjà accordé. Une stratégie de groupe
+        qui définit ce droit l'emporte : ajouter alors le compte dans la GPO.
+        """
+        data = self.ps_json(f"""
+$sid = (New-Object System.Security.Principal.NTAccount({ps_quote(account)})).Translate([System.Security.Principal.SecurityIdentifier]).Value
+$export = Join-Path $env:TEMP 'freelm-rights.inf'; $import = Join-Path $env:TEMP 'freelm-rights-new.inf'
+secedit /export /cfg $export /areas USER_RIGHTS | Out-Null
+$line = Get-Content $export | Where-Object {{ $_ -like 'SeBatchLogonRight*' }} | Select-Object -First 1
+$added = $false
+if (-not $line -or $line -notmatch [regex]::Escape('*' + $sid)) {{
+  $new = if ($line) {{ $line + ',*' + $sid }} else {{ 'SeBatchLogonRight = *' + $sid }}
+  $inf = "[Unicode]`r`nUnicode=yes`r`n[Version]`r`nsignature=`"`$CHICAGO`$`"`r`nRevision=1`r`n[Privilege Rights]`r`n" + $new
+  Set-Content -Path $import -Value $inf -Encoding Unicode
+  secedit /configure /db (Join-Path $env:TEMP 'freelm-rights.sdb') /cfg $import /areas USER_RIGHTS /quiet | Out-Null
+  $added = $true
+}}
+Remove-Item $export, $import -ErrorAction SilentlyContinue
+[pscustomobject]@{{ added = $added }} | ConvertTo-Json -Compress
+""")
+        return bool((data or {}).get("added"))
 
     def start_task(self, name: str) -> None:
         r = self.ps(f"Start-ScheduledTask -TaskPath {ps_quote(TASK_FOLDER)} -TaskName {ps_quote(name)}")
@@ -669,6 +697,10 @@ class SimulatedSystem(System):
             raise SetupError("Mot de passe du compte de service requis")
         self.tasks[spec.name] = {"exists": True, "state": "Ready", "last_result": 267011, "last_run": None,
                                  "next_run": None, "user": account, "spec": spec.arguments}
+
+    def grant_batch_logon(self, account: str) -> bool:
+        self._step("grant_batch_logon", 0.3)
+        return True
 
     def start_task(self, name: str) -> None:
         self._step(f"start_task:{name}", 0.5)

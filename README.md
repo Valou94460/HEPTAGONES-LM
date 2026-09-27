@@ -43,6 +43,7 @@ jetons et chiffrage des économies possibles.
 | **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **FreeLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
+| **FreeLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
@@ -90,6 +91,28 @@ freelm demo --days 30             # ou : base + rapport Excel de démonstration 
 ```
 
 ## Installation en production
+
+### Installation assistée (recommandée)
+
+Double-cliquer sur **`FreeLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/FREE-LM/releases)) :
+un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque étape.
+
+1. **Vérification du serveur** : Windows, droits, pilote ODBC, lmutil, rôles et modules IIS —
+   ce qui manque (IIS, URL Rewrite, ARR) s'installe en un clic.
+2. **Configuration guidée** avec un bouton « Tester » à chaque étape : compte de service,
+   SQL Server (création de la base et des droits), serveurs de licences (lmstat en direct),
+   IIS avec connexion Windows automatique et groupe AD, e-mail.
+3. **Installation avec barre de progression** et journal en direct, reprise sur échec.
+4. **Vérification de bout en bout** : base, collecte de chaque serveur, tâches planifiées,
+   interface, site IIS et authentification Windows, pare-feu, DNS ; rapport d'installation.
+
+![Assistant d'installation](docs/images/installation-progression.png)
+
+Installation silencieuse (industrialisation) : `FreeLM-Setup.exe setup --answers reponses.json`.
+Démonstration sans rien modifier : `FreeLM.exe setup --simulate`.
+Tout est détaillé dans **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
+
+### Installation manuelle
 
 Prérequis sur le serveur FreeLM (Windows) :
 
@@ -306,6 +329,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 
 | Document | Contenu |
 |---|---|
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | **Installation assistée** (FreeLM-Setup.exe), installation silencieuse, serveur hors ligne, dépannage |
 | [docs/DEX_FreeLM.docx](docs/DEX_FreeLM.docx) | **Dossier d'exploitation (Word)** : architecture, installation, exploitation, supervision, guide de l'interface illustré, sauvegarde, sécurité, incidents, maintenance, PRA |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |

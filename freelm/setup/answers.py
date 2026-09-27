@@ -287,7 +287,7 @@ class Answers:
     def config_dict(self) -> dict:
         cfg: dict = {
             "database": {"connection_string": self.connection_string()},
-            "lmutil_path": self.lmutil_path.replace("\\", "/"),
+            "lmutil_path": self.lmutil_path,              # tel quel (scripts .cmd : barres obliques inversées)
             "logging": {"file": self.path("logs", "freelm.log").replace("\\", "/"), "level": "INFO"},
             "servers": [],
             "products": [],

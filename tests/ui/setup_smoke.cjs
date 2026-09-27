@@ -16,9 +16,12 @@ const fs = require("fs");
   const failures = [];
   const check = (cond, msg) => { if (!cond) failures.push(msg); };
   const browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 1000 }, locale: "fr-FR", deviceScaleFactor: 1 });
+  // SETUP_DOC_SHOTS=1 : captures de la fenêtre seule (documentation) plutôt que de la page entière
+  const docShots = !!process.env.SETUP_DOC_SHOTS;
+  const page = await browser.newPage({ viewport: docShots ? { width: 1280, height: 860 } : { width: 1440, height: 1000 },
+                                       locale: "fr-FR", deviceScaleFactor: docShots ? 1.25 : 1 });
   page.on("pageerror", e => failures.push(`erreur JS : ${e.message}`));
-  const shot = async name => { await page.waitForTimeout(250); await page.screenshot({ path: `${out}/setup_${name}.png`, fullPage: true }); };
+  const shot = async name => { await page.waitForTimeout(250); await page.screenshot({ path: `${out}/setup_${name}.png`, fullPage: !docShots }); };
   const title = () => page.textContent("#step-title");
   const next = async expected => {
     await page.click("#next");

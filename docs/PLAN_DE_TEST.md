@@ -98,6 +98,8 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/test_mailer.py` | 9 | Libellés de période, validation de la configuration, envoi réel à un serveur SMTP de test (destinataires, sujet, HTML, texte, lien, pièce jointe), abonnement filtré, une fois par période, aperçu `.eml`, erreur SMTP journalisée, destinataires de test, abonnement ponctuel |
 | `tests/test_security.py` | 14 | Non-régression de l'audit ([SECURITE.md](SECURITE.md)) : DNS rebinding (Host forgé → 421), `Content-Length` négatif, connexion inactive coupée, plafond de connexions, en-tête `Server` sans version, erreur interne non divulguée, date hors limites, injection dans le journal d'audit, formules neutralisées (CSV, Excel), échec STARTTLS avant bind, SMTP authentifié sans chiffrement refusé |
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
+| `tests/test_setup.py` | 21 | Assistant d'installation : réponses et `freelm.yaml` généré (3 modes, validé par le chargeur réel), secrets jamais écrits, `web.config` IIS, échappement PowerShell, scripts sans mot de passe, prérequis et corrections, installation complète, échec puis reprise, plan selon le mode, vérification, serveur local (jeton, Host, anti-CSRF), mode silencieux |
+| `tests/ui/setup_smoke.cjs` | — | Navigateur réel : parcours complet de l'assistant (simulation) : corrections automatiques, validation des champs, tous les tests de connexion, installation jusqu'à 100 %, vérification verte, rapport sans mot de passe, mobile |
 | `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 11 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
@@ -105,7 +107,8 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | Job | Vérifie |
 |---|---|
 | Tests + démo (Linux, Windows × Python 3.10, 3.12) | Tests unitaires ; script SQL à jour ; démo 30 jours + rapport Excel ; collecte « en direct » via le faux lmutil ; relecture des classeurs ; rendu PDF (LibreOffice) |
-| Interface web (navigateur) | `tests/ui/ui_smoke.cjs`, `tests/ui/login_smoke.cjs` + captures d'écran publiées |
+| Interface web (navigateur) | `tests/ui/ui_smoke.cjs`, `tests/ui/login_smoke.cjs`, `tests/ui/setup_smoke.cjs` + captures d'écran publiées |
+| Installation réelle sur Windows Server | `FreeLM-Setup.exe setup --answers` sur un runner Windows : installation d'IIS, d'URL Rewrite et d'ARR, site HTTPS (certificat), tâches sous un compte de service local, authentification unique vérifiée à travers IIS, collecte planifiée, réinstallation (idempotence) |
 | Exécutable Windows | Construction de `FreeLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
 | SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; aperçu d'e-mail ; vues SQL non vides ; relance de la démo |
 
@@ -302,6 +305,27 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | MAIL-12 [E3] | Traçabilité | `SELECT * FROM report_delivery ORDER BY sent_at DESC` | Une ligne par envoi : abonnement, période, destinataires, statut | ☐ |
 
 ---
+
+### 5.11 Assistant d'installation (INST)
+
+Sur un serveur Windows de recette vierge, avec `FreeLM-Setup.exe`.
+
+| Id | Objectif | Étapes | Résultat attendu | Statut |
+|---|---|---|---|:---:|
+| INST-01 🔴 | Élévation | Double-clic sur FreeLM-Setup.exe | Demande d'élévation UAC ; console avec l'adresse ; navigateur ouvert sur l'assistant | ☐ |
+| INST-02 | Accès protégé | Ouvrir `http://127.0.0.1:<port>/` sans le jeton, depuis un autre profil | 403 | ☐ |
+| INST-03 🔴 | Prérequis | Étape 2 sur un serveur sans IIS | Rôles IIS, URL Rewrite, ARR signalés ; « Installer » les installe ; relance de la vérification verte | ☐ |
+| INST-04 | Hors ligne | Serveur sans Internet, MSI déposés dans `prerequis\` | Modules installés depuis les fichiers locaux | ☐ |
+| INST-05 | Compte de service | Tester un compte inconnu, puis un mauvais mot de passe, puis le bon | Erreur explicite, puis « mot de passe valide » | ☐ |
+| INST-06 🔴 | Base | Tester l'instance ; installer avec « Créer la base » | Base créée (SIMPLE), connexion Windows du compte de service, rôles lecture / écriture | ☐ |
+| INST-07 | Licences | Tester chaque serveur ; tester une adresse erronée | Nombre de features et de jetons ; erreur « injoignable » | ☐ |
+| INST-08 🔴 | IIS | Mode IIS, certificat du magasin, groupe AD | Site HTTPS démarré, authentification Windows seule, accès limité au groupe | ☐ |
+| INST-09 🔴 | Progression | Lancer l'installation | Barre de 0 à 100 %, étapes cochées, journal détaillé | ☐ |
+| INST-10 | Reprise | Provoquer un échec (compte sans droit), corriger, « Réessayer » | Reprise à l'étape en échec, installation terminée | ☐ |
+| INST-11 🔴 | Vérification | Fin d'installation | Tous les contrôles verts ; « Ouvrir FreeLM » ouvre l'interface sans saisie de mot de passe | ☐ |
+| INST-12 | Réinstallation | Relancer l'assistant avec les mêmes réponses | Aucune erreur ; ancienne configuration sauvegardée en `.bak` | ☐ |
+| INST-13 | Silencieux | `FreeLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
+| INST-14 | Secrets | Rechercher les mots de passe dans `freelm.yaml`, `logs\*`, le rapport | Absents | ☐ |
 
 ## 6. Validation sur les serveurs réels
 

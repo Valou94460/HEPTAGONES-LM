@@ -6,6 +6,15 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 ## [Non publié]
 
 ### Ajouté
+- **Assistant d'installation** `FreeLM-Setup.exe` / `freelm setup` : interface pas à pas dans le
+  navigateur (serveur local protégé par jeton) ; contrôle des prérequis avec installation
+  automatique des rôles IIS, d'URL Rewrite et d'ARR ; tests de connexion (compte de service,
+  SQL Server, lmstat, certificat, groupe AD, LDAP, SMTP) ; création de la base et des droits ;
+  configuration d'IIS (site HTTPS, authentification Windows, groupe autorisé, proxy vers FreeLM) ;
+  tâches planifiées sous compte de service ; pare-feu ; barre de progression, journal en direct,
+  reprise sur échec ; vérification de bout en bout et rapport d'installation.
+- **Installation silencieuse** `setup --answers reponses.json` et **démonstration** `setup --simulate`.
+- Documentation `docs/INSTALLATION.md`.
 - **Tableau de bord** (nouvelle page d'accueil) : alertes classées par gravité (collecte en échec
   ou arrêtée, refus, licences expirées ou proches de l'expiration, saturation, sous-utilisation),
   6 indicateurs clés comparés à la période précédente avec micro-courbes et accès direct au
@@ -19,7 +28,7 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   `reporting.currency`), économies potentielles, coût par heure d'usage, recommandation ;
   colonne coût dans la répartition (refacturation par service).
 - **Dates d'expiration** lues dans la sortie `lmstat` (colonne `feature.expires_on`, schéma v3).
-- **Dossier d'exploitation** `docs/DEX_FreeLM.docx` (Word, 58 pages, captures d'écran et schémas).
+- **Dossier d'exploitation** `docs/DEX_FreeLM.docx` (Word, une soixantaine de pages, captures d'écran et schémas).
 - **Nouvelle interface** : barre latérale de navigation, filtres en pastilles, préréglages de
   période en un clic, cartes et jauges, graphiques en aires, thème Auto / Clair / Sombre
   mémorisé, menu en tiroir sur mobile.

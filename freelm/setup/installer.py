@@ -212,6 +212,8 @@ def schedule_label(spec: TaskSpec) -> str:
 
 def step_tasks(ctx: Context) -> str:
     specs = _tasks(ctx)
+    if ctx.system.grant_batch_logon(ctx.a.service_account):
+        ctx.log(f"{ctx.a.service_account} : droit « Ouvrir une session en tant que tâche » accordé")
     for i, spec in enumerate(specs):
         ctx.system.register_task(spec, ctx.a.service_account, ctx.a.service_password)
         ctx.log(f"Tâche « {spec.name} » enregistrée ({schedule_label(spec)})")

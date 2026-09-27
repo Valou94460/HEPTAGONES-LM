@@ -193,3 +193,4 @@ table.servers .result { margin-top: 6px; min-width: 0; }
 }
 a.btn { color: var(--text); text-decoration: none; }
 a.btn.primary { color: var(--accent-ink); }
+table.servers .toggle span { white-space: nowrap; }
