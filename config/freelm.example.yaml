@@ -46,9 +46,11 @@ servers:
 # Correspondance feature FlexLM -> produit lisible dans les rapports.
 # Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
 # Après modification : `freelm apply-products` pour réappliquer à l'historique.
+# annual_cost (optionnel) : coût annuel d'un jeton, dans la devise reporting.currency.
+# Active le chiffrage : coût du parc, économies potentielles, refacturation par service.
 products:
-  - { pattern: "87545ACD_2024_*",   product: "AutoCAD 2024",            publisher: Autodesk }
-  - { pattern: "87048INVPROSA_*",   product: "Inventor Professional",   publisher: Autodesk }
+  - { pattern: "87545ACD_2024_*",   product: "AutoCAD 2024",            publisher: Autodesk, annual_cost: 2300 }
+  - { pattern: "87048INVPROSA_*",   product: "Inventor Professional",   publisher: Autodesk, annual_cost: 3900 }
   - { pattern: "*ACDLT*",           product: "AutoCAD LT",              publisher: Autodesk }
   - { pattern: "MATLAB",            product: "MATLAB",                  publisher: MathWorks }
   - { pattern: "SIMULINK",          product: "Simulink",                publisher: MathWorks }
@@ -60,6 +62,8 @@ reporting:
   output_dir: "C:/FreeLM/reports"
   top_n_chart: 10          # éléments affichés dans les graphiques
   business_hours: [8, 19]  # plage des heures ouvrées (jours ouvrés lundi-vendredi)
+  currency: "€"            # devise des coûts (annual_cost)
+  target_coverage: 0.95    # jetons recommandés : couvrent 95 % du temps ouvré (0.5 à 0.999)
 
 # ---------------------------------------------------------------------------
 # Interface web (freelm web / FreeLM.exe) — voir docs/AUTHENTIFICATION.md

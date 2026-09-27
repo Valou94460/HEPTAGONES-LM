@@ -95,6 +95,20 @@ class Database:
         cur = self.execute(f"INSERT INTO {table} ({cols}) VALUES ({marks})", list(values.values()))
         return int(cur.lastrowid)
 
+    # -- expressions dépendantes du dialecte ------------------------------------
+
+    def hour_of(self, column: str) -> str:
+        """Heure (0-23) d'une colonne date/heure, en SQL."""
+        if self.dialect == "mssql":
+            return f"DATEPART(HOUR, {column})"
+        return f"CAST(strftime('%H', {column}) AS INTEGER)"
+
+    def weekday_of(self, column: str) -> str:
+        """Jour de semaine d'une colonne date/heure, lundi = 0 (indépendant de DATEFIRST)."""
+        if self.dialect == "mssql":
+            return f"(DATEDIFF(DAY, 0, {column}) % 7)"  # 01/01/1900 était un lundi
+        return f"((CAST(strftime('%w', {column}) AS INTEGER) + 6) % 7)"
+
     def try_lock(self, name: str) -> bool:
         """Verrou applicatif exclusif, tenu jusqu'à la fermeture de la connexion.
 

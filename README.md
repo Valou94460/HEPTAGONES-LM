@@ -13,9 +13,10 @@ Une alternative gratuite à OpenLM pour le reporting d'usage.
 FreeLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
 leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
 quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
-interface web et en exports Excel.
+tableau de bord web et en exports Excel — avec alertes, vue en direct, efficacité des
+jetons et chiffrage des économies possibles.
 
-![Synthèse](docs/images/synthese.png)
+![Tableau de bord](docs/images/tableau-de-bord.png)
 
 ## Sommaire
 
@@ -36,7 +37,10 @@ interface web et en exports Excel.
 |---|---|
 | **Collecte** | Sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug FlexLM (refus, sessions à la seconde). Aucun agent sur les postes clients. |
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
-| **Interface web** | 9 rapports à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode sombre, liens partageables. |
+| **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
+| **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
+| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service. |
+| **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **FreeLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
@@ -47,12 +51,20 @@ interface web et en exports Excel.
 
 <table>
 <tr>
-<td><img src="docs/images/usage-temps.png" alt="Usage dans le temps"></td>
-<td><img src="docs/images/repartition-service.png" alt="Répartition par service"></td>
+<td><img src="docs/images/en-direct-sombre.png" alt="En direct (mode sombre)"></td>
+<td><img src="docs/images/efficacite.png" alt="Efficacité des jetons"></td>
 </tr>
 <tr>
+<td align="center"><em>En direct : qui utilise quoi, maintenant</em></td>
+<td align="center"><em>Efficacité : combien de jetons sont vraiment nécessaires</em></td>
+</tr>
+<tr>
+<td><img src="docs/images/optimisation.png" alt="Optimisation et coûts"></td>
+<td><img src="docs/images/usage-temps.png" alt="Usage dans le temps"></td>
+</tr>
+<tr>
+<td align="center"><em>Optimisation : coûts et économies potentielles</em></td>
 <td align="center"><em>Taux d'occupation dans le temps</em></td>
-<td align="center"><em>Heures d'utilisation par service</em></td>
 </tr>
 </table>
 
@@ -158,8 +170,12 @@ Options globales : `-c freelm.yaml` (ou variable `FREELM_CONFIG`), `-v` (logs d�
 freelm -c freelm.yaml web --open
 ```
 
-| Onglet | Contenu |
+Navigation par la barre latérale, en quatre groupes :
+
+| Vue | Contenu |
 |---|---|
+| **Tableau de bord** | Page d'accueil : alertes, indicateurs clés cliquables (tendance, comparaison à la période précédente), taux d'occupation, état en direct, produits, utilisateurs, refus, profil horaire, serveurs et échéances |
+| **En direct** | Dernier sondage : jetons utilisés / libres par produit, utilisateurs connectés (poste, service, durée), file d'attente ; actualisation automatique |
 | Synthèse | Indicateurs clés, taux d'occupation par produit (moyen, au pic, heures ouvrées) |
 | Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
 | Répartition | Heures par utilisateur, poste, service, produit, serveur ou éditeur |
@@ -167,12 +183,15 @@ freelm -c freelm.yaml web --open
 | Profil horaire | Carte de chaleur heure × jour de semaine |
 | Contention | Jours avec saturation des jetons et/ou refus |
 | Refus | Détail des refus (DENIED) issus des logs |
+| **Efficacité** | Part du temps ouvré où au moins N jetons sont utilisés ; jetons recommandés pour couvrir 95 % du temps, excédent, jetons jamais utilisés |
+| **Optimisation & coûts** | Coût annuel par produit, économies potentielles, coût par heure d'usage, recommandation (réduire, adapté, pénurie) |
 | Sessions | Données brutes filtrables |
 | Collectes | Journal et état de santé des collectes |
 
-- **Filtres** : période (préréglages ou dates), serveurs, produits, utilisateurs, services.
+- **Filtres** : période (7 j, 30 j, 90 j, mois, année… ou dates), serveurs, produits,
+  utilisateurs, services ; ils s'appliquent à toutes les vues.
   L'adresse de la page conserve les filtres : un lien partagé rouvre le même rapport.
-- **Exports** : bouton Excel / CSV / JSON sur chaque onglet, avec les filtres appliqués ;
+- **Exports** : bouton Excel / CSV / JSON sur chaque vue, avec les filtres appliqués ;
   « Rapport complet » produit le classeur 8 onglets.
 - **Sécurité** : lecture seule ; n'écoute que sur le poste local par défaut.
   Pour un accès réseau : **connexion avec les comptes Windows / AD** et HTTPS, voir
@@ -247,9 +266,17 @@ servers:
     log_path: "\\\\licsrv2\\ansys_logs$\\license.log"
 
 products:                                # feature FlexLM -> produit lisible
-  - { pattern: "87545ACD_2024_*", product: "AutoCAD 2024", publisher: Autodesk }
-  - { pattern: "MATLAB", product: "MATLAB", publisher: MathWorks }
+  - { pattern: "87545ACD_2024_*", product: "AutoCAD 2024", publisher: Autodesk, annual_cost: 2300 }
+  - { pattern: "MATLAB", product: "MATLAB", publisher: MathWorks, annual_cost: 2700 }
+
+reporting:
+  currency: "€"                          # devise des coûts
+  target_coverage: 0.95                  # jetons recommandés : couvrir 95 % du temps ouvré
 ```
+
+`annual_cost` (coût annuel d'un jeton, optionnel) active le chiffrage : coût du parc,
+économies potentielles et refacturation par service. Les dates d'expiration sont lues
+automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 
 **lmstat ou log ?** `lmstat` suffit pour les taux d'occupation et les sessions
 (précision : l'intervalle de sondage). Le **log** ajoute les refus et des sessions
@@ -263,11 +290,16 @@ products:                                # feature FlexLM -> produit lisible
 | Collecte FlexLM (lmstat + logs), sans agent client | ✅ | ✅ |
 | Historique SQL Server | ✅ | ✅ |
 | Rapports d'usage, contention, refus, par service | ✅ | ✅ |
+| Tableau de bord avec alertes (serveur, refus, expiration, saturation) | ✅ | ✅ |
+| Vue en direct (jetons et utilisateurs connectés) | ✅ | ✅ |
+| Efficacité des jetons, recommandation de dimensionnement | ✅ | ✅ |
+| Coûts, économies potentielles, refacturation par service | ✅ | ✅ |
 | Interface web + exports Excel / CSV | ✅ | ✅ |
 | Connexion comptes Windows / AD, restriction par groupe | ✅ | ✅ |
 | Rapports périodiques par e-mail | ✅ | ✅ |
 | Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
-| Alertes temps réel, libération de licences inactives | ❌ | ✅ |
+| Alertes poussées par e-mail / ticket, libération de licences inactives (agent poste) | ❌ | ✅ |
+| Licences SaaS / cloud, connecteur ServiceNow | ❌ | ✅ |
 | Autres gestionnaires (RLM, DSLS, Sentinel…) | Extensible, à développer | ✅ |
 
 ## Documentation

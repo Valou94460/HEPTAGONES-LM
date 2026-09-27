@@ -20,7 +20,7 @@ import textwrap
 
 from freelm.storage.db import Database
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -71,6 +71,7 @@ TABLES: dict[str, str] = {
         publisher NVARCHAR(100) NULL,
         first_seen {DT} NOT NULL,
         last_seen {DT} NOT NULL,
+        expires_on DATE NULL,
         CONSTRAINT uq_feature UNIQUE (server_id, name)
     """,
     "app_user": """
@@ -209,6 +210,13 @@ VIEWS: dict[str, str] = {
 }
 
 
+# Colonnes ajoutées après la création initiale d'une table : (table, colonne, type).
+# Appliquées par init-db sur les bases existantes (migration idempotente).
+ADDED_COLUMNS: list[tuple[str, str, str]] = [
+    ("feature", "expires_on", "DATE NULL"),          # v3 : échéance des licences
+]
+
+
 def _fmt(template: str, dialect: str) -> str:
     out = textwrap.dedent(template).strip()
     for key, value in _TYPES[dialect].items():
@@ -225,6 +233,13 @@ def ddl_statements(dialect: str) -> list[str]:
             stmts.append(f"IF OBJECT_ID(N'dbo.{name}', N'U') IS NULL\nCREATE TABLE dbo.{name} (\n    {cols}\n)")
         else:
             stmts.append(f"CREATE TABLE IF NOT EXISTS {name} (\n    {cols}\n)")
+    for table, column, coltype in ADDED_COLUMNS:
+        if dialect == "mssql":
+            stmts.append(
+                f"IF COL_LENGTH(N'dbo.{table}', N'{column}') IS NULL\n"
+                f"ALTER TABLE dbo.{table} ADD {column} {coltype}"
+            )
+        # SQLite : pas d'ALTER conditionnel en SQL pur, voir create_schema().
     for name, target in INDEXES.items():
         if dialect == "mssql":
             stmts.append(
@@ -258,6 +273,11 @@ def create_schema(db: Database) -> None:
     with db.transaction():
         for stmt in ddl_statements(db.dialect):
             db.execute(stmt)
+        if db.dialect == "sqlite":
+            for table, column, coltype in ADDED_COLUMNS:
+                existing = {row[1] for row in db.query(f"PRAGMA table_info({table})")}
+                if column not in existing:
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
         if not db.scalar("SELECT COUNT(*) FROM schema_info"):
             db.execute("INSERT INTO schema_info (version) VALUES (?)", [SCHEMA_VERSION])
         else:  # évolution : les nouvelles tables sont créées ci-dessus (ordres idempotents)

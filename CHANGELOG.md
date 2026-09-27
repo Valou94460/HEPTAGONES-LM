@@ -6,6 +6,22 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 ## [Non publié]
 
 ### Ajouté
+- **Tableau de bord** (nouvelle page d'accueil) : alertes classées par gravité (collecte en échec
+  ou arrêtée, refus, licences expirées ou proches de l'expiration, saturation, sous-utilisation),
+  6 indicateurs clés comparés à la période précédente avec micro-courbes et accès direct au
+  rapport détaillé, tendance d'occupation, état en direct, occupation par produit, utilisateurs
+  les plus actifs, refus par jour, profil horaire, serveurs et échéances.
+- **En direct** : jetons utilisés / libres par produit, utilisateurs connectés (poste, service,
+  durée), file d'attente ; actualisation automatique chaque minute.
+- **Efficacité des jetons** : part du temps ouvré où au moins N jetons sont utilisés, nombre de
+  jetons recommandé (`reporting.target_coverage`, 95 % par défaut), excédent.
+- **Optimisation & coûts** : coût annuel par produit (`products[].annual_cost`,
+  `reporting.currency`), économies potentielles, coût par heure d'usage, recommandation ;
+  colonne coût dans la répartition (refacturation par service).
+- **Dates d'expiration** lues dans la sortie `lmstat` (colonne `feature.expires_on`, schéma v3).
+- **Nouvelle interface** : barre latérale de navigation, filtres en pastilles, préréglages de
+  période en un clic, cartes et jauges, graphiques en aires, thème Auto / Clair / Sombre
+  mémorisé, menu en tiroir sur mobile.
 - **Connexion avec les comptes Windows / Active Directory** (`web.auth.mode: ldap`) : page de
   connexion, vérification LDAPS, restriction par groupes AD (imbriqués), sessions sécurisées,
   blocage après échecs répétés, bouton de déconnexion.

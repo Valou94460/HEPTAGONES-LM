@@ -6,113 +6,92 @@
   <title>FreeLM — Licences</title>
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="style.css">
+  <script src="theme.js"></script>
 </head>
 <body>
-  <header class="topbar">
+<div class="app">
+  <aside class="sidebar" id="sidebar" aria-label="Navigation">
     <div class="brand">
-      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/></svg>
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="9" fill="var(--accent)"/>
+        <rect x="7" y="17" width="4" height="8" rx="1.5" fill="#fff" opacity=".7"/>
+        <rect x="14" y="11" width="4" height="14" rx="1.5" fill="#fff" opacity=".85"/>
+        <rect x="21" y="6" width="4" height="19" rx="1.5" fill="#fff"/>
+      </svg>
       <div>
-        <h1>FreeLM</h1>
-        <p class="subtitle">Suivi et reporting des licences FlexLM</p>
+        <div class="brand-name">FreeLM</div>
+        <p class="subtitle">Licences FlexLM</p>
       </div>
     </div>
-    <div class="topbar-right">
+    <nav id="nav" aria-label="Rapports"></nav>
+    <div class="sidebar-foot">
       <span id="coverage" class="muted"></span>
-      <button id="health" class="health" type="button" hidden></button>
-      <span id="user-badge" class="user-badge" hidden>
-        <span id="user-name"></span>
-        <button id="logout" class="btn ghost" type="button" hidden>Se déconnecter</button>
-      </span>
+      <div class="theme-switch" role="group" aria-label="Thème">
+        <button type="button" data-theme-choice="auto" aria-pressed="true">Auto</button>
+        <button type="button" data-theme-choice="light" aria-pressed="false">Clair</button>
+        <button type="button" data-theme-choice="dark" aria-pressed="false">Sombre</button>
+      </div>
+      <span class="muted">FreeLM <span id="version"></span> · logiciel libre (MIT)</span>
     </div>
-  </header>
+  </aside>
 
-  <section class="filters" aria-label="Filtres">
-    <label class="field">
-      <span>Période</span>
-      <select id="preset">
-        <option value="7d">7 derniers jours</option>
-        <option value="30d" selected>30 derniers jours</option>
-        <option value="90d">90 derniers jours</option>
-        <option value="mtd">Mois en cours</option>
-        <option value="lastm">Mois précédent</option>
-        <option value="ytd">Année en cours</option>
-        <option value="lasty">Année précédente</option>
-        <option value="all">Toutes les données</option>
-        <option value="custom">Personnalisée…</option>
-      </select>
-    </label>
-    <label class="field"><span>Du</span><input type="date" id="start"></label>
-    <label class="field"><span>Au</span><input type="date" id="end"></label>
-    <div class="field"><span>Serveurs</span><div class="ms" id="ms-server"></div></div>
-    <div class="field"><span>Produits</span><div class="ms" id="ms-product"></div></div>
-    <div class="field"><span>Utilisateurs</span><div class="ms" id="ms-user"></div></div>
-    <div class="field"><span>Services</span><div class="ms" id="ms-department"></div></div>
-    <button id="reset" class="btn ghost" type="button">Réinitialiser</button>
-  </section>
+  <div class="content">
+    <header class="topbar">
+      <button id="menu" class="icon-btn" type="button" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <div class="page-head">
+        <h1 id="page-title">Tableau de bord</h1>
+        <p id="page-desc" class="muted"></p>
+      </div>
+      <div class="top-actions">
+        <button id="health" class="health" type="button" hidden></button>
+        <span id="user-badge" class="user-badge" hidden>
+          <span id="user-avatar" class="avatar" aria-hidden="true"></span>
+          <span id="user-name"></span>
+          <button id="logout" class="btn ghost small" type="button" hidden>Se déconnecter</button>
+        </span>
+      </div>
+    </header>
 
-  <nav class="tabs" id="tabs" role="tablist" aria-label="Rapports"></nav>
+    <section class="filterbar" aria-label="Filtres">
+      <div class="segmented" id="presets" role="group" aria-label="Période">
+        <button type="button" data-preset="7d">7 j</button>
+        <button type="button" data-preset="30d">30 j</button>
+        <button type="button" data-preset="90d">90 j</button>
+        <button type="button" data-preset="mtd">Ce mois</button>
+        <button type="button" data-preset="lastm">Mois préc.</button>
+        <button type="button" data-preset="ytd">Année</button>
+        <button type="button" data-preset="all">Tout</button>
+      </div>
+      <div class="dates">
+        <input type="date" id="start" aria-label="Du">
+        <span class="muted">→</span>
+        <input type="date" id="end" aria-label="Au">
+      </div>
+      <div class="ms" id="ms-server"></div>
+      <div class="ms" id="ms-product"></div>
+      <div class="ms" id="ms-user"></div>
+      <div class="ms" id="ms-department"></div>
+      <button id="reset" class="btn ghost small" type="button" hidden>Réinitialiser</button>
+      <span class="spacer"></span>
+      <div class="exports" role="group" aria-label="Exporter">
+        <button class="btn small" type="button" data-export="xlsx" title="Cette vue, au format Excel (avec graphique)">Excel</button>
+        <button class="btn small" type="button" data-export="csv" title="Cette vue, CSV pour Excel (séparateur ;)">CSV</button>
+        <button class="btn small" type="button" data-export="json" title="Cette vue, au format JSON">JSON</button>
+        <button class="btn small primary" type="button" data-export="full" title="Classeur complet 8 onglets, filtres serveurs et produits appliqués">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>Rapport complet
+        </button>
+      </div>
+    </section>
 
-  <section class="toolbar">
-    <div class="options" id="options">
-      <label class="field inline" data-for="timeseries">
-        <span>Pas</span>
-        <select id="granularity">
-          <option value="hour">Heure</option>
-          <option value="day" selected>Jour</option>
-          <option value="week">Semaine</option>
-          <option value="month">Mois</option>
-        </select>
-      </label>
-      <label class="field inline" data-for="timeseries">
-        <span>Mesure</span>
-        <select id="metric">
-          <option value="peak" selected>Pic de jetons</option>
-          <option value="avg">Moyenne de jetons</option>
-          <option value="utilization">Taux d'occupation</option>
-        </select>
-      </label>
-      <label class="field inline" data-for="breakdown matrix">
-        <span>Par</span>
-        <select id="dimension"></select>
-      </label>
-    </div>
-    <div class="exports">
-      <span class="muted">Exporter</span>
-      <button class="btn" type="button" data-export="xlsx" title="Ce rapport, au format Excel (avec graphique)">Excel</button>
-      <button class="btn" type="button" data-export="csv" title="Ce rapport, CSV pour Excel (séparateur ;)">CSV</button>
-      <button class="btn" type="button" data-export="json" title="Ce rapport, au format JSON">JSON</button>
-      <button class="btn primary" type="button" data-export="full" title="Classeur complet 8 onglets, filtres serveurs et produits appliqués">Rapport complet</button>
-    </div>
-  </section>
-
-  <main id="main">
     <div id="error" class="error" role="alert" hidden></div>
-    <div id="kpis" class="kpis"></div>
-    <section id="chart-card" class="card" hidden>
-      <div class="card-head">
-        <h2 id="chart-title"></h2>
-        <div id="legend" class="legend"></div>
-      </div>
-      <div id="chart" class="chart"></div>
-    </section>
-    <ul id="notes" class="notes"></ul>
-    <section class="card">
-      <div class="card-head">
-        <h2 id="table-title">Chargement…</h2>
-        <div class="table-tools">
-          <span id="row-count" class="muted"></span>
-          <input type="search" id="table-search" placeholder="Rechercher dans le tableau" aria-label="Rechercher dans le tableau">
-        </div>
-      </div>
-      <div class="table-wrap"><table id="table"></table></div>
-      <div class="table-foot"><button id="more" class="btn ghost" type="button" hidden>Afficher plus</button></div>
-    </section>
-  </main>
+    <main id="view" aria-live="polite"></main>
+  </div>
+</div>
+<div id="tooltip" class="tooltip" role="status" hidden></div>
 
-  <div id="tooltip" class="tooltip" role="status" hidden></div>
-  <footer class="footer muted">FreeLM <span id="version"></span> — logiciel libre (MIT)</footer>
-
-  <script src="charts.js"></script>
-  <script src="app.js"></script>
+<script src="charts.js"></script>
+<script src="app.js"></script>
 </body>
 </html>

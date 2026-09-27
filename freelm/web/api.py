@@ -61,6 +61,9 @@ class ReportParams:
     metric: str = "peak"
     dimension: str = "user"
     business_hours: tuple[int, int] = (8, 19)
+    costs: dict[str, float] = field(default_factory=dict)   # coût annuel d'un jeton par produit
+    currency: str = "€"
+    target_coverage: float = 0.95
 
     def describe(self) -> str:
         parts = [f"Période du {self.start:%d/%m/%Y} au {(self.end - timedelta(seconds=1)):%d/%m/%Y}"]
@@ -69,6 +72,15 @@ class ReportParams:
             if values:
                 parts.append(f"{label} : {', '.join(values)}")
         return " — ".join(parts)
+
+
+def params_from_config(query: dict[str, list[str]], config, today: date | None = None) -> "ReportParams":
+    """Paramètres de requête + réglages de la configuration (heures ouvrées, coûts…)."""
+    p = parse_params(query, today=today, business_hours=config.reporting.business_hours)
+    p.costs = config.product_costs()
+    p.currency = config.reporting.currency
+    p.target_coverage = config.reporting.target_coverage
+    return p
 
 
 def parse_params(query: dict[str, list[str]], today: date | None = None,
@@ -384,11 +396,28 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         g["users"].add(s["username"])
         g["products"].add(s["product"])
         g["hosts"].add(s["hostname"])
+    # Refacturation : coût de chaque produit sur la période, réparti au prorata des heures.
+    if p.costs:
+        years = max((p.end - p.start).days, 1) / 365.0
+        issued_by_product: dict[str, int] = defaultdict(int)
+        for s in data.summaries:
+            issued_by_product[s.product] += s.issued or 0
+        hours_by_product: dict[str, float] = defaultdict(float)
+        for s in sessions:
+            hours_by_product[s["product"]] += s["hours_in_period"]
+        for s in sessions:
+            unit = p.costs.get(s["product"])
+            if unit is None or not hours_by_product[s["product"]]:
+                continue
+            share = s["hours_in_period"] / hours_by_product[s["product"]]
+            g = groups[_dimension_value(s, p.dimension)]
+            g["cost"] = g.get("cost", 0.0) + unit * issued_by_product[s["product"]] * years * share
     total = sum(g["hours"] for g in groups.values()) or 1.0
     rows = [
         {"key": k, "hours": round(g["hours"], 2), "share": g["hours"] / total, "sessions": g["sessions"],
          "users": len(g["users"]), "products": len(g["products"]), "hosts": len(g["hosts"]),
-         "avg_session": round(g["hours"] / g["sessions"], 2) if g["sessions"] else None}
+         "avg_session": round(g["hours"] / g["sessions"], 2) if g["sessions"] else None,
+         "cost": round(g["cost"], 2) if "cost" in g else None}
         for k, g in sorted(groups.items(), key=lambda kv: -kv[1]["hours"])
     ]
     label = DIMENSIONS[p.dimension]
@@ -405,7 +434,14 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         _col("products", "Produits", "int"), _col("hosts", "Postes", "int"),
         _col("avg_session", "Durée moy. session (h)", "hours"),
     ]
-    return _result("breakdown", f"Répartition par {label.lower()}", p.describe(), columns, rows, chart, notes=notes)
+    if p.costs:
+        columns.append(_col("cost", "Coût refacturé (période)", "money"))
+    if p.costs:
+        notes.append("Coût refacturé : coût annuel des jetons de chaque produit ramené à la période, "
+                     "réparti au prorata des heures d'utilisation.")
+    result = _result("breakdown", f"Répartition par {label.lower()}", p.describe(), columns, rows, chart, notes=notes)
+    result["currency"] = p.currency
+    return result
 
 
 def report_matrix(db: Database, p: ReportParams) -> dict:
@@ -522,7 +558,18 @@ def report_collections(db: Database, p: ReportParams) -> dict:
     return _result("collections", "Journal des collectes", p.describe(), columns, rows, kpis=kpis)
 
 
+def _insight(name: str) -> Callable[[Database, ReportParams], dict]:
+    def run(db: Database, p: ReportParams) -> dict:
+        from freelm.web import insights
+
+        return getattr(insights, name)(db, p)
+
+    return run
+
+
 REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
+    "dashboard": ("Tableau de bord", _insight("report_dashboard")),
+    "live": ("En direct", _insight("report_live")),
     "summary": ("Synthèse", report_summary),
     "timeseries": ("Usage dans le temps", report_timeseries),
     "breakdown": ("Répartition", report_breakdown),
@@ -530,6 +577,8 @@ REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
     "heatmap": ("Profil horaire", report_heatmap),
     "contention": ("Contention", report_contention),
     "denials": ("Refus", report_denials),
+    "efficiency": ("Efficacité", _insight("report_efficiency")),
+    "optimization": ("Optimisation & coûts", _insight("report_optimization")),
     "sessions": ("Sessions", report_sessions),
     "collections": ("Collectes", report_collections),
 }
@@ -590,7 +639,8 @@ def export_xlsx(result: dict) -> bytes:
 
     from freelm.reporting.excel import _autosize, _show_axes, _write_table
 
-    formats = {"pct": "0.0%", "float": "0.00", "hours": "0.0", "int": "0", "datetime": "dd/mm/yyyy hh:mm", "date": "dd/mm/yyyy"}
+    formats = {"pct": "0.0%", "float": "0.00", "hours": "0.0", "int": "0", "datetime": "dd/mm/yyyy hh:mm",
+               "date": "dd/mm/yyyy", "money": '#,##0 "' + result.get("currency", "€").replace('"', "") + '"'}
     wb = Workbook()
     ws = wb.active
     ws.title = result["title"][:31].replace("/", "-").replace(":", "")
@@ -688,6 +738,8 @@ def export(db: Database, report_type: str, p: ReportParams, fmt: str) -> tuple[b
         return export_full_workbook(db, p), _filename("complet", p, "xlsx"), EXPORT_TYPES["xlsx"]
     if fmt not in EXPORT_TYPES:
         raise ParamError(f"Format d'export inconnu : {fmt}")
+    if report_type == "dashboard":  # pas de tableau propre : on exporte la synthèse
+        report_type = "summary"
     result = run_report(db, report_type, p)
     content = {"xlsx": export_xlsx, "csv": export_csv, "json": export_json}[fmt](result)
     return content, _filename(report_type, p, fmt), EXPORT_TYPES[fmt]

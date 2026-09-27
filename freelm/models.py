@@ -8,7 +8,7 @@ Aucun code de parsing ne doit écrire directement en base.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 
@@ -59,6 +59,7 @@ class FeatureStatus:
     error: str | None = None
     checkouts: list[Checkout] = field(default_factory=list)
     queued: int = 0
+    expires: date | None = None   # date d'expiration ; None = permanente ou inconnue
 
 
 @dataclass

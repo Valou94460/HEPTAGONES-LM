@@ -88,17 +88,17 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 
 | Fichier | Tests | Couvre |
 |---|---:|---|
-| `tests/test_lmstat_parser.py` | 7 | Totaux émis/utilisés, checkouts (user, poste, handle, début, nb jetons), utilisateur avec espaces, files d'attente, features non comptées / en erreur, changement d'année, serveur injoignable |
+| `tests/test_lmstat_parser.py` | 9 | Dates d'expiration (formats, permanente, échéance la plus proche), totaux émis/utilisés, checkouts (user, poste, handle, début, nb jetons), utilisateur avec espaces, files d'attente, features non comptées / en erreur, changement d'année, serveur injoignable |
 | `tests/test_log_parser.py` | 7 | Types d'évènements, champs, passage de minuit, lignes TIMESTAMP, lignes sans date, préfixe date, lecture incrémentale (ligne partielle, pas de relecture), rotation |
 | `tests/test_collection.py` | 8 | Cycle de vie des sessions lmstat (ouverture, fermeture estimée), nouveau handle, démon vendeur arrêté, sondages et agrégats horaires, journal en cas d'échec, sessions et évènements depuis le log, reprise d'historique antérieur, rendu du script SQL Server, vues |
 | `tests/test_report.py` | 7 | Indicateurs (émis, pic, moyenne, taux, heures saturées, refus, utilisateurs, heures), profil horaire, contention, filtre serveur, mois précédent, export Excel (y compris période vide) |
 | `tests/test_simulation.py` | 9 | Déterminisme du simulateur, jamais plus de jetons utilisés qu'émis, log conforme au modèle, faux lmutil, sessions en base identiques au modèle (lmstat et log), durées exactes (log), configuration « en direct » |
-| `tests/test_web.py` | 12 | Paramètres (défauts, listes, validation), fichiers statiques et types MIME, métadonnées, les 9 rapports, filtres (serveur, utilisateur, produit), granularités, exports CSV / JSON / Excel (9 rapports + classeur complet), erreurs 400 / 404, import utilisateurs (format AD) |
+| `tests/test_web.py` | 14 | Paramètres (défauts, listes, validation), fichiers statiques et types MIME, métadonnées, les 13 vues (tableau de bord, en direct, efficacité, optimisation : cohérence des recommandations et des coûts), alertes (sévérités, regroupement, collecte arrêtée), filtres (serveur, utilisateur, produit), granularités, exports CSV / JSON / Excel (9 rapports + classeur complet), erreurs 400 / 404, import utilisateurs (format AD) |
 | `tests/test_auth.py` | 16 | Mode ldap (routes protégées, redirection, connexion / déconnexion, cookie `HttpOnly` `SameSite`, cookie forgé, blocage après échecs, audit des exports, en-têtes de sécurité), mode header (proxy de confiance, utilisateur non autorisé, proxy non fiable), refus de l'AD sans HTTPS, configurations invalides, expiration des sessions, serveur HTTPS, **vrai code LDAP** contre l'annuaire fictif ldap3 (groupes imbriqués, mauvais mot de passe, mot de passe vide, restriction par groupe) |
 | `tests/test_mailer.py` | 9 | Libellés de période, validation de la configuration, envoi réel à un serveur SMTP de test (destinataires, sujet, HTML, texte, lien, pièce jointe), abonnement filtré, une fois par période, aperçu `.eml`, erreur SMTP journalisée, destinataires de test, abonnement ponctuel |
 | `tests/test_security.py` | 14 | Non-régression de l'audit ([SECURITE.md](SECURITE.md)) : DNS rebinding (Host forgé → 421), `Content-Length` négatif, connexion inactive coupée, plafond de connexions, en-tête `Server` sans version, erreur interne non divulguée, date hors limites, injection dans le journal d'audit, formules neutralisées (CSV, Excel), échec STARTTLS avant bind, SMTP authentifié sans chiffrement refusé |
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
-| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : 9 onglets en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
+| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 11 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
 
@@ -193,8 +193,8 @@ Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| WEB-01 🔴 | Ouverture | Lancer l'interface | Page chargée, badge « Collectes OK », plage des données affichée | ☐ |
-| WEB-02 🔴 | 9 onglets | Cliquer chaque onglet | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
+| WEB-01 🔴 | Ouverture | Lancer l'interface | Tableau de bord affiché, badge « Collectes OK », plage des données affichée (barre latérale) | ☐ |
+| WEB-02 🔴 | 13 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
 | WEB-03 | Préréglages de période | Tester 7 j, 30 j, mois en cours, mois précédent, année, toutes les données | Dates « Du / Au » cohérentes, données rechargées | ☐ |
 | WEB-04 | Dates personnalisées | Saisir des dates | Préréglage passe à « Personnalisée », données de la période | ☐ |
 | WEB-05 | Début après la fin | Du > Au | Message « La date de début doit précéder la date de fin » | ☐ |
@@ -214,6 +214,15 @@ Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
 | WEB-19 | Navigateurs | Edge et Chrome (et Firefox si utilisé) | Comportement identique | ☐ |
 | WEB-20 | Port occupé | Lancer deux instances | La 2ᵉ utilise le port suivant (8766) et l'indique | ☐ |
 | WEB-21 | Badge d'état en échec | Provoquer COL-03 puis recharger | Badge « ⚠ 1 collecteur(s) en échec » ; clic → onglet Collectes | ☐ |
+| WEB-22 🔴 | Indicateurs du tableau de bord | Comparer les 6 KPI aux vues détaillées (Synthèse, Répartition, Contention, Refus, Optimisation) sur la même période | Valeurs identiques ; variation « vs » cohérente avec la période précédente de même durée ; couleur verte = amélioration | ☐ |
+| WEB-23 | KPI cliquables | Cliquer chaque carte KPI | Ouvre le rapport détaillé correspondant avec les mêmes filtres | ☐ |
+| WEB-24 🔴 | Alertes | Arrêter la tâche de collecte 1 h ; provoquer un refus ; licence expirant sous 30 j | Alerte « Collecte arrêtée » (critique), « refus » (important), « expirent dans les 30 jours » (attention) ; « Voir » ouvre la vue concernée | ☐ |
+| WEB-25 🔴 | En direct | Ouvrir un produit sur un poste, attendre le sondage suivant | Carte du produit : jeton compté, utilisateur, poste et durée affichés ; actualisation automatique en moins de 1 min après le sondage | ☐ |
+| WEB-26 | Échéances | Comparer « Serveurs et échéances » à `lmutil lmstat -i` | Mêmes dates d'expiration ; licences permanentes absentes | ☐ |
+| WEB-27 | Efficacité | Filtrer un seul produit | Courbe en nombre de jetons, décroissante ; jetons recommandés ≤ pic observé | ☐ |
+| WEB-28 | Optimisation et coûts | Renseigner `annual_cost` pour 2 produits | Coût annuel = coût × jetons ; économie = excédent × coût ; aucun produit avec refus proposé à la baisse ; sans `annual_cost` : note explicative | ☐ |
+| WEB-29 | Thème | Barre latérale : Auto / Clair / Sombre, puis recharger | Thème appliqué immédiatement et conservé au rechargement | ☐ |
+| WEB-30 | Menu mobile | Fenêtre ~400 px : bouton menu | Barre latérale en tiroir ; se ferme après choix d'une vue ou Échap | ☐ |
 
 ### 5.7 Exports (EXP)
 
@@ -378,13 +387,15 @@ achats, DSI) sur les données réelles (E3), après au moins 2 semaines de colle
 
 | Id | Question métier | Où trouver la réponse | Réponse obtenue et jugée fiable ? | Statut |
 |---|---|---|---|:---:|
-| MET-01 | Combien de licences de <produit> sont réellement nécessaires ? | Synthèse (pic, taux au pic, heures saturées) + Usage dans le temps (pic / jour) | | ☐ |
-| MET-02 | Quelles licences sont sous-utilisées (pistes d'économie) ? | Synthèse triée par taux moyen croissant | | ☐ |
+| MET-01 | Combien de licences de <produit> sont réellement nécessaires ? | Efficacité (jetons recommandés) + Synthèse (pic, heures saturées) + Usage dans le temps | | ☐ |
+| MET-02 | Quelles licences sont sous-utilisées (pistes d'économie) ? | Optimisation & coûts (économies potentielles), alerte « sous-utilisé » du tableau de bord | | ☐ |
 | MET-03 | Qui utilise <produit>, et combien de temps ? | Répartition par utilisateur, filtre produit | | ☐ |
 | MET-04 | Quels services consomment le plus (refacturation) ? | Répartition / Croisement par service | | ☐ |
 | MET-05 | Quand y a-t-il pénurie ? | Contention, Refus, Profil horaire | | ☐ |
 | MET-06 | Le rapport mensuel est-il exploitable tel quel (comité, direction) ? | Rapport complet Excel | | ☐ |
 | MET-07 | Les données peuvent-elles être retravaillées dans Excel ? | Export CSV / Sessions + tableau croisé dynamique | | ☐ |
+| MET-08 | En un coup d'œil, la situation est-elle saine ? | Tableau de bord (alertes, KPI, serveurs) | | ☐ |
+| MET-09 | Qui bloque <produit> en ce moment ? | En direct | | ☐ |
 
 ## 11. Planning et procès-verbal
 

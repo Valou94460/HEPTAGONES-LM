@@ -33,6 +33,7 @@ class SimFeature:
     daily_prob: float         # probabilité d'usage un jour ouvré, par utilisateur du pool
     mean_hours: float         # durée moyenne d'une session
     counts: tuple[int, ...] = (1,)  # nb de jetons par checkout (ex. HPC)
+    annual_cost: float | None = None  # coût annuel d'un jeton (démonstration)
 
 
 @dataclass(frozen=True)
@@ -107,27 +108,27 @@ DEFAULT_SCENARIO: tuple[SimServer, ...] = (
     SimServer(
         name="AUTODESK", host="licsrv-adsk", port=27000, vendor="adskflex",
         features=(
-            SimFeature("87545ACD_2024_0F", 12, "AutoCAD 2024", "Autodesk", 26, 0.55, 3.0),
-            SimFeature("87048INVPROSA_2024_0F", 6, "Inventor Professional 2024", "Autodesk", 12, 0.6, 4.0),
-            SimFeature("87706RVT_2024_0F", 3, "Revit 2024", "Autodesk", 6, 0.45, 3.5),
+            SimFeature("87545ACD_2024_0F", 12, "AutoCAD 2024", "Autodesk", 26, 0.55, 3.0, annual_cost=2300),
+            SimFeature("87048INVPROSA_2024_0F", 6, "Inventor Professional 2024", "Autodesk", 12, 0.6, 4.0, annual_cost=3900),
+            SimFeature("87706RVT_2024_0F", 3, "Revit 2024", "Autodesk", 6, 0.45, 3.5, annual_cost=3400),
         ),
     ),
     SimServer(
         name="ANSYS", host="licsrv-ansys", port=1055, vendor="ansyslmd", with_log=True,
         features=(
-            SimFeature("ansys", 4, "Ansys Mechanical Enterprise", "Ansys", 10, 0.5, 3.0),
-            SimFeature("cfd_base", 2, "Ansys Fluent", "Ansys", 5, 0.45, 5.0),
-            SimFeature("a_spaceclaim_dirmod", 3, "Ansys SpaceClaim", "Ansys", 8, 0.35, 1.5),
-            SimFeature("anshpc", 32, "Ansys HPC", "Ansys", 6, 0.4, 6.0, counts=(4, 8, 8, 16)),
+            SimFeature("ansys", 4, "Ansys Mechanical Enterprise", "Ansys", 10, 0.5, 3.0, annual_cost=28000),
+            SimFeature("cfd_base", 2, "Ansys Fluent", "Ansys", 5, 0.45, 5.0, annual_cost=24000),
+            SimFeature("a_spaceclaim_dirmod", 3, "Ansys SpaceClaim", "Ansys", 8, 0.35, 1.5, annual_cost=4500),
+            SimFeature("anshpc", 32, "Ansys HPC", "Ansys", 6, 0.4, 6.0, counts=(4, 8, 8, 16), annual_cost=900),
         ),
     ),
     SimServer(
         name="MATLAB", host="licsrv-mlm", port=27000, vendor="MLM",
         features=(
-            SimFeature("MATLAB", 10, "MATLAB", "MathWorks", 18, 0.5, 2.5),
-            SimFeature("SIMULINK", 4, "Simulink", "MathWorks", 8, 0.4, 3.0),
-            SimFeature("Optimization_Toolbox", 2, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5),
-            SimFeature("Signal_Toolbox", 3, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5),
+            SimFeature("MATLAB", 10, "MATLAB", "MathWorks", 18, 0.5, 2.5, annual_cost=2700),
+            SimFeature("SIMULINK", 4, "Simulink", "MathWorks", 8, 0.4, 3.0, annual_cost=3600),
+            SimFeature("Optimization_Toolbox", 2, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5, annual_cost=1200),
+            SimFeature("Signal_Toolbox", 3, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5, annual_cost=1200),
         ),
     ),
 )
@@ -201,6 +202,24 @@ def _mdy(d: date | datetime) -> str:
     return f"{d.month}/{d.day}/{d.year}"
 
 
+_MONTHS_EN = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+
+
+def _expiry(feature: SimFeature, when: datetime) -> str:
+    """Échéances variées pour la démonstration : permanentes, fin d'année, et
+    quelques contrats qui arrivent à terme dans les semaines à venir."""
+    rank = zlib.crc32(feature.name.encode()) % 5
+    if rank == 0:
+        return "permanent(no expiration date)"
+    if rank == 1:  # échéance glissante : toujours dans ~3 semaines
+        d = (when + timedelta(days=21 + zlib.crc32(feature.name.encode()) % 10)).date()
+    elif rank == 2:
+        d = (when + timedelta(days=60)).date().replace(day=1)
+    else:
+        d = date(when.year + 1, 12, 31)
+    return f"{d.day}-{_MONTHS_EN[d.month - 1]}-{d.year}"
+
+
 def render_lmstat(server: SimServer, when: datetime) -> str:
     """Sortie de ``lmutil lmstat -a -c port@host`` à l'instant ``when``."""
     out = [
@@ -228,10 +247,10 @@ def render_lmstat(server: SimServer, when: datetime) -> str:
             f"Total of {used} {lic(used)} in use)"
         )
         out.append("")
+        out.append(f'  "{f.name}" v2024.0, vendor: {server.vendor}, expiry: {_expiry(f, when)}')
+        out.append("  floating license")
+        out.append("")
         if active:
-            out.append(f'  "{f.name}" v2024.0, vendor: {server.vendor}, expiry: 31-dec-2026')
-            out.append("  floating license")
-            out.append("")
             for s in active:
                 line = (
                     f"    {s.user} {s.host} {s.host} (v2024.0) ({server.host}/{server.port} {s.handle}), "

@@ -66,3 +66,28 @@ class LmstatParserTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ExpiryTest(unittest.TestCase):
+    def test_parse_expiry(self):
+        from datetime import date
+
+        from freelm.collectors.flexlm.lmstat import parse_expiry
+        self.assertEqual(parse_expiry("31-dec-2026"), date(2026, 12, 31))
+        self.assertEqual(parse_expiry("1-Mar-27"), date(2027, 3, 1))
+        for none in (None, "", "permanent(no", "1-jan-0", "31-feb-2026", "demain"):
+            self.assertIsNone(parse_expiry(none), none)
+
+    def test_earliest_expiry_kept(self):
+        from datetime import date
+        text = (
+            "Feature usage info:\n\n"
+            "Users of MATLAB:  (Total of 5 licenses issued;  Total of 0 licenses in use)\n\n"
+            '  "MATLAB" v44, vendor: MLM, expiry: 30-jun-2027\n'
+            '  "MATLAB" v44, vendor: MLM, expiry: 15-jan-2027\n'
+            "Users of Simulink:  (Total of 2 licenses issued;  Total of 0 licenses in use)\n\n"
+            '  "Simulink" v44, vendor: MLM, expiry: permanent(no expiration date)\n'
+        )
+        features = {f.name: f for f in parse_lmstat(text, "1@x", queried_at=datetime(2026, 9, 1)).features}
+        self.assertEqual(features["MATLAB"].expires, date(2027, 1, 15))
+        self.assertIsNone(features["Simulink"].expires)

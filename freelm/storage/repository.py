@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime
 
 from freelm.storage.db import Database
+
+log = logging.getLogger(__name__)
 
 
 def _norm(value: str | None) -> str:
@@ -94,6 +97,25 @@ class Repository:
             [seen_at, seen_at, seen_at, seen_at, vendor, version, product, publisher, fid],
         )
         return fid
+
+    def has_column(self, table: str, column: str) -> bool:
+        """Vrai si la colonne existe (base pas encore migrée par init-db sinon)."""
+        key = (table, column)
+        cache = self.__dict__.setdefault("_columns", {})
+        if key not in cache:
+            # Requête de métadonnées (n'échoue pas, ne perturbe pas la transaction en cours).
+            if self.db.dialect == "mssql":
+                cache[key] = self.db.scalar("SELECT COL_LENGTH(?, ?)", [f"dbo.{table}", column]) is not None
+            else:
+                cache[key] = column in {row[1] for row in self.db.query(f"PRAGMA table_info({table})")}
+            if not cache[key]:
+                log.warning("Colonne %s.%s absente : exécuter « freelm init-db » pour mettre à jour le schéma",
+                            table, column)
+        return cache[key]
+
+    def set_feature_expiry(self, feature_id: int, expires_on) -> None:
+        if expires_on is not None and self.has_column("feature", "expires_on"):
+            self.db.execute("UPDATE feature SET expires_on = ? WHERE id = ?", [expires_on, feature_id])
 
     def get_or_create_user(self, username: str) -> int:
         key = _norm(username) or "(inconnu)"

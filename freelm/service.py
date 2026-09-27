@@ -150,6 +150,7 @@ class CollectionService:
         current: dict[tuple, tuple] = {}
         for feat in status.features:
             fid = self._feature_id(server_id, feat.name, now, feat.vendor, feat.version)
+            self.repo.set_feature_expiry(fid, feat.expires)
             self.repo.add_snapshot(fid, now, feat.issued, feat.in_use, feat.queued)
             for co in feat.checkouts:
                 current[co.session_key()] = (co, fid)

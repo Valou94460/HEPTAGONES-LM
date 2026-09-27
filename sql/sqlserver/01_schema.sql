@@ -1,5 +1,5 @@
 -- Schéma FreeLM (généré par `freelm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 2
+-- Version du schéma : 3
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -31,6 +31,7 @@ CREATE TABLE dbo.feature (
     publisher NVARCHAR(100) NULL,
     first_seen DATETIME2(0) NOT NULL,
     last_seen DATETIME2(0) NOT NULL,
+    expires_on DATE NULL,
     CONSTRAINT uq_feature UNIQUE (server_id, name)
 )
 GO
@@ -144,6 +145,10 @@ CREATE TABLE dbo.report_delivery (
     status NVARCHAR(10) NOT NULL,
     message NVARCHAR(2000) NULL
 )
+GO
+
+IF COL_LENGTH(N'dbo.feature', N'expires_on') IS NULL
+ALTER TABLE dbo.feature ADD expires_on DATE NULL
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_session_feature_time')

@@ -64,7 +64,8 @@ class WebServerTest(unittest.TestCase):
         return status, json.loads(body)
 
     def test_static_files(self):
-        for path, ctype in (("/", "text/html"), ("/app.js", "text/javascript"), ("/style.css", "text/css")):
+        for path, ctype in (("/", "text/html"), ("/app.js", "text/javascript"), ("/style.css", "text/css"),
+                            ("/theme.js", "text/javascript")):
             status, headers, _ = self.get(path)
             self.assertEqual(status, 200)
             self.assertTrue(headers["Content-Type"].startswith(ctype), headers["Content-Type"])
@@ -82,9 +83,48 @@ class WebServerTest(unittest.TestCase):
         for rtype in api.REPORTS:
             status, r = self.get_json(f"/api/report?type={rtype}&{self.period}&dimension=department")
             self.assertEqual(status, 200, (rtype, r))
+            if rtype == "dashboard":  # vue composite : indicateurs, tendances, blocs
+                self.assertEqual(len(r["kpis"]), 6)
+                self.assertTrue(r["products"] and r["trend"]["x"] and r["servers"])
+                continue
             self.assertTrue(r["rows"], rtype)
             for col in r["columns"]:  # chaque colonne annoncée est présente dans les lignes
                 self.assertIn(col["key"], r["rows"][0], (rtype, col["key"]))
+
+    def test_insight_reports(self):
+        _, eff = self.get_json(f"/api/report?type=efficiency&{self.period}")
+        for row in eff["rows"]:
+            self.assertLessEqual(row["recommended"], row["issued"], row)
+            self.assertLessEqual(row["recommended"], row["peak"], row)
+        self.assertEqual(eff["chart"]["xType"], "share")
+        _, one = self.get_json(f"/api/report?type=efficiency&{self.period}&product=AutoCAD%202024")
+        self.assertEqual(one["chart"]["xType"], "tokens")
+        values = one["chart"]["series"][0]["values"]
+        self.assertEqual(values, sorted(values, reverse=True))  # « au moins N » : courbe décroissante
+
+        _, opt = self.get_json(f"/api/report?type=optimization&{self.period}")
+        self.assertEqual(opt["currency"], "€")
+        costed = [r for r in opt["rows"] if r["unit_cost"] is not None]
+        self.assertTrue(costed)  # la démo renseigne annual_cost
+        for r in costed:
+            self.assertEqual(r["annual_cost"], r["unit_cost"] * r["issued"])
+            self.assertEqual(r["savings"], r["surplus"] * r["unit_cost"])
+        for r in opt["rows"]:
+            if r["denials"]:
+                self.assertEqual(r["surplus"], 0, r)  # jamais de baisse conseillée en cas de refus
+
+        _, live = self.get_json("/api/report?type=live")
+        self.assertTrue(live["live"]["updated_at"] and live["live"]["products"])
+        for p in live["live"]["products"]:
+            self.assertEqual(p["free"], p["issued"] - p["in_use"])
+
+        _, dash = self.get_json(f"/api/report?type=dashboard&{self.period}")
+        keys = [k["key"] for k in dash["kpis"]]
+        self.assertEqual(keys[:5], ["utilization", "users", "hours", "saturated", "denials"])
+        self.assertEqual(len(dash["heatmap"]["values"]), 24)
+        self.assertEqual(len(dash["trend"]["x"]), len(dash["trend"]["business_utilization"]))
+        for a in dash["alerts"]:
+            self.assertIn(a["severity"], ("critical", "serious", "warning", "info"))
 
     def test_filters(self):
         _, all_ = self.get_json(f"/api/report?type=sessions&{self.period}")
@@ -160,3 +200,34 @@ class UsersImportTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AlertsTest(unittest.TestCase):
+    def test_compute_alerts(self):
+        from types import SimpleNamespace
+
+        from freelm.web import insights
+        p = api.parse_params({"start": ["2024-09-16"], "end": ["2024-09-22"]})
+        data = SimpleNamespace(summaries=[
+            SimpleNamespace(label="A", denials=3, saturated_hours=0, issued=4, peak_utilization=1.0, peak_in_use=4),
+            SimpleNamespace(label="B", denials=0, saturated_hours=0, issued=10, peak_utilization=0.3, peak_in_use=3),
+        ])
+        now = datetime(2024, 9, 22, 12, 0)
+        collections = [{"server": "S", "collector": "lmstat", "status": "ERROR", "message": "timeout",
+                        "last_run": "2024-09-22 11:55"}]
+        expiring = [{"product": "X", "feature": "fx", "server": "S", "expires_on": "2024-09-25", "days_left": 3},
+                    {"product": "Y", "feature": "fy", "server": "S", "expires_on": "2024-10-10", "days_left": 18},
+                    {"product": "Z", "feature": "fz", "server": "S", "expires_on": "2024-10-12", "days_left": 20}]
+        alerts = insights.compute_alerts(None, p, data, collections, expiring, now=now)
+        sev = [a["severity"] for a in alerts]
+        self.assertEqual(sev, sorted(sev, key=["critical", "serious", "warning", "info"].index))
+        titles = " | ".join(a["title"] for a in alerts)
+        self.assertIn("Collecte en échec", titles)
+        self.assertIn("Expiration dans 3 j", titles)
+        self.assertIn("2 licence(s) expirent", titles)  # avertissements regroupés
+        self.assertIn("3 refus", titles)
+        self.assertIn("sous-utilisé", titles)
+        self.assertNotIn("Collecte arrêtée", titles)
+        stale = insights.compute_alerts(None, p, data, [dict(collections[0], status="OK")], [],
+                                        now=now + timedelta(hours=3))
+        self.assertIn("Collecte arrêtée", stale[0]["title"])

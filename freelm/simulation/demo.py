@@ -100,7 +100,8 @@ def demo_config_dict(output_dir: Path, connection_string: str, lmutil: Path, sce
             entry["log_path"] = str(output_dir / "logs" / f"{srv.name}.log")
         servers.append(entry)
         for f in srv.features:
-            products.append({"pattern": f.name, "product": f.product, "publisher": f.publisher})
+            products.append({"pattern": f.name, "product": f.product, "publisher": f.publisher,
+                             "annual_cost": f.annual_cost})
     return {
         "database": {"connection_string": connection_string},
         "lmutil_path": str(lmutil),
@@ -141,7 +142,7 @@ def _simulate_day(
         events, state = read_log_incremental(str(path), svc.repo.get_state(sid, "log"))
         items += svc.apply_events(sid, events, "log", srv_cfg.sessions_from == "log")
         svc.repo.save_state(sid, "log", state)
-    run_id = svc.repo.start_run(sid, "simulation", day)
+    run_id = svc.repo.start_run(sid, "simulation", max(day, day_end - poll))
     svc.repo.finish_run(run_id, "OK", items, None)
     return items
 

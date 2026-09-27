@@ -50,6 +50,7 @@ class ProductRule:
     product: str
     publisher: str | None = None
     vendor: str | None = None
+    annual_cost: float | None = None   # coût annuel d'UN jeton (maintenance / abonnement)
 
 
 @dataclass
@@ -57,6 +58,8 @@ class ReportingConfig:
     output_dir: str = "reports"
     top_n_chart: int = 10          # nombre de features/utilisateurs dans les graphiques
     business_hours: tuple[int, int] = (8, 19)
+    currency: str = "€"
+    target_coverage: float = 0.95  # part du temps ouvré à couvrir pour la recommandation de jetons
 
 
 @dataclass
@@ -159,6 +162,14 @@ class AppConfig:
                 return srv
         raise ConfigError(f"Serveur inconnu dans la configuration : {name}")
 
+    def product_costs(self) -> dict[str, float]:
+        """Coût annuel d'un jeton par produit (première règle renseignée)."""
+        costs: dict[str, float] = {}
+        for rule in self.products:
+            if rule.annual_cost is not None:
+                costs.setdefault(rule.product, rule.annual_cost)
+        return costs
+
     def resolve_product(self, feature: str, vendor: str | None = None) -> ProductRule | None:
         """Retourne la première règle produit correspondant à la feature."""
         for rule in self.products:
@@ -226,6 +237,7 @@ def parse_config(raw: dict) -> AppConfig:
             product=p["product"],
             publisher=p.get("publisher"),
             vendor=p.get("vendor"),
+            annual_cost=float(p["annual_cost"]) if p.get("annual_cost") not in (None, "") else None,
         )
         for p in raw.get("products") or []
     ]
@@ -236,6 +248,8 @@ def parse_config(raw: dict) -> AppConfig:
         output_dir=_expand(rep.get("output_dir", "reports")),
         top_n_chart=int(rep.get("top_n_chart", 10)),
         business_hours=(int(bh[0]), int(bh[1])),
+        currency=str(rep.get("currency", "€")),
+        target_coverage=min(0.999, max(0.5, float(rep.get("target_coverage", 0.95)))),
     )
     ret = raw.get("retention") or {}
     retention = RetentionConfig(

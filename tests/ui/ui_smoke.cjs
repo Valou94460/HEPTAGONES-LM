@@ -18,8 +18,45 @@ const fs = require("fs");
     page.on("console", m => { if (m.type() === "error") failures.push(`[${scheme}] console: ${m.text()}`); });
     page.on("pageerror", e => failures.push(`[${scheme}] erreur JS : ${e.message}`));
     const tabs = scheme === "light"
-      ? ["summary", "timeseries", "breakdown", "matrix", "heatmap", "contention", "denials", "sessions", "collections"]
+      ? ["summary", "timeseries", "breakdown", "matrix", "heatmap", "contention", "denials", "efficiency", "optimization", "sessions", "collections"]
       : ["summary", "timeseries", "heatmap"];
+    // Tableau de bord (page d'accueil) : alertes, 6 KPI cliquables avec micro-courbes, graphiques.
+    await page.goto(`${base}/#preset=all`);
+    await page.waitForSelector("#kpi-grid .kpi-card", { timeout: 30000 });
+    await page.waitForTimeout(300);
+    const dash = await page.evaluate(() => ({
+      kpis: document.querySelectorAll("#kpi-grid > *").length,
+      sparks: document.querySelectorAll("#kpi-grid .spark svg").length,
+      trend: !!document.querySelector("#trend-chart svg"),
+      products: document.querySelectorAll("#product-meters .meter-row").length,
+      users: document.querySelectorAll("#top-users .person").length,
+      servers: document.querySelectorAll("#servers .status-row").length,
+      alerts: document.querySelectorAll("#alerts .alert, #alerts .alerts-ok").length,
+      current: (document.querySelector('.nav-item[aria-current="page"]') || {}).dataset?.type,
+      error: document.getElementById("error").hidden ? "" : document.getElementById("error").textContent,
+    }));
+    console.log(scheme.padEnd(5), "dashboard   ", JSON.stringify(dash));
+    if (dash.error) failures.push(`dashboard : ${dash.error}`);
+    if (dash.kpis !== 6) failures.push(`dashboard : ${dash.kpis} KPI au lieu de 6`);
+    if (!dash.sparks || !dash.trend || !dash.products || !dash.users || !dash.servers || !dash.alerts) failures.push("dashboard : bloc vide");
+    if (dash.current !== "dashboard") failures.push("dashboard : entrée de menu non active");
+    await page.screenshot({ path: `${out}/${scheme}_dashboard.png`, fullPage: true });
+    // Vue en direct : une carte par produit.
+    await page.click('.nav-item[data-type="live"]');
+    await page.waitForSelector("#live-grid .live-card", { timeout: 15000 })
+      .catch(() => failures.push("en direct : aucune carte produit"));
+    console.log(scheme.padEnd(5), "live        ", await page.$$eval("#live-grid .live-card", c => c.length), "cartes");
+    await page.screenshot({ path: `${out}/${scheme}_live.png`, fullPage: true });
+    if (scheme === "light") {
+      // Clic sur un KPI : ouvre le rapport détaillé correspondant.
+      await page.goto(`${base}/#type=dashboard&preset=all`);
+      await page.waitForSelector('#kpi-grid .kpi-card[data-key="denials"]');
+      await page.click('#kpi-grid .kpi-card[data-key="denials"]');
+      await page.waitForFunction(() => document.getElementById("table-title") &&
+        document.getElementById("table-title").textContent !== "Chargement…", null, { timeout: 15000 });
+      const h = await page.evaluate(() => location.hash);
+      if (!h.includes("type=denials")) failures.push("clic KPI refus : rapport Refus non ouvert");
+    }
     for (const t of tabs) {
       const extra = { timeseries: "&metric=utilization&granularity=day", breakdown: "&dimension=department", matrix: "&dimension=department" }[t] || "";
       await page.goto(`${base}/#type=${t}&preset=all${extra}`);
@@ -64,7 +101,7 @@ const fs = require("fs");
       // Navigation Précédent / Suivant entre onglets
       await page.goto(`${base}/#type=summary&preset=all`);
       await page.waitForSelector(".kpi");
-      await page.click('.tab[data-type="heatmap"]');
+      await page.click('.nav-item[data-type="heatmap"]');
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Profil horaire");
       await page.goBack();
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Synthèse par produit", null, { timeout: 10000 })
@@ -75,7 +112,11 @@ const fs = require("fs");
       await page.goto(`${base}/#type=summary`);
       await page.waitForSelector(".kpi");
       if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) failures.push("débordement horizontal sur mobile");
-      await page.screenshot({ path: `${out}/mobile_summary.png` });
+      await page.goto(`${base}/#type=dashboard`);
+      await page.waitForSelector("#kpi-grid .kpi-card");
+      await page.waitForTimeout(300);
+      if (await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)) failures.push("débordement horizontal sur mobile (tableau de bord)");
+      await page.screenshot({ path: `${out}/mobile_dashboard.png` });
     }
     await page.close();
   }

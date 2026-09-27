@@ -43,9 +43,9 @@ CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; c
                  ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 STATIC_FILES = {"/": "index.html", "/index.html": "index.html", "/app.js": "app.js",
                 "/charts.js": "charts.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
-                "/login.html": "login.html", "/login.js": "login.js"}
+                "/login.html": "login.html", "/login.js": "login.js", "/theme.js": "theme.js"}
 # Accessibles sans être connecté (page de connexion et ses ressources).
-PUBLIC_PATHS = {"/login.html", "/login.js", "/style.css", "/favicon.svg"}
+PUBLIC_PATHS = {"/login.html", "/login.js", "/style.css", "/favicon.svg", "/theme.js"}
 MAX_BODY = 8192
 
 
@@ -273,11 +273,11 @@ class FreeLMHandler(BaseHTTPRequestHandler):
                     return self._json({**api.meta(db), "version": __version__,
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
             if url.path == "/api/report":
-                params = api.parse_params(query, business_hours=self.config.reporting.business_hours)
+                params = api.params_from_config(query, self.config)
                 with self._db() as db:
                     return self._json(api.run_report(db, (query.get("type") or ["summary"])[0], params))
             if url.path == "/api/export":
-                params = api.parse_params(query, business_hours=self.config.reporting.business_hours)
+                params = api.params_from_config(query, self.config)
                 fmt = (query.get("format") or ["xlsx"])[0]
                 rtype = (query.get("type") or ["summary"])[0]
                 with self._db() as db:

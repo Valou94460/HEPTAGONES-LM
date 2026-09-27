@@ -26,7 +26,7 @@ from __future__ import annotations
 import logging
 import re
 import subprocess
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from freelm.collectors.base import CollectorError, StatusCollector, register
 from freelm.models import Checkout, FeatureStatus, ServerStatus
@@ -51,7 +51,28 @@ _TOTALS_RE = re.compile(
 )
 _FEATURE_INFO_RE = re.compile(
     r'^\s*"(?P<name>[^"]+)"\s+v(?P<version>[^,\s]+),\s+vendor:\s+(?P<vendor>[^,\s]+)'
+    r'(?:,\s+expiry:\s*(?P<expiry>[^,\s]+))?'
 )
+_MONTHS = {m: i for i, m in enumerate(
+    ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], start=1)}
+
+
+def parse_expiry(text: str | None) -> date | None:
+    """« 31-dec-2026 » -> date ; « permanent(...) », « 1-jan-0 » ou illisible -> None."""
+    if not text:
+        return None
+    m = re.match(r"^(\d{1,2})-([a-z]{3})-(\d{1,4})$", text.strip().lower())
+    if not m or m.group(2) not in _MONTHS:
+        return None
+    year = int(m.group(3))
+    if year == 0:            # convention FlexLM : 1-jan-0 = permanente
+        return None
+    if year < 100:
+        year += 2000
+    try:
+        return date(year, _MONTHS[m.group(2)], int(m.group(1)))
+    except ValueError:
+        return None
 # Ligne utilisateur : "<user> <host> <display> (vX) (server/port handle), start Day M/D H:MM[, N licenses]"
 _CHECKOUT_RE = re.compile(
     r"^\s+(?P<ident>\S.*?)\s+\((?P<version>v[^)]*)\)\s+"
@@ -170,6 +191,10 @@ def parse_lmstat(text: str, port_at_host: str = "", queried_at: datetime | None 
             if info["name"] == current.name:
                 current.vendor = current.vendor or info["vendor"]
                 current.version = current.version or info["version"]
+                expires = parse_expiry(info["expiry"])
+                # plusieurs lignes (pools) : on retient l'échéance la plus proche
+                if expires and (current.expires is None or expires < current.expires):
+                    current.expires = expires
             continue
 
         co = _CHECKOUT_RE.match(line)
