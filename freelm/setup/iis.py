@@ -146,7 +146,9 @@ def configure_site_script(a: Answers, physical_path: str) -> str:
     return f"""
 Import-Module WebAdministration
 $site = {site}; $pool = {pool}; $hostName = {host}; $port = {port}; $thumb = {thumb}; $path = {path}
-if (-not (Test-Path "Cert:\\LocalMachine\\My\\$thumb")) {{ throw "Certificat $thumb introuvable dans LocalMachine\\My" }}
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('My', 'LocalMachine'); $store.Open('ReadOnly')
+$found = $store.Certificates.Find('FindByThumbprint', $thumb, $false).Count; $store.Close()
+if ($found -eq 0) {{ throw "Certificat $thumb introuvable dans LocalMachine\\My" }}
 if (-not (Test-Path "IIS:\\AppPools\\$pool")) {{ New-WebAppPool -Name $pool | Out-Null }}
 Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedRuntimeVersion -Value ''
 Set-ItemProperty "IIS:\\AppPools\\$pool" -Name startMode -Value 'AlwaysRunning'

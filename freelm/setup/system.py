@@ -179,7 +179,9 @@ class WindowsSystem(System):
     name = "Windows"
 
     PREAMBLE = ("$ErrorActionPreference = 'Stop'; $ProgressPreference = 'SilentlyContinue'; "
-                "[Console]::OutputEncoding = [Text.Encoding]::UTF8\n")
+                "[Console]::OutputEncoding = [Text.Encoding]::UTF8\n"
+                # lecteur Cert: absent des sessions non interactives tant que le module n'est pas chargé
+                "Import-Module Microsoft.PowerShell.Security -ErrorAction SilentlyContinue\n")
 
     def ps(self, script: str, secret: str | None = None, timeout: int = 600) -> Result:
         full = self.PREAMBLE + "try {\n" + script + "\n} catch { [Console]::Error.WriteLine($_.Exception.Message); exit 1 }"
@@ -265,10 +267,13 @@ $fqdn = try { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName } catch
     def certificates(self) -> list[dict]:
         data = self.ps_json("""
 $now = Get-Date
-$certs = @(Get-ChildItem Cert:\\LocalMachine\\My | Where-Object { $_.HasPrivateKey } | ForEach-Object {
+$store = New-Object System.Security.Cryptography.X509Certificates.X509Store('My', 'LocalMachine')
+$store.Open('ReadOnly')
+$certs = @($store.Certificates | Where-Object { $_.HasPrivateKey } | ForEach-Object {
   [pscustomobject]@{ thumbprint = $_.Thumbprint; subject = $_.Subject; friendly = $_.FriendlyName;
     not_after = $_.NotAfter.ToString('yyyy-MM-dd'); expired = ($_.NotAfter -lt $now);
     dns = (@($_.DnsNameList | ForEach-Object { $_.Unicode }) -join ', ') } })
+$store.Close()
 ConvertTo-Json -InputObject $certs -Compress
 """)
         return data if isinstance(data, list) else ([data] if data else [])
@@ -340,6 +345,7 @@ $i = $t | Get-ScheduledTaskInfo
 
     def run(self, cmd: list[str], env: dict | None = None, timeout: int = 180) -> Result:
         full_env = dict(os.environ)
+        full_env.setdefault("PYTHONIOENCODING", "utf-8")     # FreeLM.exe enfant : sortie UTF-8
         full_env.update(env or {})
         try:
             proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env, stdin=subprocess.DEVNULL)
@@ -347,8 +353,7 @@ $i = $t | Get-ScheduledTaskInfo
             return Result(127, "", f"programme introuvable : {cmd[0]}")
         except subprocess.TimeoutExpired:
             return Result(124, "", f"délai dépassé ({timeout} s)")
-        dec = lambda b: (b or b"").decode("utf-8", "replace") if b else ""
-        return Result(proc.returncode, dec(proc.stdout), dec(proc.stderr))
+        return Result(proc.returncode, _decode(proc.stdout), _decode(proc.stderr))
 
     def makedirs(self, path: str) -> None:
         os.makedirs(path, exist_ok=True)
@@ -519,6 +524,16 @@ New-NetFirewallRule -DisplayName {ps_quote(name)} -Direction Inbound -Protocol T
         finally:
             conn.close()
         return done
+
+
+def _decode(data: bytes | None) -> str:
+    if not data:
+        return ""
+    try:
+        return data.decode("utf-8")
+    except UnicodeDecodeError:
+        import locale
+        return data.decode(locale.getpreferredencoding(False) or "cp1252", "replace")
 
 
 def _odbc_message(exc: Exception) -> str:
