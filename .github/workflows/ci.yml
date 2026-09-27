@@ -207,8 +207,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      # Compte local jetable, propre à la CI (sans fragment du nom du compte : règle de complexité Windows)
-      SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"
+      SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # compte local jetable, propre à la CI
     steps:
       - uses: actions/checkout@v4
 
@@ -218,12 +217,14 @@ jobs:
           path: livrables
 
       - name: Préparation (compte de service, groupe, certificat, DNS, faux lmutil)
+        shell: powershell
         run: |
-          net user svc_freelm $env:SVC_PWD /add /passwordchg:no /expires:never
-          if ($LASTEXITCODE -ne 0) { throw "création du compte de service impossible" }
-          net localgroup FreeLM_Lecteurs /add
-          net localgroup FreeLM_Lecteurs $env:USERNAME /add
-          if ($LASTEXITCODE -ne 0) { throw "groupe local impossible" }
+          $ErrorActionPreference = "Stop"
+          # Cmdlets non interactives (net user demande une confirmation au-delà de 14 caractères)
+          $secure = ConvertTo-SecureString $env:SVC_PWD -AsPlainText -Force
+          New-LocalUser -Name svc_freelm -Password $secure -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
+          New-LocalGroup -Name FreeLM_Lecteurs | Out-Null
+          Add-LocalGroupMember -Group FreeLM_Lecteurs -Member $env:USERNAME
           $cert = New-SelfSignedCertificate -DnsName "freelm.ci.local" -CertStoreLocation Cert:\LocalMachine\My
           Get-ChildItem Cert:\LocalMachine\My | Format-Table Thumbprint, Subject, HasPrivateKey
           Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 freelm.ci.local"
