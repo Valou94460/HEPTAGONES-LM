@@ -251,8 +251,7 @@ jobs:
       - name: Contrôles après installation
         run: |
           Get-ScheduledTask -TaskPath "\FreeLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
-          Import-Module WebAdministration
-          Get-Website | Format-Table Name, State, PhysicalPath
+          & "$env:windir\system32\inetsrv\appcmd.exe" list site
           # Authentification unique : IIS (Windows) -> FreeLM (en-tête X-Remote-User)
           $meta = Invoke-RestMethod "https://freelm.ci.local/api/meta" -UseDefaultCredentials -SkipCertificateCheck
           if (-not $meta.version) { throw "API FreeLM inaccessible via IIS" }
