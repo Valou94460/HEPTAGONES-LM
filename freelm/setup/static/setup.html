@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Installation de FreeLM</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="setup.css">
+  <script src="theme.js"></script>
+</head>
+<body class="setup">
+<div class="setup-shell">
+  <aside class="setup-side" aria-label="Étapes de l'installation">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 32 32" aria-hidden="true">
+        <rect width="32" height="32" rx="9" fill="var(--accent)"/>
+        <rect x="7" y="17" width="4" height="8" rx="1.5" fill="#fff" opacity=".7"/>
+        <rect x="14" y="11" width="4" height="14" rx="1.5" fill="#fff" opacity=".85"/>
+        <rect x="21" y="6" width="4" height="19" rx="1.5" fill="#fff"/>
+      </svg>
+      <div>
+        <div class="brand-name">FreeLM</div>
+        <p class="subtitle">Assistant d'installation</p>
+      </div>
+    </div>
+    <ol id="stepper" class="stepper"></ol>
+    <div class="side-foot">
+      <span id="sys-badge" class="badge"></span>
+      <span class="muted">FreeLM <span id="version"></span></span>
+    </div>
+  </aside>
+
+  <main class="setup-main">
+    <div id="sim-banner" class="sim-banner" role="note" hidden>
+      <b>Mode simulation</b> — l'assistant montre l'installation complète sans rien modifier sur ce poste.
+    </div>
+    <header class="setup-head">
+      <div id="step-eyebrow" class="eyebrow"></div>
+      <h1 id="step-title">Chargement…</h1>
+      <p id="step-desc" class="muted"></p>
+    </header>
+    <div id="error" class="error" role="alert" hidden></div>
+    <section id="step-body" class="setup-body" aria-live="polite"></section>
+    <footer class="setup-foot">
+      <button id="prev" class="btn ghost" type="button">Précédent</button>
+      <span class="spacer"></span>
+      <span id="foot-msg" class="muted"></span>
+      <button id="next" class="btn primary" type="button">Suivant</button>
+    </footer>
+  </main>
+</div>
+<script src="setup.js"></script>
+</body>
+</html>

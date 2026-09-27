@@ -286,6 +286,25 @@ def cmd_web(args) -> int:
     return 0
 
 
+def cmd_setup(args) -> int:
+    from freelm.setup.system import SetupError, make_system
+
+    _setup_logging("DEBUG" if args.verbose else "WARNING", None)
+    try:
+        system = make_system(args.simulate)
+    except SetupError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    if args.answers:
+        from freelm.setup.unattended import run
+
+        return run(system, args.answers)
+    from freelm.setup.server import serve
+
+    serve(system, port=args.port, open_browser=not args.no_open, token=args.token)
+    return 0
+
+
 def cmd_ddl(args) -> int:
     from freelm.storage.schema import render_script
 
@@ -348,6 +367,13 @@ def build_parser() -> argparse.ArgumentParser:
     dm.add_argument("--poll-minutes", type=int, default=5, help="intervalle de sondage simulé")
     dm.add_argument("--no-report", action="store_true", help="ne pas générer le rapport Excel")
 
+    st = sub.add_parser("setup", help="assistant d'installation sur un serveur Windows (IIS, base, tâches, vérification)")
+    st.add_argument("--simulate", action="store_true", help="démonstration : aucune modification du système")
+    st.add_argument("--answers", metavar="FICHIER.json", help="installation silencieuse à partir d'un fichier de réponses")
+    st.add_argument("--port", type=int, default=0, help="port local de l'assistant (défaut : libre)")
+    st.add_argument("--no-open", action="store_true", help="ne pas ouvrir le navigateur")
+    st.add_argument("--token", help=argparse.SUPPRESS)
+
     w = sub.add_parser("web", help="interface web : rapports à la demande et exports")
     w.add_argument("--host", help="adresse d'écoute (défaut : web.host, sinon poste local uniquement)")
     w.add_argument("--port", type=int, help="port (défaut : web.port, sinon 8765)")
@@ -384,6 +410,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if args.command == "web":
             return cmd_web(args)
+        if args.command == "setup":
+            return cmd_setup(args)
         if args.command in NO_CONFIG:
             _setup_logging("DEBUG" if args.verbose else "INFO", None)
             return NO_CONFIG[args.command](args)

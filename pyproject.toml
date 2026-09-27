@@ -27,6 +27,7 @@ include = ["freelm*"]
 
 [tool.setuptools.package-data]
 "freelm.web" = ["static/*"]
+"freelm.setup" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -44,8 +44,13 @@ jobs:
       - name: Construction de FreeLM.exe
         run: |
           pyinstaller --noconfirm --clean --onefile --console --name FreeLM \
-            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" freelm/launcher.py
+            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
+            --add-data "freelm/setup/static:freelm/setup/static" freelm/launcher.py
           ./dist/FreeLM.exe --version
+          pyinstaller --noconfirm --onefile --console --uac-admin --name FreeLM-Setup \
+            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
+            --add-data "freelm/setup/static:freelm/setup/static" --add-data "dist/FreeLM.exe:." freelm/launcher.py
+          ./dist/FreeLM-Setup.exe --version
 
       - name: Vérification rapide
         run: |
@@ -56,12 +61,12 @@ jobs:
       - name: Paquet de distribution
         run: |
           mkdir -p paquet/FreeLM/sql paquet/FreeLM/scripts
-          cp dist/FreeLM.exe README.md LICENSE CHANGELOG.md paquet/FreeLM/
+          cp dist/FreeLM.exe dist/FreeLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/FreeLM/
           cp config/freelm.example.yaml paquet/FreeLM/freelm.example.yaml
           cp sql/sqlserver/*.sql paquet/FreeLM/sql/
           cp scripts/*.ps1 scripts/*.bat paquet/FreeLM/scripts/
           mkdir -p livrables
-          cp dist/FreeLM.exe livrables/
+          cp dist/FreeLM.exe dist/FreeLM-Setup.exe livrables/
           (cd paquet && 7z a -tzip "../livrables/FreeLM-${GITHUB_REF_NAME}-windows.zip" FreeLM > /dev/null)
 
       - uses: actions/upload-artifact@v4
@@ -85,7 +90,7 @@ jobs:
       - name: Empreintes SHA-256
         run: |
           cd livrables
-          sha256sum FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
+          sha256sum FreeLM.exe FreeLM-Setup.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publication
@@ -95,6 +100,6 @@ jobs:
         run: |
           cd livrables
           gh release create "$GITHUB_REF_NAME" \
-            FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
+            FreeLM-Setup.exe FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
             --title "FreeLM $GITHUB_REF_NAME" --generate-notes \
-            --notes "Vérifier l'intégrité : \`Get-FileHash FreeLM.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
+            --notes "Installation sur serveur : FreeLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash FreeLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
