@@ -207,7 +207,8 @@ jobs:
       run:
         shell: pwsh
     env:
-      SVC_PWD: "FreeLM-CI-Svc-2026!"     # compte local jetable, propre à la CI
+      # Compte local jetable, propre à la CI (sans fragment du nom du compte : règle de complexité Windows)
+      SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"
     steps:
       - uses: actions/checkout@v4
 
@@ -219,9 +220,12 @@ jobs:
       - name: Préparation (compte de service, groupe, certificat, DNS, faux lmutil)
         run: |
           net user svc_freelm $env:SVC_PWD /add /passwordchg:no /expires:never
+          if ($LASTEXITCODE -ne 0) { throw "création du compte de service impossible" }
           net localgroup FreeLM_Lecteurs /add
           net localgroup FreeLM_Lecteurs $env:USERNAME /add
+          if ($LASTEXITCODE -ne 0) { throw "groupe local impossible" }
           $cert = New-SelfSignedCertificate -DnsName "freelm.ci.local" -CertStoreLocation Cert:\LocalMachine\My
+          Get-ChildItem Cert:\LocalMachine\My | Format-Table Thumbprint, Subject, HasPrivateKey
           Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 freelm.ci.local"
           # Authentification Windows vers un alias local (environnement de test uniquement)
           New-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name DisableLoopbackCheck -Value 1 -PropertyType DWord -Force | Out-Null

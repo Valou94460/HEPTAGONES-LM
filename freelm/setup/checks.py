@@ -30,7 +30,9 @@ def blocking(checks: list[Check]) -> list[Check]:
     return [c for c in checks if c.status == "error"]
 
 
-def run_checks(system: System, a: Answers | None = None) -> list[Check]:
+def run_checks(system: System, a: Answers | None = None, final: bool = False) -> list[Check]:
+    """Prérequis du serveur. ``final`` : contrôles complémentaires sur les réponses saisies
+    (compte de service), juste avant l'installation."""
     a = a or Answers()
     out: list[Check] = []
 
@@ -74,6 +76,20 @@ def run_checks(system: System, a: Answers | None = None) -> list[Check]:
             f"{free:.1f} Go libres" + (" : 2 Go minimum" if status == "error" else " : 10 Go recommandés" if status == "warning" else ""))
     except OSError as exc:
         add("disk", "Système", "Espace disque", "warning", f"Lecture impossible : {exc}")
+
+    # -- Compte de service (avant installation) ------------------------------------------------
+    if final and a.service_account:
+        try:
+            sid = system.resolve_account(a.service_account)
+        except SetupError as exc:
+            sid, err = None, str(exc)
+        else:
+            err = None
+        if sid:
+            add("account", "Système", "Compte de service", "ok", f"{a.service_account} ({sid})")
+        else:
+            add("account", "Système", "Compte de service", "error",
+                f"{a.service_account} introuvable" + (f" : {err}" if err else " : créer le compte ou corriger le nom (étape 3)"))
 
     # -- Base de données ----------------------------------------------------------------
     if a.db_mode == "sqlserver":
@@ -132,8 +148,9 @@ def run_checks(system: System, a: Answers | None = None) -> list[Check]:
             help=None if ok else mod["url"])
     try:
         certs = [c for c in system.certificates() if not c.get("expired")]
-    except SetupError:
-        certs = []
+    except SetupError as exc:
+        add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "warning", f"Lecture du magasin impossible : {exc}")
+        return out
     add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "ok" if certs else "warning",
         f"{len(certs)} certificat(s) avec clé privée disponible(s)" if certs else
         "Aucun certificat avec clé privée : en demander un à l'AC d'entreprise puis l'importer "

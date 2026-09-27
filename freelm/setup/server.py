@@ -212,11 +212,11 @@ class SetupHandler(BaseHTTPRequestHandler):
             if path == "/api/validate":
                 return self._json({"errors": a.validate(body.get("step"))})
             if path == "/api/checks":
-                checks = run_checks(app.system, a)
+                checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"checks": [c.to_dict() for c in checks], "blocking": len(blocking(checks))})
             if path == "/api/fix":
                 message = apply_fix(app.system, str(body.get("fix", "")))
-                checks = run_checks(app.system, a)
+                checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"message": message, "checks": [c.to_dict() for c in checks],
                                    "blocking": len(blocking(checks))})
             if path == "/api/test":
@@ -234,7 +234,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                         errors = a.validate()
                         if errors:
                             return self._json({"error": "Configuration incomplète", "errors": errors}, HTTPStatus.BAD_REQUEST)
-                        checks = blocking(run_checks(app.system, a))
+                        checks = blocking(run_checks(app.system, a, final=True))
                         if checks:
                             return self._json({"error": "Prérequis bloquants : " + ", ".join(c.label for c in checks)},
                                               HTTPStatus.CONFLICT)

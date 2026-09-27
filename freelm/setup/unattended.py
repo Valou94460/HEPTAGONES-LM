@@ -44,7 +44,11 @@ def _bar(pct: float, width: int = 30) -> str:
     return "[" + "#" * full + "-" * (width - full) + f"] {pct:5.1f} %"
 
 
-def run(system: System, answers_path: str, out=sys.stdout) -> int:
+def run(system: System, answers_path: str, out=None) -> int:
+    if out is None:
+        out = sys.stdout
+        if not out.isatty() and hasattr(out, "reconfigure"):
+            out.reconfigure(encoding="utf-8", errors="replace")   # sortie redirigée (journal, CI) : UTF-8
     p = lambda *a: print(*a, file=out, flush=True)
     try:
         a = load_answers(answers_path)
@@ -59,7 +63,7 @@ def run(system: System, answers_path: str, out=sys.stdout) -> int:
         return 1
 
     p(f"== Prérequis ({system.name})")
-    checks = run_checks(system, a)
+    checks = run_checks(system, a, final=True)
     for c in checks:
         p(f"  [{SYMBOL[c.status]}] {c.category} · {c.label} : {c.detail}")
     fixes = list(dict.fromkeys(c.fix for c in blocking(checks) if c.fix))
@@ -70,7 +74,7 @@ def run(system: System, answers_path: str, out=sys.stdout) -> int:
                 p("   ", apply_fix(system, fix))
             except SetupError as exc:
                 p(f"    échec : {exc}")
-        checks = run_checks(system, a)
+        checks = run_checks(system, a, final=True)
     blockers = blocking(checks)
     if blockers:
         p("Prérequis bloquants : " + ", ".join(c.label for c in blockers)

@@ -161,6 +161,11 @@ class ChecksTest(unittest.TestCase):
         self.assertEqual(blocking(checks), [])
         self.assertEqual(next(c for c in checks if c.id == "iis").status, "info")
 
+    def test_unknown_service_account_blocks_before_install(self):
+        a = answers(service_account="ENTREPRISE\\compte_inconnu", web_mode="local")
+        self.assertNotIn("account", {c.id for c in run_checks(SimulatedSystem(delay=0), a)})
+        self.assertIn("account", {c.id for c in blocking(run_checks(SimulatedSystem(delay=0), a, final=True))})
+
     def test_not_admin_is_blocking(self):
         class NoAdmin(SimulatedSystem):
             def is_admin(self):

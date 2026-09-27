@@ -258,7 +258,7 @@
   async function runChecks() {
     checksBusy = true;
     try {
-      const res = await api("/api/checks", { answers: A });
+      const res = await api("/api/checks", { answers: A, final: step >= 7 });
       checks = res.checks; blockingCount = res.blocking;
     } catch (e) { showError(e.message); }
     checksBusy = false;
@@ -269,7 +269,7 @@
     fixResult = { busy: "Installation en cours… cette opération peut prendre plusieurs minutes." };
     render();
     try {
-      const res = await api("/api/fix", { fix, answers: A });
+      const res = await api("/api/fix", { fix, answers: A, final: step >= 7 });
       checks = res.checks; blockingCount = res.blocking;
       fixResult = { status: "ok", message: res.message };
     } catch (e) {
