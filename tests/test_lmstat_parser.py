@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime
 
-from freelm.collectors.flexlm.lmstat import parse_lmstat
+from heptagoneslm.collectors.flexlm.lmstat import parse_lmstat
 from tests.helpers import FIXTURES
 
 
@@ -72,7 +72,7 @@ class ExpiryTest(unittest.TestCase):
     def test_parse_expiry(self):
         from datetime import date
 
-        from freelm.collectors.flexlm.lmstat import parse_expiry
+        from heptagoneslm.collectors.flexlm.lmstat import parse_expiry
         self.assertEqual(parse_expiry("31-dec-2026"), date(2026, 12, 31))
         self.assertEqual(parse_expiry("1-Mar-27"), date(2027, 3, 1))
         for none in (None, "", "permanent(no", "1-jan-0", "31-feb-2026", "demain"):

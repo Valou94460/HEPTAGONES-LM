@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from freelm.config import parse_config
-from freelm.storage import Database, create_schema
+from heptagoneslm.config import parse_config
+from heptagoneslm.storage import Database, create_schema
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

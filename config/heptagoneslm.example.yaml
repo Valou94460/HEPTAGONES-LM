@@ -1,0 +1,115 @@
+# ---------------------------------------------------------------------------
+# HeptagonesLM - fichier de configuration (copier en heptagoneslm.yaml et adapter)
+# Les variables d'environnement sont développées : %HEPTAGONESLM_HOME% ou ${VAR}
+# ---------------------------------------------------------------------------
+
+database:
+  # SQL Server via ODBC (authentification Windows du compte de la tâche planifiée).
+  # Encrypt=yes : échanges chiffrés ET certificat du serveur SQL vérifié (nom complet
+  # du serveur = nom du certificat). Ne mettre TrustServerCertificate=yes qu'en test.
+  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=HeptagonesLM;Trusted_Connection=yes;Encrypt=yes"
+  # Authentification SQL (mot de passe via variable d'environnement) :
+  # connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=HeptagonesLM;UID=heptagoneslm;PWD=${HEPTAGONESLM_DB_PASSWORD};Encrypt=yes"
+  # Pour un essai local sans SQL Server :
+  # connection_string: "sqlite:///C:/HeptagonesLM/data/heptagoneslm.db"
+
+# Chemin de lmutil.exe (fourni avec le gestionnaire de licences, ex. Autodesk NLM)
+lmutil_path: "C:/HeptagonesLM/bin/lmutil.exe"
+
+logging:
+  file: "C:/HeptagonesLM/logs/heptagoneslm.log"
+  level: INFO
+
+servers:
+  # Collecte par lmstat uniquement (cas le plus simple, aucun accès fichier)
+  - name: AUTODESK
+    port_at_host: "27000@licsrv1"
+    collectors: [lmstat]
+    sessions_from: lmstat
+
+  # lmstat pour les jetons + log debug pour les refus et des sessions à la seconde
+  - name: ANSYS
+    port_at_host: "1055@licsrv2"
+    collectors: [lmstat, log]
+    sessions_from: log
+    log_path: "\\\\licsrv2\\ansys_logs$\\license.log"
+
+  # Triade redondante : lister les trois serveurs
+  - name: MATLAB
+    port_at_host: "27000@mlm1:27000@mlm2:27000@mlm3"
+    collectors: [lmstat]
+    sessions_from: lmstat
+    timeout_s: 90
+    # lmutil_path: "C:/MATLAB/etc/win64/lmutil.exe"   # surcharge par serveur
+    # enabled: false
+
+# Correspondance feature FlexLM -> produit lisible dans les rapports.
+# Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
+# Après modification : `heptagoneslm apply-products` pour réappliquer à l'historique.
+# annual_cost (optionnel) : coût annuel d'un jeton, dans la devise reporting.currency.
+# Active le chiffrage : coût du parc, économies potentielles, refacturation par service.
+products:
+  - { pattern: "87545ACD_2024_*",   product: "AutoCAD 2024",            publisher: Autodesk, annual_cost: 2300 }
+  - { pattern: "87048INVPROSA_*",   product: "Inventor Professional",   publisher: Autodesk, annual_cost: 3900 }
+  - { pattern: "*ACDLT*",           product: "AutoCAD LT",              publisher: Autodesk }
+  - { pattern: "MATLAB",            product: "MATLAB",                  publisher: MathWorks }
+  - { pattern: "SIMULINK",          product: "Simulink",                publisher: MathWorks }
+  - { pattern: "*_Toolbox",         product: "MATLAB Toolboxes",        publisher: MathWorks, vendor: MLM }
+  - { pattern: "ansys",             product: "Ansys Mechanical Enterprise", publisher: Ansys }
+  - { pattern: "a_spaceclaim_*",    product: "Ansys SpaceClaim",        publisher: Ansys }
+
+reporting:
+  output_dir: "C:/HeptagonesLM/reports"
+  top_n_chart: 10          # éléments affichés dans les graphiques
+  business_hours: [8, 19]  # plage des heures ouvrées (jours ouvrés lundi-vendredi)
+  currency: "€"            # devise des coûts (annual_cost)
+  target_coverage: 0.95    # jetons recommandés : couvrent 95 % du temps ouvré (0.5 à 0.999)
+
+# ---------------------------------------------------------------------------
+# Interface web (heptagoneslm web / HeptagonesLM.exe) — voir docs/AUTHENTIFICATION.md
+# ---------------------------------------------------------------------------
+web:
+  host: 127.0.0.1            # 0.0.0.0 pour un accès réseau (avec authentification + HTTPS)
+  port: 8765
+  # tls_cert: "C:/HeptagonesLM/certs/heptagoneslm.pem"     # HTTPS (obligatoire avec ldap sur le réseau)
+  # tls_key:  "C:/HeptagonesLM/certs/heptagoneslm.key"
+  # public_url: "https://heptagoneslm.entreprise.local:8765"   # lien cité dans les e-mails
+  # allowed_hosts: ["heptagoneslm", "10.1.2.3"]   # noms/IP acceptés en plus (anti « DNS rebinding »)
+  # request_timeout_s: 30                   # coupe les connexions lentes
+  # max_connections: 64                     # requêtes simultanées
+  auth:
+    mode: none               # none | ldap (identifiants Windows) | header (SSO via IIS)
+    # --- mode ldap ---
+    # ldap_servers: ["ldaps://dc01.entreprise.local", "ldaps://dc02.entreprise.local"]
+    # base_dn: "DC=entreprise,DC=local"
+    # upn_suffix: "entreprise.local"           # connexion en identifiant@entreprise.local
+    # allowed_groups: ["GG_HeptagonesLM_Lecteurs"]   # vide = tout compte du domaine
+    # ldap_ca_file: "C:/HeptagonesLM/certs/ac-interne.pem"   # si l'AC interne n'est pas reconnue
+    # session_hours: 8
+    # --- mode header (IIS + authentification Windows en frontal) ---
+    # header_name: X-Remote-User
+    # trusted_proxies: ["127.0.0.1"]
+    # allowed_users: []                         # vide = tout utilisateur authentifié par IIS
+
+# ---------------------------------------------------------------------------
+# Envoi du rapport par e-mail (heptagoneslm send-report, tâche « Envoi des rapports »)
+# ---------------------------------------------------------------------------
+# email:
+#   smtp_host: smtp.entreprise.local
+#   smtp_port: 25                # 587 avec starttls + authentification, 465 avec ssl
+#   security: starttls           # starttls | ssl | none (none : interdit avec username)
+#   # username: svc_heptagoneslm@entreprise.local
+#   # password: ${HEPTAGONESLM_SMTP_PASSWORD}
+#   sender: "HeptagonesLM <heptagoneslm@entreprise.local>"
+#   subscriptions:
+#     - name: Direction
+#       recipients: [dsi@entreprise.local, achats@entreprise.local]
+#       period: last-month       # last-month | last-week | last-7d | this-month | last-year
+#     - name: Simulation
+#       recipients: [responsable.simulation@entreprise.local]
+#       servers: [ANSYS]
+#       attach_excel: true
+
+retention:
+  snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés
+  events_days: 730         # refus, journal des collectes

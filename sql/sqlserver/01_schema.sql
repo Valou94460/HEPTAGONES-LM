@@ -1,4 +1,4 @@
--- Schéma FreeLM (généré par `freelm ddl --dialect mssql`, ne pas modifier à la main)
+-- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
 -- Version du schéma : 3
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL

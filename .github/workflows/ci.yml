@@ -51,18 +51,18 @@ jobs:
 
       - name: Script SQL Server à jour
         if: runner.os == 'Linux'
-        run: freelm ddl --dialect mssql | diff - sql/sqlserver/01_schema.sql
+        run: heptagoneslm ddl --dialect mssql | diff - sql/sqlserver/01_schema.sql
 
       - name: Démo - historique simulé et rapport Excel
-        run: freelm demo --days "${{ inputs.days || '30' }}" --output-dir demo
+        run: heptagoneslm demo --days "${{ inputs.days || '30' }}" --output-dir demo
 
       - name: Démo - collecte en direct avec le faux lmutil
         run: |
-          freelm -c demo/freelm.demo.yaml test-server --server AUTODESK
-          freelm -c demo/freelm.demo.yaml collect
-          freelm -c demo/freelm.demo.yaml collect
-          freelm -c demo/freelm.demo.yaml report --period last-7d -o demo/reports/FreeLM_7_derniers_jours.xlsx
-          freelm -c demo/freelm.demo.yaml report --period last-7d -o demo/reports/FreeLM_7_derniers_jours.xlsx --skip-existing
+          heptagoneslm -c demo/heptagoneslm.demo.yaml test-server --server AUTODESK
+          heptagoneslm -c demo/heptagoneslm.demo.yaml collect
+          heptagoneslm -c demo/heptagoneslm.demo.yaml collect
+          heptagoneslm -c demo/heptagoneslm.demo.yaml report --period last-7d -o demo/reports/HeptagonesLM_7_derniers_jours.xlsx
+          heptagoneslm -c demo/heptagoneslm.demo.yaml report --period last-7d -o demo/reports/HeptagonesLM_7_derniers_jours.xlsx --skip-existing
 
       - name: Vérification des classeurs Excel
         run: |
@@ -86,7 +86,7 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends libreoffice-calc > /dev/null
-          soffice --headless --convert-to pdf --outdir demo/reports demo/reports/FreeLM_demo_*.xlsx
+          soffice --headless --convert-to pdf --outdir demo/reports demo/reports/HeptagonesLM_demo_*.xlsx
 
       - name: Publication du rapport de démonstration
         if: always() && matrix.python == '3.12'
@@ -96,7 +96,7 @@ jobs:
           path: |
             demo/reports/
             demo/logs/
-            demo/freelm.demo.yaml
+            demo/heptagoneslm.demo.yaml
           if-no-files-found: warn
 
   ui:
@@ -121,7 +121,7 @@ jobs:
 
       - name: Démarrage de l'interface (données de démonstration)
         run: |
-          freelm web --demo --demo-days 60 --port 8765 > web.log 2>&1 &
+          heptagoneslm web --demo --demo-days 60 --port 8765 > web.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8765/api/meta > /dev/null && break; sleep 1; done
           curl -sf localhost:8765/api/meta > /dev/null || (cat web.log; exit 1)
 
@@ -136,7 +136,7 @@ jobs:
 
       - name: Assistant d'installation (simulation)
         run: |
-          freelm setup --simulate --no-open --port 8790 --token ci-token > setup.log 2>&1 &
+          heptagoneslm setup --simulate --no-open --port 8790 --token ci-token > setup.log 2>&1 &
           for i in $(seq 1 30); do curl -s -o /dev/null localhost:8790/setup.css && break; sleep 1; done
           node tests/ui/setup_smoke.cjs http://127.0.0.1:8790 ci-token ui-captures
 
@@ -149,7 +149,7 @@ jobs:
           if-no-files-found: warn
 
   exe:
-    name: Exécutable Windows (FreeLM.exe)
+    name: Exécutable Windows (HeptagonesLM.exe)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -162,41 +162,41 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install . pyinstaller
-          pyinstaller --noconfirm --clean --onefile --console --name FreeLM \
-            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
-            --add-data "freelm/setup/static:freelm/setup/static" freelm/launcher.py
-          # Assistant d'installation : élévation administrateur, FreeLM.exe embarqué
-          pyinstaller --noconfirm --onefile --console --uac-admin --name FreeLM-Setup \
-            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
-            --add-data "freelm/setup/static:freelm/setup/static" --add-data "dist/FreeLM.exe:." freelm/launcher.py
+          pyinstaller --noconfirm --clean --onefile --console --name HeptagonesLM --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
+          # Assistant d'installation : élévation administrateur, HeptagonesLM.exe embarqué
+          pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
 
       - name: Vérification de l'exécutable
         run: |
           cd dist
-          ./FreeLM.exe --version
-          ./FreeLM.exe demo --days 5 --output-dir exe-demo
-          ./FreeLM.exe -c exe-demo/freelm.demo.yaml collect
-          ./FreeLM.exe web --demo --demo-days 10 --port 8799 > web.log 2>&1 &
+          ./HeptagonesLM.exe --version
+          ./HeptagonesLM.exe demo --days 5 --output-dir exe-demo
+          ./HeptagonesLM.exe -c exe-demo/heptagoneslm.demo.yaml collect
+          ./HeptagonesLM.exe web --demo --demo-days 10 --port 8799 > web.log 2>&1 &
           for i in $(seq 1 60); do curl -sf localhost:8799/api/meta > /dev/null && break; sleep 1; done
-          curl -sf localhost:8799/ | grep -q "FreeLM"
+          curl -sf localhost:8799/ | grep -q "HeptagonesLM"
           curl -sf "localhost:8799/api/report?type=summary" | grep -q "Synthèse"
           curl -sf "localhost:8799/api/export?type=full&format=xlsx" -o complet.xlsx
           test -s complet.xlsx
-          taskkill //F //IM FreeLM.exe || true
-          ./FreeLM-Setup.exe --version
-          ./FreeLM-Setup.exe setup --simulate --no-open --port 8791 --token ci > setup.log 2>&1 &
-          for i in $(seq 1 60); do curl -sf -b "freelm_setup=ci" localhost:8791/api/info > /dev/null && break; sleep 1; done
-          curl -sf -b "freelm_setup=ci" localhost:8791/api/info | grep -q '"simulated": true'
-          taskkill //F //IM FreeLM-Setup.exe || true
+          taskkill //F //IM HeptagonesLM.exe || true
+          ./HeptagonesLM-Setup.exe --version
+          ./HeptagonesLM-Setup.exe setup --simulate --no-open --port 8791 --token ci > setup.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info > /dev/null && break; sleep 1; done
+          curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info | grep -q '"simulated": true'
+          taskkill //F //IM HeptagonesLM-Setup.exe || true
 
-      - name: Publication de FreeLM.exe et FreeLM-Setup.exe
+      - name: Publication de HeptagonesLM.exe et HeptagonesLM-Setup.exe
         uses: actions/upload-artifact@v4
         with:
-          name: FreeLM-windows
+          name: HeptagonesLM-windows
           path: |
-            dist/FreeLM.exe
-            dist/FreeLM-Setup.exe
-            config/freelm.example.yaml
+            dist/HeptagonesLM.exe
+            dist/HeptagonesLM-Setup.exe
+            config/heptagoneslm.example.yaml
 
   setup-windows:
     name: Installation réelle sur Windows Server (assistant)
@@ -213,7 +213,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: FreeLM-windows
+          name: HeptagonesLM-windows
           path: livrables
 
       - name: Préparation (compte de service, groupe, certificat, DNS, faux lmutil)
@@ -222,41 +222,41 @@ jobs:
           $ErrorActionPreference = "Stop"
           # Cmdlets non interactives (net user demande une confirmation au-delà de 14 caractères)
           $secure = ConvertTo-SecureString $env:SVC_PWD -AsPlainText -Force
-          New-LocalUser -Name svc_freelm -Password $secure -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
-          New-LocalGroup -Name FreeLM_Lecteurs | Out-Null
+          New-LocalUser -Name svc_heptagoneslm -Password $secure -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
+          New-LocalGroup -Name HeptagonesLM_Lecteurs | Out-Null
           # Utilisateur de test membre du groupe (connexion NTLM avec identifiants explicites :
           # en boucle locale, NTLM réutiliserait sinon le jeton de session du runner, antérieur au groupe)
           New-LocalUser -Name ci_lecteur -Password $secure -PasswordNeverExpires | Out-Null
-          Add-LocalGroupMember -Group FreeLM_Lecteurs -Member ci_lecteur
-          $cert = New-SelfSignedCertificate -DnsName "freelm.ci.local" -CertStoreLocation Cert:\LocalMachine\My
+          Add-LocalGroupMember -Group HeptagonesLM_Lecteurs -Member ci_lecteur
+          $cert = New-SelfSignedCertificate -DnsName "heptagoneslm.ci.local" -CertStoreLocation Cert:\LocalMachine\My
           Get-ChildItem Cert:\LocalMachine\My | Format-Table Thumbprint, Subject, HasPrivateKey
-          Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 freelm.ci.local"
+          Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 heptagoneslm.ci.local"
           # Authentification Windows vers un alias local (environnement de test uniquement)
           New-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name DisableLoopbackCheck -Value 1 -PropertyType DWord -Force | Out-Null
           New-Item -ItemType Directory C:\ci -Force | Out-Null
-          Set-Content C:\ci\lmutil.cmd '@"C:\FreeLM\FreeLM.exe" fake-lmutil %*' -Encoding ascii
+          Set-Content C:\ci\lmutil.cmd '@"C:\HeptagonesLM\HeptagonesLM.exe" fake-lmutil %*' -Encoding ascii
           $answers = [ordered]@{
-            install_dir = "C:\FreeLM"; service_account = "$env:COMPUTERNAME\svc_freelm"; service_password = '${SVC_PWD}'
+            install_dir = "C:\HeptagonesLM"; service_account = "$env:COMPUTERNAME\svc_heptagoneslm"; service_password = '${SVC_PWD}'
             db_mode = "sqlite"; lmutil_path = "C:\ci\lmutil.cmd"
             servers = @(@{ name = "AUTODESK"; port_at_host = "27000@licsrv-adsk" }, @{ name = "ANSYS"; port_at_host = "1055@licsrv-ansys" })
-            web_mode = "iis"; public_host = "freelm.ci.local"; iis_cert_thumbprint = $cert.Thumbprint
-            access_group = "$env:COMPUTERNAME\FreeLM_Lecteurs"; auto_fix = $true
+            web_mode = "iis"; public_host = "heptagoneslm.ci.local"; iis_cert_thumbprint = $cert.Thumbprint
+            access_group = "$env:COMPUTERNAME\HeptagonesLM_Lecteurs"; auto_fix = $true
           }
           $answers | ConvertTo-Json -Depth 4 | Set-Content answers.json -Encoding utf8
           Get-Content answers.json
 
-      - name: Installation silencieuse (FreeLM-Setup.exe --answers)
+      - name: Installation silencieuse (HeptagonesLM-Setup.exe --answers)
         timeout-minutes: 30
         run: |
-          .\livrables\dist\FreeLM-Setup.exe setup --answers answers.json
+          .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json
           if ($LASTEXITCODE -ne 0) { throw "Installation : code $LASTEXITCODE" }
 
       - name: Contrôles après installation
         run: |
-          Get-ScheduledTask -TaskPath "\FreeLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
+          Get-ScheduledTask -TaskPath "\HeptagonesLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
           & "$env:windir\system32\inetsrv\appcmd.exe" list site
-          # Authentification unique : IIS (Windows) -> module FreeLMUserHeader -> FreeLM (en-tête X-Remote-User)
-          $url = "https://freelm.ci.local/api/me"
+          # Authentification unique : IIS (Windows) -> module HeptagonesLMUserHeader -> HeptagonesLM (en-tête X-Remote-User)
+          $url = "https://heptagoneslm.ci.local/api/me"
           function Get-Me([string[]]$extra) {
             $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" @extra -o me.json -w "%{http_code}" $url
             $body = Get-Content me.json -Raw
@@ -270,25 +270,25 @@ jobs:
           $me = Get-Me @("-H", "X-Remote-User: administrateur")
           if ($me.user -ne "ci_lecteur") { throw "en-tête X-Remote-User du client accepté" }
           # Authentifié mais hors du groupe autorisé : refus par IIS
-          $code = curl.exe -sk --ntlm -u "svc_freelm:$env:SVC_PWD" -o NUL -w "%{http_code}" $url
+          $code = curl.exe -sk --ntlm -u "svc_heptagoneslm:$env:SVC_PWD" -o NUL -w "%{http_code}" $url
           Write-Host "Hors du groupe : $code"
           if ($code -ne "401") { throw "accès accordé hors du groupe ($code)" }
           # Sans identifiants : refus par IIS
-          try { Invoke-WebRequest "https://freelm.ci.local/" -SkipCertificateCheck -ErrorAction Stop; throw "accès anonyme accepté" }
+          try { Invoke-WebRequest "https://heptagoneslm.ci.local/" -SkipCertificateCheck -ErrorAction Stop; throw "accès anonyme accepté" }
           catch { if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw $_ } }
           # Collecte planifiée exécutée par le compte de service
-          Start-ScheduledTask -TaskPath "\FreeLM\" -TaskName "FreeLM - Collecte"
+          Start-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte"
           Start-Sleep 20
-          $info = Get-ScheduledTask -TaskPath "\FreeLM\" -TaskName "FreeLM - Collecte" | Get-ScheduledTaskInfo
+          $info = Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte" | Get-ScheduledTaskInfo
           Write-Host "Collecte planifiée : dernier résultat $($info.LastTaskResult)"
-          if ($info.LastTaskResult -ne 0) { Get-Content C:\FreeLM\logs\freelm.log -Tail 40; throw "collecte planifiée en échec" }
+          if ($info.LastTaskResult -ne 0) { Get-Content C:\HeptagonesLM\logs\heptagoneslm.log -Tail 40; throw "collecte planifiée en échec" }
 
       - name: Relance de l'installation (idempotence)
         run: |
-          .\livrables\dist\FreeLM-Setup.exe setup --answers answers.json
+          .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json
           if ($LASTEXITCODE -ne 0) { throw "Réinstallation : code $LASTEXITCODE" }
-          # FreeLM relancé après la mise à jour de l'exécutable, SSO toujours opérationnel
-          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://freelm.ci.local/api/me
+          # HeptagonesLM relancé après la mise à jour de l'exécutable, SSO toujours opérationnel
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://heptagoneslm.ci.local/api/me
           Write-Host "[$code] $(Get-Content me.json -Raw)"
           if ($code -ne "200" -or (Get-Content me.json -Raw | ConvertFrom-Json).user -ne "ci_lecteur") { throw "SSO après réinstallation" }
 
@@ -298,9 +298,9 @@ jobs:
         with:
           name: installation-windows
           path: |
-            C:/FreeLM/logs/
-            C:/FreeLM/freelm.yaml
-            C:/FreeLM/iis/web.config
+            C:/HeptagonesLM/logs/
+            C:/HeptagonesLM/heptagoneslm.yaml
+            C:/HeptagonesLM/iis/web.config
           if-no-files-found: warn
 
   sqlserver:
@@ -312,11 +312,11 @@ jobs:
         env:
           ACCEPT_EULA: "Y"
           # Mot de passe d'un conteneur jetable, propre à la CI.
-          MSSQL_SA_PASSWORD: "FreeLM-CI-2024!"
+          MSSQL_SA_PASSWORD: "HeptagonesLM-CI-2024!"
         ports:
           - 1433:1433
     env:
-      FREELM_DB: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=FreeLM;UID=sa;PWD=FreeLM-CI-2024!;TrustServerCertificate=yes"
+      HEPTAGONESLM_DB: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=HeptagonesLM;UID=sa;PWD=HeptagonesLM-CI-2024!;TrustServerCertificate=yes"
     steps:
       - uses: actions/checkout@v4
 
@@ -342,11 +342,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Création de la base FreeLM
+      - name: Création de la base HeptagonesLM
         run: |
           python - <<'EOF'
           import os, time, pyodbc
-          cs = os.environ["FREELM_DB"].replace("DATABASE=FreeLM", "DATABASE=master")
+          cs = os.environ["HEPTAGONESLM_DB"].replace("DATABASE=HeptagonesLM", "DATABASE=master")
           for attempt in range(60):
               try:
                   conn = pyodbc.connect(cs, autocommit=True, timeout=5)
@@ -357,44 +357,44 @@ jobs:
           else:
               raise SystemExit("SQL Server indisponible")
           print(conn.execute("SELECT @@VERSION").fetchone()[0])
-          conn.execute("IF DB_ID('FreeLM') IS NULL CREATE DATABASE FreeLM")
+          conn.execute("IF DB_ID('HeptagonesLM') IS NULL CREATE DATABASE HeptagonesLM")
           EOF
 
       - name: Démo sur SQL Server
-        run: freelm demo --days 14 --output-dir demo-mssql --connection-string "$FREELM_DB"
+        run: heptagoneslm demo --days 14 --output-dir demo-mssql --connection-string "$HEPTAGONESLM_DB"
 
       - name: Idempotence du schéma et collecte en direct
         run: |
-          freelm -c demo-mssql/freelm.demo.yaml init-db
-          freelm -c demo-mssql/freelm.demo.yaml init-db
-          freelm -c demo-mssql/freelm.demo.yaml collect
-          freelm -c demo-mssql/freelm.demo.yaml purge
-          freelm -c demo-mssql/freelm.demo.yaml report --period last-7d -o demo-mssql/reports/FreeLM_mssql_7j.xlsx
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml init-db
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml init-db
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml collect
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml purge
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml report --period last-7d -o demo-mssql/reports/HeptagonesLM_mssql_7j.xlsx
 
       - name: Verrou de collecte (deux collectes simultanées)
         run: |
           python - <<'EOF' &
           import os, time, pyodbc
-          conn = pyodbc.connect(os.environ["FREELM_DB"], autocommit=True)
-          conn.execute("EXEC sp_getapplock @Resource = 'freelm_collect', @LockMode = 'Exclusive', @LockOwner = 'Session'")
+          conn = pyodbc.connect(os.environ["HEPTAGONESLM_DB"], autocommit=True)
+          conn.execute("EXEC sp_getapplock @Resource = 'heptagoneslm_collect', @LockMode = 'Exclusive', @LockOwner = 'Session'")
           open("lock_held", "w").close()
           time.sleep(30)
           EOF
           for i in $(seq 1 30); do [ -f lock_held ] && break; sleep 1; done
-          freelm -c demo-mssql/freelm.demo.yaml collect | tee collect.out
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml collect | tee collect.out
           grep -q "déjà en cours" collect.out
           wait
 
       - name: Envoi de rapport (aperçu .eml) sur SQL Server
         run: |
-          freelm -c demo-mssql/freelm.demo.yaml send-report --to test@example.com --period last-7d --dry-run eml
+          heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml send-report --to test@example.com --period last-7d --dry-run eml
           ls eml/*.eml
 
       - name: Contrôle des vues SQL
         run: |
           python - <<'EOF'
           import os, pyodbc
-          conn = pyodbc.connect(os.environ["FREELM_DB"])
+          conn = pyodbc.connect(os.environ["HEPTAGONESLM_DB"])
           for view in ("v_session_detail", "v_usage_hourly", "v_denial"):
               n = conn.execute(f"SELECT COUNT(*) FROM dbo.{view}").fetchone()[0]
               print(f"{view:<18} {n:>8} lignes")
@@ -407,7 +407,7 @@ jobs:
           EOF
 
       - name: Relance de la démo (remplacement des données de démonstration)
-        run: freelm demo --days 3 --output-dir demo-mssql-bis --connection-string "$FREELM_DB" --no-report
+        run: heptagoneslm demo --days 3 --output-dir demo-mssql-bis --connection-string "$HEPTAGONESLM_DB" --no-report
 
       - name: Publication du rapport SQL Server
         if: always()

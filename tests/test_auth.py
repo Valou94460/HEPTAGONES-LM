@@ -10,10 +10,10 @@ import threading
 import unittest
 from datetime import datetime, timedelta
 
-from freelm.config import ConfigError, load_config, parse_config
-from freelm.simulation.demo import run_demo
-from freelm.web.auth import Auth, AuthError, LoginThrottle, SessionStore, UserInfo
-from freelm.web.server import check_security, make_server
+from heptagoneslm.config import ConfigError, load_config, parse_config
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.web.auth import Auth, AuthError, LoginThrottle, SessionStore, UserInfo
+from heptagoneslm.web.server import check_security, make_server
 
 HAS_LDAP3 = importlib.util.find_spec("ldap3") is not None
 MONDAY = datetime(2024, 9, 23)
@@ -26,7 +26,7 @@ class FakeDirectory:
 
     def authenticate(self, username, password):
         if username == "jdupont" and password == "Secret-1":
-            return UserInfo("jdupont", "Jean Dupont", "Bureau d'études", ["GG_FreeLM"])
+            return UserInfo("jdupont", "Jean Dupont", "Bureau d'études", ["GG_HeptagonesLM"])
         raise AuthError("Identifiant ou mot de passe incorrect")
 
 
@@ -94,7 +94,7 @@ class LdapModeTest(_ServerCase):
         status, _, body = self.request("GET", "/api/me", headers={"Cookie": token})
         self.assertEqual((status, json.loads(body)["display_name"]), (200, "Jean Dupont"))
         self.assertEqual(self.request("GET", "/", headers={"Cookie": token})[0], 200)
-        with self.assertLogs("freelm.audit", "INFO") as logs:
+        with self.assertLogs("heptagoneslm.audit", "INFO") as logs:
             status, _, _ = self.request("GET", "/api/export?type=summary&format=csv&start=2024-09-23&end=2024-09-25",
                                         headers={"Cookie": token})
         self.assertEqual(status, 200)
@@ -114,7 +114,7 @@ class LdapModeTest(_ServerCase):
         self.auth.throttle = LoginThrottle(3, 1)
 
     def test_forged_cookie(self):
-        self.assertEqual(self.request("GET", "/api/meta", headers={"Cookie": "freelm_session=forge"})[0], 401)
+        self.assertEqual(self.request("GET", "/api/meta", headers={"Cookie": "heptagoneslm_session=forge"})[0], 401)
 
     def test_security_headers(self):
         _, r, _ = self.request("GET", "/login.html")
@@ -198,17 +198,17 @@ class LdapAuthenticatorTest(unittest.TestCase):
     def setUp(self):
         import ldap3
 
-        from freelm.config import AuthConfig
-        from freelm.web.auth import LdapAuthenticator
+        from heptagoneslm.config import AuthConfig
+        from heptagoneslm.web.auth import LdapAuthenticator
 
         self.server = ldap3.Server("fake_dc", get_info=ldap3.OFFLINE_AD_2012_R2)
         setup = ldap3.Connection(self.server, user="CN=svc,DC=test,DC=local", password="svc-pw",
                                  client_strategy=ldap3.MOCK_SYNC)
         base = "DC=test,DC=local"
         setup.strategy.add_entry(f"CN=svc,{base}", {"userPassword": "svc-pw", "objectClass": "person", "sAMAccountName": "svc"})
-        setup.strategy.add_entry(f"CN=GG_FreeLM,OU=Groupes,{base}", {"objectClass": "group", "cn": "GG_FreeLM"})
+        setup.strategy.add_entry(f"CN=GG_HeptagonesLM,OU=Groupes,{base}", {"objectClass": "group", "cn": "GG_HeptagonesLM"})
         setup.strategy.add_entry(f"CN=Bureau etudes,OU=Groupes,{base}",
-                                 {"objectClass": "group", "cn": "Bureau etudes", "memberOf": [f"CN=GG_FreeLM,OU=Groupes,{base}"]})
+                                 {"objectClass": "group", "cn": "Bureau etudes", "memberOf": [f"CN=GG_HeptagonesLM,OU=Groupes,{base}"]})
         setup.strategy.add_entry(f"CN=Jean Dupont,OU=Users,{base}", {
             "userPassword": "Secret-1", "objectClass": "person", "sAMAccountName": "jdupont",
             "displayName": "Jean Dupont", "department": "CAO", "memberOf": [f"CN=Bureau etudes,OU=Groupes,{base}"]})
@@ -220,9 +220,9 @@ class LdapAuthenticatorTest(unittest.TestCase):
             server=self.server, client_strategy=ldap3.MOCK_SYNC)
 
     def test_valid_user_with_nested_group(self):
-        user = self.make(["GG_FreeLM"]).authenticate("TEST\\jdupont", "Secret-1")
+        user = self.make(["GG_HeptagonesLM"]).authenticate("TEST\\jdupont", "Secret-1")
         self.assertEqual((user.username, user.display_name, user.department), ("jdupont", "Jean Dupont", "CAO"))
-        self.assertIn("GG_FreeLM", user.groups)   # via le groupe imbriqué « Bureau etudes »
+        self.assertIn("GG_HeptagonesLM", user.groups)   # via le groupe imbriqué « Bureau etudes »
 
     def test_wrong_password_unknown_user_empty_password(self):
         auth = self.make([])
@@ -232,7 +232,7 @@ class LdapAuthenticatorTest(unittest.TestCase):
 
     def test_group_restriction(self):
         with self.assertRaises(AuthError) as ctx:
-            self.make(["GG_FreeLM"]).authenticate("asmith", "Secret-2")
+            self.make(["GG_HeptagonesLM"]).authenticate("asmith", "Secret-2")
         # message générique pour l'utilisateur, cause précise pour l'audit
         self.assertIn("non autorisé", str(ctx.exception))
         self.assertIn("groupes autorisés", ctx.exception.reason)

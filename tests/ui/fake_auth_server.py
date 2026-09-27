@@ -1,4 +1,4 @@
-"""Interface FreeLM en mode « ldap » avec un annuaire factice (jdupont / Secret-1),
+"""Interface HeptagonesLM en mode « ldap » avec un annuaire factice (jdupont / Secret-1),
 pour tester la page de connexion dans un navigateur :
 
     python tests/ui/fake_auth_server.py 8766
@@ -8,10 +8,10 @@ import sys
 import tempfile
 from datetime import datetime, timedelta
 
-from freelm.config import load_config, parse_config
-from freelm.simulation.demo import run_demo
-from freelm.web.auth import Auth, AuthError, UserInfo
-from freelm.web.server import make_server
+from heptagoneslm.config import load_config, parse_config
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.web.auth import Auth, AuthError, UserInfo
+from heptagoneslm.web.server import make_server
 
 
 class FakeDirectory:

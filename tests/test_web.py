@@ -8,12 +8,12 @@ import urllib.error
 import urllib.request
 from datetime import date, datetime, timedelta
 
-from freelm.config import load_config
-from freelm.simulation.demo import run_demo
-from freelm.storage import Database, Repository
-from freelm.users import import_users, read_users_csv
-from freelm.web import api
-from freelm.web.server import make_server
+from heptagoneslm.config import load_config
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.storage import Database, Repository
+from heptagoneslm.users import import_users, read_users_csv
+from heptagoneslm.web import api
+from heptagoneslm.web.server import make_server
 
 HAS_OPENPYXL = importlib.util.find_spec("openpyxl") is not None
 MONDAY = datetime(2024, 9, 23)
@@ -69,7 +69,7 @@ class WebServerTest(unittest.TestCase):
             status, headers, _ = self.get(path)
             self.assertEqual(status, 200)
             self.assertTrue(headers["Content-Type"].startswith(ctype), headers["Content-Type"])
-        self.assertEqual(self.get("/../freelm.demo.yaml")[0], 404)
+        self.assertEqual(self.get("/../heptagoneslm.demo.yaml")[0], 404)
 
     def test_meta(self):
         status, meta = self.get_json("/api/meta")
@@ -188,7 +188,7 @@ class UsersImportTest(unittest.TestCase):
             users = read_users_csv(path)
             self.assertEqual(users[0], {"username": "JDoe", "display_name": "John Doe", "department": "CAO"})
             db = Database("sqlite:///:memory:")
-            from freelm.storage import create_schema
+            from heptagoneslm.storage import create_schema
 
             create_schema(db)
             repo = Repository(db)
@@ -206,7 +206,7 @@ class AlertsTest(unittest.TestCase):
     def test_compute_alerts(self):
         from types import SimpleNamespace
 
-        from freelm.web import insights
+        from heptagoneslm.web import insights
         p = api.parse_params({"start": ["2024-09-16"], "end": ["2024-09-22"]})
         data = SimpleNamespace(summaries=[
             SimpleNamespace(label="A", denials=3, saturated_hours=0, issued=4, peak_utilization=1.0, peak_in_use=4),

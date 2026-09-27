@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "freelm"
+name = "heptagoneslm"
 version = "0.1.0"
 description = "Suivi et reporting open source de la consommation de licences FlexLM/FlexNet"
 readme = "README.md"
@@ -20,14 +20,14 @@ dependencies = [
 dev = ["pytest>=7"]
 
 [project.scripts]
-freelm = "freelm.cli:main"
+heptagoneslm = "heptagoneslm.cli:main"
 
 [tool.setuptools.packages.find]
-include = ["freelm*"]
+include = ["heptagoneslm*"]
 
 [tool.setuptools.package-data]
-"freelm.web" = ["static/*"]
-"freelm.setup" = ["static/*"]
+"heptagoneslm.web" = ["static/*"]
+"heptagoneslm.setup" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

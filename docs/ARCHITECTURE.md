@@ -1,11 +1,11 @@
-# Architecture de FreeLM
+# Architecture de HeptagonesLM
 
 ## 1. Vue d'ensemble
 
-FreeLM tourne sur un serveur Windows (ou n'importe quelle machine avec Python
+HeptagonesLM tourne sur un serveur Windows (ou n'importe quelle machine avec Python
 3.10+), **sans agent sur les postes clients**. La collecte est une commande
 planifiée (Planificateur de tâches) ; la restitution passe par une interface web
-locale en lecture seule (`freelm web` ou `FreeLM.exe`) et des exports Excel :
+locale en lecture seule (`heptagoneslm web` ou `HeptagonesLM.exe`) et des exports Excel :
 
 ```mermaid
 flowchart LR
@@ -15,14 +15,14 @@ flowchart LR
         L2[(license.log<br/>partage SMB)]
     end
 
-    subgraph "Serveur FreeLM (tâches planifiées)"
+    subgraph "Serveur HeptagonesLM (tâches planifiées)"
         C1[collect<br/>toutes les 5 min]
         R1[report<br/>mensuel]
         W1[web<br/>interface]
         P1[purge<br/>hebdo]
     end
 
-    DB[(SQL Server<br/>base FreeLM)]
+    DB[(SQL Server<br/>base HeptagonesLM)]
     X[/Rapport .xlsx/]
 
     A1 -- "lmutil lmstat -a" --> C1
@@ -37,7 +37,7 @@ flowchart LR
 ## 2. Modules
 
 ```
-freelm/
+heptagoneslm/
 ├── cli.py                  Point d'entrée (init-db, collect, report, import-log, purge…)
 ├── config.py               Chargement/validation du YAML, mapping feature → produit
 ├── models.py               Modèle normalisé : ServerStatus, FeatureStatus, Checkout, LicenseEvent
@@ -58,16 +58,16 @@ freelm/
 │   ├── api.py              Rapports à la demande + exports (Excel, CSV, JSON)
 │   ├── server.py           Serveur HTTP (bibliothèque standard), lecture seule
 │   └── static/             Interface HTML/JS/CSS, graphiques SVG, sans CDN
-├── simulation/             Simulateur FlexLM, faux lmutil, `freelm demo`
+├── simulation/             Simulateur FlexLM, faux lmutil, `heptagoneslm demo`
 ├── users.py                Import du référentiel utilisateurs (CSV AD/RH)
-└── launcher.py             Point d'entrée de FreeLM.exe (double-clic → interface)
+└── launcher.py             Point d'entrée de HeptagonesLM.exe (double-clic → interface)
 ```
 
 Principes :
 
 * **Séparation parsing / persistance** : les collecteurs ne connaissent pas la
   base ; ils renvoient des objets de `models.py`. On peut tester un parser sur
-  une sortie texte sans aucune base (`freelm parse-lmstat fichier.txt`).
+  une sortie texte sans aucune base (`heptagoneslm parse-lmstat fichier.txt`).
 * **Registre de collecteurs** : `@register("flexlm", "lmstat")`. Ajouter RLM
   revient à écrire `collectors/rlm/rlmstat.py` qui produit les mêmes objets
   (voir §6) ; le service, la base et les rapports ne changent pas.
@@ -86,7 +86,7 @@ sequenceDiagram
     participant C as Collecteur
     participant DB as SQL Server
 
-    T->>S: freelm collect
+    T->>S: heptagoneslm collect
     S->>DB: sync license_server (depuis le YAML)
     loop pour chaque serveur, chaque collecteur
         alt collecteur d'état (lmstat)
@@ -118,7 +118,7 @@ sequenceDiagram
 | Jetons émis / en cours | ✅ | ❌ |
 | Sessions | ✅ précision = intervalle de sondage | ✅ à la seconde |
 | Refus (DENIED) / files d'attente | ❌ (seulement la file courante) | ✅ |
-| Reprise d'historique | ❌ | ✅ (`freelm import-log`) |
+| Reprise d'historique | ❌ | ✅ (`heptagoneslm import-log`) |
 
 Recommandation : `lmstat` partout ; ajouter `log` là où le fichier est
 accessible, en prenant alors `sessions_from: log`. Les deux collecteurs
@@ -152,7 +152,7 @@ incomplète (en cours d'écriture) n'est jamais consommée.
 ## 4. Schéma de base de données
 
 Script complet : [`sql/sqlserver/01_schema.sql`](../sql/sqlserver/01_schema.sql)
-(généré par `freelm ddl --dialect mssql`).
+(généré par `heptagoneslm ddl --dialect mssql`).
 
 ```mermaid
 erDiagram
@@ -264,7 +264,7 @@ Choix de conception :
 * **Dimensions `app_user` / `workstation`** : les colonnes `display_name`,
   `department`, `site` sont vides à la collecte ; elles peuvent être alimentées
   par un script (export AD, CSV RH) et apparaissent alors dans les rapports.
-* **Dates en heure locale** (`DATETIME2(0)`), celle du serveur FreeLM et des
+* **Dates en heure locale** (`DATETIME2(0)`), celle du serveur HeptagonesLM et des
   logs. Tous les serveurs de licences sont supposés dans le même fuseau.
 * **Vues** `v_session_detail`, `v_usage_hourly`, `v_denial` : données
   dénormalisées pour des requêtes ad hoc, Power Query ou un tableau croisé
@@ -272,7 +272,7 @@ Choix de conception :
 
 ## 5. Rapport Excel
 
-`freelm report` produit un classeur avec les feuilles :
+`heptagoneslm report` produit un classeur avec les feuilles :
 
 | Feuille | Contenu |
 |---|---|
@@ -291,11 +291,11 @@ Tableaux Excel (Insertion › Tableau croisé dynamique en un clic).
 
 ## 6. Ajouter un autre gestionnaire de licences (ex. RLM)
 
-1. Créer `freelm/collectors/rlm/rlmstat.py` :
+1. Créer `heptagoneslm/collectors/rlm/rlmstat.py` :
 
    ```python
-   from freelm.collectors.base import StatusCollector, register
-   from freelm.models import ServerStatus
+   from heptagoneslm.collectors.base import StatusCollector, register
+   from heptagoneslm.models import ServerStatus
 
    @register("rlm", "rlmstat")
    class RlmstatCollector(StatusCollector):
@@ -304,7 +304,7 @@ Tableaux Excel (Insertion › Tableau croisé dynamique en un clic).
            return parse_rlmstat(output)  # produit FeatureStatus / Checkout
    ```
 
-2. L'importer dans `freelm/collectors/__init__.py`.
+2. L'importer dans `heptagoneslm/collectors/__init__.py`.
 3. Déclarer le serveur :
 
    ```yaml

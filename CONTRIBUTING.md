@@ -1,4 +1,4 @@
-# Contribuer à FreeLM
+# Contribuer à HeptagonesLM
 
 Merci de votre intérêt ! Les contributions sont bienvenues : signalements de bugs,
 sorties `lmstat` ou logs d'éditeurs non encore gérés, nouveaux rapports, nouveaux
@@ -11,7 +11,7 @@ git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
 python -m venv .venv && . .venv/bin/activate      # Windows : .venv\Scripts\activate
 pip install -e ".[dev]"
 python -m pytest
-freelm web --demo --open
+heptagoneslm web --demo --open
 ```
 
 Aucun serveur de licences ni SQL Server n'est nécessaire : les tests utilisent
@@ -20,10 +20,10 @@ SQLite en mémoire et le simulateur intégré.
 ## Avant d'ouvrir une pull request
 
 - [ ] `python -m pytest` passe.
-- [ ] Toute modification du schéma (`freelm/storage/schema.py`) est accompagnée de la
-      régénération du script : `freelm ddl --dialect mssql > sql/sqlserver/01_schema.sql`.
+- [ ] Toute modification du schéma (`heptagoneslm/storage/schema.py`) est accompagnée de la
+      régénération du script : `heptagoneslm ddl --dialect mssql > sql/sqlserver/01_schema.sql`.
 - [ ] Toute modification de l'interface web a été vérifiée dans le navigateur
-      (`freelm web --demo --open`), en clair et en sombre.
+      (`heptagoneslm web --demo --open`), en clair et en sombre.
 - [ ] Un test couvre le comportement ajouté ou le bug corrigé.
 - [ ] Le [CHANGELOG](CHANGELOG.md) est complété (section « Non publié »).
 
@@ -37,8 +37,8 @@ d'utilisateurs et de postes remplacés) dans `tests/fixtures/` avec un test dans
 `tests/test_lmstat_parser.py` ou `tests/test_log_parser.py`. Diagnostic rapide :
 
 ```bash
-freelm parse-lmstat sortie.txt
-freelm parse-log license.log
+heptagoneslm parse-lmstat sortie.txt
+heptagoneslm parse-log license.log
 ```
 
 ## Conventions
@@ -52,6 +52,6 @@ freelm parse-log license.log
 
 ## Publier une version
 
-1. Mettre à jour `freelm/__init__.py`, `pyproject.toml` et le CHANGELOG.
+1. Mettre à jour `heptagoneslm/__init__.py`, `pyproject.toml` et le CHANGELOG.
 2. `git tag v0.2.0 && git push origin v0.2.0`
-3. Le workflow *Release* construit `FreeLM.exe` et publie la release GitHub.
+3. Le workflow *Release* construit `HeptagonesLM.exe` et publie la release GitHub.

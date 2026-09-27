@@ -12,17 +12,17 @@ réelles avant de passer à la suivante.
 - [x] Reconstruction des sessions (lmstat et log), agrégats horaires
 - [x] Rapport Excel (8 feuilles)
 - [x] Scripts de tâches planifiées, tests unitaires
-- [x] Simulateur FlexLM + `freelm demo` + faux `lmutil` ; CI Linux / Windows / SQL Server 2022
-- [x] Interface web (`freelm web`) : 9 rapports, filtres, exports Excel/CSV/JSON ; `FreeLM.exe` autonome
+- [x] Simulateur FlexLM + `heptagoneslm demo` + faux `lmutil` ; CI Linux / Windows / SQL Server 2022
+- [x] Interface web (`heptagoneslm web`) : 9 rapports, filtres, exports Excel/CSV/JSON ; `HeptagonesLM.exe` autonome
 - [x] Import du référentiel utilisateurs (services, noms) depuis un CSV AD/RH
 
 ## Étape 1 — Validation des parsers sur vos serveurs (½ à 1 jour)
 
-1. Sur le futur serveur FreeLM, capturer une sortie réelle par serveur :
+1. Sur le futur serveur HeptagonesLM, capturer une sortie réelle par serveur :
    `lmutil lmstat -a -c 27000@licsrv1 > lmstat_autodesk.txt`
-2. `freelm parse-lmstat lmstat_autodesk.txt` : vérifier features, totaux,
+2. `heptagoneslm parse-lmstat lmstat_autodesk.txt` : vérifier features, totaux,
    utilisateurs, heures de début.
-3. Idem pour les logs : `freelm parse-log \\licsrv2\...\license.log`.
+3. Idem pour les logs : `heptagoneslm parse-log \\licsrv2\...\license.log`.
 4. Ajouter chaque sortie un peu particulière dans `tests/fixtures/` avec un
    test (anonymiser les noms) : c'est la meilleure protection contre les
    régressions quand les éditeurs changent leur version de FlexNet.
@@ -34,9 +34,9 @@ Points d'attention connus selon les éditeurs :
 
 ## Étape 2 — Mise en service de la collecte (1 jour)
 
-1. Base : `sql/sqlserver/00_create_database.sql` (DBA), puis `freelm init-db`.
-2. Installer Python + venv + ODBC Driver 18 sur le serveur FreeLM (voir README).
-3. `freelm test-server --server AUTODESK` pour chaque serveur.
+1. Base : `sql/sqlserver/00_create_database.sql` (DBA), puis `heptagoneslm init-db`.
+2. Installer Python + venv + ODBC Driver 18 sur le serveur HeptagonesLM (voir README).
+3. `heptagoneslm test-server --server AUTODESK` pour chaque serveur.
 4. `scripts/register_tasks.ps1` → collecte toutes les 5 minutes.
 5. Surveiller la table `collection_run` pendant quelques jours
    (`SELECT * FROM collection_run WHERE status = 'ERROR'`).
@@ -45,9 +45,9 @@ Points d'attention connus selon les éditeurs :
 
 1. Compléter `products:` dans le YAML (liste des features :
    `SELECT DISTINCT name, vendor FROM feature WHERE product IS NULL`),
-   puis `freelm apply-products`.
-2. Importer l'historique des logs disponibles : `freelm import-log --server ANSYS archive1.log archive2.log`.
-3. Premier rapport : `freelm report --period last-7d`, relecture avec les
+   puis `heptagoneslm apply-products`.
+2. Importer l'historique des logs disponibles : `heptagoneslm import-log --server ANSYS archive1.log archive2.log`.
+3. Premier rapport : `heptagoneslm report --period last-7d`, relecture avec les
    utilisateurs clés, ajustement des indicateurs.
 
 ## Étape 4 — Enrichissements (à la demande)

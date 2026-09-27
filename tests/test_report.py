@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 
-from freelm.reporting.dataset import build_report_data, previous_month
-from freelm.service import CollectionService
+from heptagoneslm.reporting.dataset import build_report_data, previous_month
+from heptagoneslm.service import CollectionService
 from tests.helpers import make_config, make_db
 from tests.test_collection import co, status_at
 
@@ -73,7 +73,7 @@ class ReportDatasetTest(unittest.TestCase):
     def test_excel_export(self):
         from openpyxl import load_workbook
 
-        from freelm.reporting.excel import write_excel_report
+        from heptagoneslm.reporting.excel import write_excel_report
 
         with tempfile.TemporaryDirectory() as tmp:
             path = write_excel_report(self.data, os.path.join(tmp, "r.xlsx"))
@@ -86,7 +86,7 @@ class ReportDatasetTest(unittest.TestCase):
 
     @unittest.skipUnless(HAS_OPENPYXL, "openpyxl non installé")
     def test_excel_export_empty_period(self):
-        from freelm.reporting.excel import write_excel_report
+        from heptagoneslm.reporting.excel import write_excel_report
 
         empty = build_report_data(self.db, datetime(2020, 1, 1), datetime(2020, 2, 1))
         with tempfile.TemporaryDirectory() as tmp:

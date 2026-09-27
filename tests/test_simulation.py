@@ -6,13 +6,13 @@ import tempfile
 import unittest
 from datetime import date, datetime, timedelta
 
-from freelm.collectors.flexlm.lmstat import parse_lmstat
-from freelm.collectors.flexlm.logfile import FlexlmLogParser
-from freelm.models import EventType
-from freelm.simulation import fake_lmutil
-from freelm.simulation.demo import run_demo
-from freelm.simulation.model import DEFAULT_SCENARIO, day_activity, log_lines, render_lmstat
-from freelm.storage import Database
+from heptagoneslm.collectors.flexlm.lmstat import parse_lmstat
+from heptagoneslm.collectors.flexlm.logfile import FlexlmLogParser
+from heptagoneslm.models import EventType
+from heptagoneslm.simulation import fake_lmutil
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.simulation.model import DEFAULT_SCENARIO, day_activity, log_lines, render_lmstat
+from heptagoneslm.storage import Database
 
 HAS_OPENPYXL = importlib.util.find_spec("openpyxl") is not None
 MONDAY = datetime(2024, 9, 23)
@@ -66,7 +66,7 @@ class DemoRunTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.end = MONDAY + timedelta(days=2)  # lundi -> mercredi 00:00
         cls.result = run_demo(cls.tmp.name, days=2, end=cls.end, make_report=HAS_OPENPYXL)
-        cls.db = Database(f"sqlite:///{os.path.join(cls.tmp.name, 'freelm_demo.db')}")
+        cls.db = Database(f"sqlite:///{os.path.join(cls.tmp.name, 'heptagoneslm_demo.db')}")
 
     @classmethod
     def tearDownClass(cls):
@@ -98,7 +98,7 @@ class DemoRunTest(unittest.TestCase):
         self.assertAlmostEqual(sum(s.usage_hours for s in summaries) * 3600, expected, delta=1)
 
     def test_live_config_written(self):
-        from freelm.config import load_config
+        from heptagoneslm.config import load_config
 
         cfg = load_config(self.result.config_path)
         self.assertEqual([s.name for s in cfg.servers], ["AUTODESK", "ANSYS", "MATLAB"])

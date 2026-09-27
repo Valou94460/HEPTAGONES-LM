@@ -1,13 +1,13 @@
 # Interface web partagée : connexion Windows / AD et HTTPS
 
-Par défaut, l'interface (`freelm web`, `FreeLM.exe`) n'est accessible que depuis le
+Par défaut, l'interface (`heptagoneslm web`, `HeptagonesLM.exe`) n'est accessible que depuis le
 poste où elle tourne, sans authentification. Pour la partager sur le réseau, il faut
 authentifier les utilisateurs avec leur compte Windows, et chiffrer les échanges.
 
 | Mode (`web.auth.mode`) | Expérience utilisateur | Mise en œuvre |
 |---|---|---|
 | `none` | Aucune connexion | Poste local uniquement (défaut) |
-| **`ldap`** (recommandé) | Page de connexion : identifiant et mot de passe Windows | FreeLM seul + certificat HTTPS |
+| **`ldap`** (recommandé) | Page de connexion : identifiant et mot de passe Windows | HeptagonesLM seul + certificat HTTPS |
 | `header` | **Aucune saisie** (SSO, session Windows) | IIS en frontal avec l'authentification Windows |
 
 <img src="images/connexion.png" alt="Page de connexion" width="560">
@@ -19,10 +19,10 @@ authentifier les utilisateurs avec leur compte Windows, et chiffrer les échange
 - **LDAPS** actif sur les contrôleurs de domaine (port 636 ; certificat délivré par
   l'AC d'entreprise — c'est le cas dès qu'une AD CS est déployée). À défaut :
   `ldap://` + `ldap_starttls: true` (port 389).
-- Flux ouvert du serveur FreeLM vers les contrôleurs de domaine (636 ou 389).
-- (recommandé) un groupe AD des personnes autorisées, ex. `GG_FreeLM_Lecteurs`.
-- Un certificat HTTPS pour le serveur FreeLM (§ 3) : **obligatoire** dès que
-  l'interface écoute sur le réseau, sans quoi FreeLM refuse de démarrer (les mots de
+- Flux ouvert du serveur HeptagonesLM vers les contrôleurs de domaine (636 ou 389).
+- (recommandé) un groupe AD des personnes autorisées, ex. `GG_HeptagonesLM_Lecteurs`.
+- Un certificat HTTPS pour le serveur HeptagonesLM (§ 3) : **obligatoire** dès que
+  l'interface écoute sur le réseau, sans quoi HeptagonesLM refuse de démarrer (les mots de
   passe circuleraient en clair).
 
 ### Configuration
@@ -31,24 +31,24 @@ authentifier les utilisateurs avec leur compte Windows, et chiffrer les échange
 web:
   host: 0.0.0.0
   port: 8765
-  tls_cert: "C:/FreeLM/certs/freelm.pem"
-  tls_key:  "C:/FreeLM/certs/freelm.key"
-  public_url: "https://freelm.entreprise.local:8765"
+  tls_cert: "C:/HeptagonesLM/certs/heptagoneslm.pem"
+  tls_key:  "C:/HeptagonesLM/certs/heptagoneslm.key"
+  public_url: "https://heptagoneslm.entreprise.local:8765"
   auth:
     mode: ldap
     ldap_servers: ["ldaps://dc01.entreprise.local", "ldaps://dc02.entreprise.local"]
     base_dn: "DC=entreprise,DC=local"
     upn_suffix: "entreprise.local"          # connexion en identifiant@entreprise.local
-    allowed_groups: ["GG_FreeLM_Lecteurs"]  # groupes imbriqués acceptés ; vide = tout le domaine
+    allowed_groups: ["GG_HeptagonesLM_Lecteurs"]  # groupes imbriqués acceptés ; vide = tout le domaine
     session_hours: 8
 ```
 
 Variante sans `upn_suffix` (annuaire non AD, ou comptes hors du suffixe) : un compte de
-service en lecture recherche l'utilisateur, puis FreeLM vérifie son mot de passe.
+service en lecture recherche l'utilisateur, puis HeptagonesLM vérifie son mot de passe.
 
 ```yaml
-    bind_dn: "CN=svc_freelm_ldap,OU=Services,DC=entreprise,DC=local"
-    bind_password: ${FREELM_LDAP_PASSWORD}
+    bind_dn: "CN=svc_heptagoneslm_ldap,OU=Services,DC=entreprise,DC=local"
+    bind_password: ${HEPTAGONESLM_LDAP_PASSWORD}
     user_filter: "(sAMAccountName={username})"
 ```
 
@@ -63,7 +63,7 @@ L'utilisateur peut saisir `jdupont`, `ENTREPRISE\jdupont` ou `jdupont@entreprise
 - Après `max_failures` échecs (5 par défaut) pour un même identifiant ou une même
   adresse IP : blocage de `lockout_minutes` (15 min). À régler en dessous du seuil de
   verrouillage des comptes AD.
-- **Journal d'audit** (`freelm.log`, logger `freelm.audit`) : connexions, échecs,
+- **Journal d'audit** (`heptagoneslm.log`, logger `heptagoneslm.audit`) : connexions, échecs,
   blocages, déconnexions et **chaque export** (utilisateur, rapport, format, filtres).
 
 ### Dépannage
@@ -78,9 +78,9 @@ L'utilisateur peut saisir `jdupont`, `ENTREPRISE\jdupont` ou `jdupont@entreprise
 ## 2. Mode `header` : authentification unique avec IIS
 
 IIS authentifie l'utilisateur de manière transparente (Kerberos/NTLM) et transmet son
-nom à FreeLM, qui n'écoute que sur la boucle locale.
+nom à HeptagonesLM, qui n'écoute que sur la boucle locale.
 
-> **Le plus simple : `FreeLM-Setup.exe`** réalise toutes ces étapes et vérifie le
+> **Le plus simple : `HeptagonesLM-Setup.exe`** réalise toutes ces étapes et vérifie le
 > résultat (voir [INSTALLATION.md](INSTALLATION.md)). Procédure manuelle ci-dessous.
 
 1. Installer IIS avec **Authentification Windows**, **Autorisation d'URL** et
@@ -90,18 +90,18 @@ nom à FreeLM, qui n'écoute que sur la boucle locale.
    (ARR › *Server Proxy Settings* › *Enable proxy*).
 2. Créer un site HTTPS (certificat du § 3, lié dans IIS), pool **.NET CLR v4.0,
    pipeline intégré** ; *Authentification* : **Windows activé, Anonyme désactivé**.
-3. Déposer le module d'identité `App_Code\FreeLMUserHeader.cs` dans le dossier du site.
+3. Déposer le module d'identité `App_Code\HeptagonesLMUserHeader.cs` dans le dossier du site.
    Il pose l'en-tête `X-Remote-User` **après** l'authentification et supprime toute
    valeur envoyée par le navigateur.
 
    > Ne pas utiliser de variable serveur `{LOGON_USER}` dans la règle URL Rewrite.
    > Les règles s'exécutent *avant* l'authentification Windows : la valeur serait
-   > toujours vide et FreeLM répondrait « Authentification requise ».
+   > toujours vide et HeptagonesLM répondrait « Authentification requise ».
 
    ```csharp
    using System.Web;
 
-   public class FreeLMUserHeader : IHttpModule
+   public class HeptagonesLMUserHeader : IHttpModule
    {
        const string Header = "X-Remote-User";
 
@@ -129,16 +129,16 @@ nom à FreeLM, qui n'écoute que sur la boucle locale.
        <security>
          <authorization>
            <clear />
-           <add accessType="Allow" roles="ENTREPRISE\GG_FreeLM_Lecteurs" />
+           <add accessType="Allow" roles="ENTREPRISE\GG_HeptagonesLM_Lecteurs" />
          </authorization>
        </security>
        <modules>
-         <remove name="FreeLMUserHeader" />
-         <add name="FreeLMUserHeader" type="FreeLMUserHeader" />
+         <remove name="HeptagonesLMUserHeader" />
+         <add name="HeptagonesLMUserHeader" type="HeptagonesLMUserHeader" />
        </modules>
        <rewrite>
          <rules>
-           <rule name="FreeLM" stopProcessing="true">
+           <rule name="HeptagonesLM" stopProcessing="true">
              <match url="(.*)" />
              <action type="Rewrite" url="http://127.0.0.1:8765/{R:1}" />
            </rule>
@@ -148,13 +148,13 @@ nom à FreeLM, qui n'écoute que sur la boucle locale.
    </configuration>
    ```
 
-5. FreeLM :
+5. HeptagonesLM :
 
    ```yaml
    web:
      host: 127.0.0.1            # jamais exposé directement
      port: 8765
-     public_url: "https://freelm.entreprise.local"
+     public_url: "https://heptagoneslm.entreprise.local"
      auth:
        mode: header
        header_name: X-Remote-User
@@ -163,45 +163,45 @@ nom à FreeLM, qui n'écoute que sur la boucle locale.
    ```
 
    La section `<authorization>` du `web.config` réserve l'accès au groupe
-   `GG_FreeLM_Lecteurs` (supprimer la section pour tout utilisateur authentifié) ;
-   la liste `allowed_users` de FreeLM permet un filtrage supplémentaire.
+   `GG_HeptagonesLM_Lecteurs` (supprimer la section pour tout utilisateur authentifié) ;
+   la liste `allowed_users` de HeptagonesLM permet un filtrage supplémentaire.
 
 ## 3. Certificat HTTPS
 
 Demander un certificat serveur à l'AC d'entreprise pour le nom utilisé par les
-navigateurs (ex. `freelm.entreprise.local`), l'exporter en `.pfx` avec la clé privée,
+navigateurs (ex. `heptagoneslm.entreprise.local`), l'exporter en `.pfx` avec la clé privée,
 puis le convertir en PEM :
 
 ```powershell
-openssl pkcs12 -in freelm.pfx -clcerts -nokeys -out freelm.pem
-openssl pkcs12 -in freelm.pfx -nocerts -nodes -out freelm.key
+openssl pkcs12 -in heptagoneslm.pfx -clcerts -nokeys -out heptagoneslm.pem
+openssl pkcs12 -in heptagoneslm.pfx -nocerts -nodes -out heptagoneslm.key
 ```
 
 (`openssl` est fourni avec Git pour Windows : `C:\Program Files\Git\usr\bin\openssl.exe`.)
-Restreindre les droits NTFS du fichier `.key` au compte de service FreeLM et aux
+Restreindre les droits NTFS du fichier `.key` au compte de service HeptagonesLM et aux
 administrateurs. Pour un simple essai : certificat auto-signé
-`openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN=freelm.entreprise.local" -keyout freelm.key -out freelm.pem`
+`openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN=heptagoneslm.entreprise.local" -keyout heptagoneslm.key -out heptagoneslm.pem`
 (le navigateur affichera un avertissement).
 
 ## 4. Noms d'hôte autorisés
 
-Pour contrer le « DNS rebinding », FreeLM n'accepte que les requêtes adressées à un nom
+Pour contrer le « DNS rebinding », HeptagonesLM n'accepte que les requêtes adressées à un nom
 connu : `localhost`, `127.0.0.1`, `::1`, le nom de `public_url` et, en écoute réseau
 (`host: 0.0.0.0`), le nom court, le nom complet et les adresses IP du serveur. Les autres
 reçoivent une erreur 421. Ajouter les alias DNS ou adresses supplémentaires :
 
 ```yaml
 web:
-  allowed_hosts: ["freelm", "licences.entreprise.local"]
+  allowed_hosts: ["heptagoneslm", "licences.entreprise.local"]
 ```
 
 ## 5. Interface permanente
 
 ```powershell
-scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\gmsa_freelm$" -WithWebInterface
+scripts\register_tasks.ps1 -HeptagonesLMHome C:\HeptagonesLM -ServiceAccount "DOMAINE\gmsa_heptagoneslm$" -WithWebInterface
 ```
 
-Ajoute la tâche « FreeLM - Interface web », démarrée avec le serveur et relancée
+Ajoute la tâche « HeptagonesLM - Interface web », démarrée avec le serveur et relancée
 automatiquement en cas d'arrêt ; adresse, HTTPS et authentification sont lus dans la
 section `web` du YAML. Ouvrir le port choisi dans le pare-feu Windows du serveur.
 Le compte de service est obligatoire et ne peut pas être SYSTEM pour l'interface web

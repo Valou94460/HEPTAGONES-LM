@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from datetime import datetime
 
-from freelm.collectors.flexlm.logfile import FlexlmLogParser, read_log_incremental
-from freelm.models import EventType
+from heptagoneslm.collectors.flexlm.logfile import FlexlmLogParser, read_log_incremental
+from heptagoneslm.models import EventType
 from tests.helpers import FIXTURES
 
 

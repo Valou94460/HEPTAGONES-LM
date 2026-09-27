@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Construit FreeLM.exe (application autonome) et FreeLM-Setup.exe (assistant d'installation).
+    Construit HeptagonesLM.exe (application autonome) et HeptagonesLM-Setup.exe (assistant d'installation).
 
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File packaging\build_exe.ps1
-    -> dist\FreeLM.exe, dist\FreeLM-Setup.exe
+    -> dist\HeptagonesLM.exe, dist\HeptagonesLM-Setup.exe
 #>
 $ErrorActionPreference = "Stop"
 Set-Location (Split-Path $PSScriptRoot -Parent)
@@ -14,21 +14,21 @@ py -3 -m venv .build-venv
 .\.build-venv\Scripts\pip install . pyinstaller
 
 .\.build-venv\Scripts\pyinstaller --noconfirm --clean --onefile --console `
-    --name FreeLM `
-    --collect-submodules freelm `
-    --add-data "freelm/web/static:freelm/web/static" `
-    --add-data "freelm/setup/static:freelm/setup/static" `
-    freelm/launcher.py
+    --name HeptagonesLM --icon packaging/heptagoneslm.ico `
+    --collect-submodules heptagoneslm `
+    --add-data "heptagoneslm/web/static:heptagoneslm/web/static" `
+    --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" `
+    heptagoneslm/launcher.py
 
-# Assistant d'installation : demande l'élévation administrateur, embarque FreeLM.exe
+# Assistant d'installation : demande l'élévation administrateur, embarque HeptagonesLM.exe
 .\.build-venv\Scripts\pyinstaller --noconfirm --onefile --console --uac-admin `
-    --name FreeLM-Setup `
-    --collect-submodules freelm `
-    --add-data "freelm/web/static:freelm/web/static" `
-    --add-data "freelm/setup/static:freelm/setup/static" `
-    --add-data "dist/FreeLM.exe:." `
-    freelm/launcher.py
+    --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico `
+    --collect-submodules heptagoneslm `
+    --add-data "heptagoneslm/web/static:heptagoneslm/web/static" `
+    --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" `
+    --add-data "dist/HeptagonesLM.exe:." `
+    heptagoneslm/launcher.py
 
-.\dist\FreeLM.exe --version
-.\dist\FreeLM-Setup.exe --version
-Write-Host "Exécutables prêts : dist\FreeLM.exe (application) et dist\FreeLM-Setup.exe (assistant d'installation)"
+.\dist\HeptagonesLM.exe --version
+.\dist\HeptagonesLM-Setup.exe --version
+Write-Host "Exécutables prêts : dist\HeptagonesLM.exe (application) et dist\HeptagonesLM-Setup.exe (assistant d'installation)"

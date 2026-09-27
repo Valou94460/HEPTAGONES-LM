@@ -1,4 +1,7 @@
-# FreeLM
+<img src="docs/images/logo.svg" alt="" width="64" align="left">
+
+# HeptagonesLM
+
 
 [![CI](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
@@ -10,7 +13,7 @@
 (Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher).
 Une alternative gratuite à OpenLM pour le reporting d'usage.
 
-FreeLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
+HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
 leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
 quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
 tableau de bord web et en exports Excel — avec alertes, vue en direct, efficacité des
@@ -42,8 +45,8 @@ jetons et chiffrage des économies possibles.
 | **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service. |
 | **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
-| **FreeLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
-| **FreeLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
+| **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
+| **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
@@ -73,9 +76,9 @@ jetons et chiffrage des économies possibles.
 
 ### Essayer en 1 minute (Windows, sans rien installer)
 
-1. Télécharger **`FreeLM.exe`** depuis la page [Releases](https://github.com/Valou94460/FREE-LM/releases)
+1. Télécharger **`HeptagonesLM.exe`** depuis la page [Releases](https://github.com/Valou94460/FREE-LM/releases)
    (ou, pour la dernière version de développement : onglet
-   [Actions](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml) › dernière exécution › artefact `FreeLM-windows`).
+   [Actions](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-windows`).
 2. Double-cliquer : l'interface s'ouvre dans le navigateur sur des **données de
    démonstration** (3 serveurs simulés, ~45 utilisateurs, 90 jours).
 
@@ -86,15 +89,15 @@ jetons et chiffrage des économies possibles.
 
 ```bash
 pip install git+https://github.com/Valou94460/FREE-LM.git
-freelm web --demo --open          # interface sur données simulées
-freelm demo --days 30             # ou : base + rapport Excel de démonstration dans ./demo
+heptagoneslm web --demo --open          # interface sur données simulées
+heptagoneslm demo --days 30             # ou : base + rapport Excel de démonstration dans ./demo
 ```
 
 ## Installation en production
 
 ### Installation assistée (recommandée)
 
-Double-cliquer sur **`FreeLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/FREE-LM/releases)) :
+Double-cliquer sur **`HeptagonesLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/FREE-LM/releases)) :
 un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque étape.
 
 1. **Vérification du serveur** : Windows, droits, pilote ODBC, lmutil, rôles et modules IIS —
@@ -108,18 +111,18 @@ un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque 
 
 ![Assistant d'installation](docs/images/installation-progression.png)
 
-Installation silencieuse (industrialisation) : `FreeLM-Setup.exe setup --answers reponses.json`.
-Démonstration sans rien modifier : `FreeLM.exe setup --simulate`.
+Installation silencieuse (industrialisation) : `HeptagonesLM-Setup.exe setup --answers reponses.json`.
+Démonstration sans rien modifier : `HeptagonesLM.exe setup --simulate`.
 Tout est détaillé dans **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
 
 ### Installation manuelle
 
-Prérequis sur le serveur FreeLM (Windows) :
+Prérequis sur le serveur HeptagonesLM (Windows) :
 
 - accès réseau aux serveurs de licences (port `lmgrd` et ports des démons vendeurs) ;
 - `lmutil.exe` (fourni avec tout gestionnaire FlexLM, ex. Autodesk Network License Manager) ;
 - [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) ;
-- soit `FreeLM.exe`, soit Python 3.10+ (64 bits).
+- soit `HeptagonesLM.exe`, soit Python 3.10+ (64 bits).
 
 **1. Base de données** (une fois, par un DBA) :
 
@@ -127,24 +130,24 @@ Prérequis sur le serveur FreeLM (Windows) :
 sqlcmd -S SQLSRV01 -i sql\sqlserver\00_create_database.sql   # base + compte de service
 ```
 
-**2. Configuration** : copier [`config/freelm.example.yaml`](config/freelm.example.yaml)
-en `C:\FreeLM\freelm.yaml` et renseigner la base, `lmutil` et les serveurs.
+**2. Configuration** : copier [`config/heptagoneslm.example.yaml`](config/heptagoneslm.example.yaml)
+en `C:\HeptagonesLM\heptagoneslm.yaml` et renseigner la base, `lmutil` et les serveurs.
 
 **3. Initialisation et vérification** :
 
 ```powershell
-cd C:\FreeLM
-.\FreeLM.exe -c freelm.yaml init-db                    # crée les tables (ou sql\sqlserver\01_schema.sql)
-.\FreeLM.exe -c freelm.yaml test-server --server AUTODESK
-.\FreeLM.exe -c freelm.yaml collect
+cd C:\HeptagonesLM
+.\HeptagonesLM.exe -c heptagoneslm.yaml init-db                    # crée les tables (ou sql\sqlserver\01_schema.sql)
+.\HeptagonesLM.exe -c heptagoneslm.yaml test-server --server AUTODESK
+.\HeptagonesLM.exe -c heptagoneslm.yaml collect
 ```
 
-(avec Python : `py -3 -m venv venv`, `venv\Scripts\pip install .`, puis `venv\Scripts\freelm` à la place de `FreeLM.exe`)
+(avec Python : `py -3 -m venv venv`, `venv\Scripts\pip install .`, puis `venv\Scripts\heptagoneslm` à la place de `HeptagonesLM.exe`)
 
 **4. Planification** :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\gmsa_freelm$"
+powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -HeptagonesLMHome C:\HeptagonesLM -ServiceAccount "DOMAINE\gmsa_heptagoneslm$"
 ```
 
 Le compte de service est obligatoire (compte dédié non administrateur, gMSA
@@ -159,38 +162,38 @@ purge hebdomadaire ; `-WithWebInterface` ajoute l'interface web permanente.
 Get-ADUser -Filter * -Properties DisplayName,Department |
   Select-Object SamAccountName,DisplayName,Department |
   Export-Csv users.csv -NoTypeInformation -Encoding UTF8
-.\FreeLM.exe -c freelm.yaml import-users users.csv
+.\HeptagonesLM.exe -c heptagoneslm.yaml import-users users.csv
 
 # Reprise de l'historique depuis des logs archivés
-.\FreeLM.exe -c freelm.yaml import-log --server ANSYS D:\archives\license_2026-08.log
+.\HeptagonesLM.exe -c heptagoneslm.yaml import-log --server ANSYS D:\archives\license_2026-08.log
 ```
 
 ## Utilisation
 
 | Commande | Rôle |
 |---|---|
-| `freelm init-db` | Crée / complète le schéma, référence les serveurs du YAML |
-| `freelm collect [--server X]` | Une collecte (à planifier). Code retour 2 si un serveur est en échec |
-| `freelm web [--open] [--port 8765] [--host …] [--demo]` | Interface web |
-| `freelm report [--period last-month\|this-month\|last-week\|last-7d\|last-year]` | Rapport Excel complet |
-| `freelm report --from 2026-09-01 --to 2026-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
-| `freelm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
-| `freelm import-users users.csv` | Noms complets et services (export AD/RH) |
-| `freelm send-report [--skip-sent] [--dry-run DOSSIER] [--to adresse]` | Envoi du rapport aux abonnés e-mail (aperçu `.eml` avec `--dry-run`) |
-| `freelm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
-| `freelm purge` | Applique la politique de rétention |
-| `freelm test-server --server X` | Interroge un serveur sans rien écrire |
-| `freelm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
-| `freelm demo [--days N] [--connection-string …]` | Environnement de démonstration simulé |
-| `freelm ddl --dialect mssql` | Script SQL du schéma |
+| `heptagoneslm init-db` | Crée / complète le schéma, référence les serveurs du YAML |
+| `heptagoneslm collect [--server X]` | Une collecte (à planifier). Code retour 2 si un serveur est en échec |
+| `heptagoneslm web [--open] [--port 8765] [--host …] [--demo]` | Interface web |
+| `heptagoneslm report [--period last-month\|this-month\|last-week\|last-7d\|last-year]` | Rapport Excel complet |
+| `heptagoneslm report --from 2026-09-01 --to 2026-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
+| `heptagoneslm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
+| `heptagoneslm import-users users.csv` | Noms complets et services (export AD/RH) |
+| `heptagoneslm send-report [--skip-sent] [--dry-run DOSSIER] [--to adresse]` | Envoi du rapport aux abonnés e-mail (aperçu `.eml` avec `--dry-run`) |
+| `heptagoneslm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
+| `heptagoneslm purge` | Applique la politique de rétention |
+| `heptagoneslm test-server --server X` | Interroge un serveur sans rien écrire |
+| `heptagoneslm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
+| `heptagoneslm demo [--days N] [--connection-string …]` | Environnement de démonstration simulé |
+| `heptagoneslm ddl --dialect mssql` | Script SQL du schéma |
 
-Options globales : `-c freelm.yaml` (ou variable `FREELM_CONFIG`), `-v` (logs détaillés).
-`FreeLM.exe` accepte exactement les mêmes commandes.
+Options globales : `-c heptagoneslm.yaml` (ou variable `HEPTAGONESLM_CONFIG`), `-v` (logs détaillés).
+`HeptagonesLM.exe` accepte exactement les mêmes commandes.
 
 ## Interface web
 
 ```bash
-freelm -c freelm.yaml web --open
+heptagoneslm -c heptagoneslm.yaml web --open
 ```
 
 Navigation par la barre latérale, en quatre groupes :
@@ -225,18 +228,18 @@ Navigation par la barre latérale, en quatre groupes :
 ```yaml
 web:
   host: 0.0.0.0
-  tls_cert: "C:/FreeLM/certs/freelm.pem"
-  tls_key:  "C:/FreeLM/certs/freelm.key"
+  tls_cert: "C:/HeptagonesLM/certs/heptagoneslm.pem"
+  tls_key:  "C:/HeptagonesLM/certs/heptagoneslm.key"
   auth:
     mode: ldap                                  # ou header : SSO derrière IIS
     ldap_servers: ["ldaps://dc01.entreprise.local"]
     base_dn: "DC=entreprise,DC=local"
     upn_suffix: "entreprise.local"
-    allowed_groups: ["GG_FreeLM_Lecteurs"]
+    allowed_groups: ["GG_HeptagonesLM_Lecteurs"]
 ```
 
 Identifiants vérifiés par l'AD (jamais stockés), groupes imbriqués, blocage après
-échecs répétés, session de 8 h, journal d'audit (connexions et exports). FreeLM refuse
+échecs répétés, session de 8 h, journal d'audit (connexions et exports). HeptagonesLM refuse
 d'exposer la page de connexion sur le réseau sans HTTPS.
 
 ## Rapport mensuel par e-mail
@@ -244,7 +247,7 @@ d'exposer la page de connexion sur le réseau sans HTTPS.
 ```yaml
 email:
   smtp_host: smtp.entreprise.local
-  sender: "FreeLM <freelm@entreprise.local>"
+  sender: "HeptagonesLM <heptagoneslm@entreprise.local>"
   subscriptions:
     - name: Direction
       recipients: [dsi@entreprise.local, achats@entreprise.local]
@@ -258,8 +261,8 @@ saturés plus de 5 % des heures ouvrées —, produits sous-utilisés, détail p
 lien vers l'interface) et le classeur Excel complet en pièce jointe.
 
 ```powershell
-FreeLM.exe -c freelm.yaml send-report --dry-run apercu      # .eml à ouvrir dans Outlook, rien n'est envoyé
-FreeLM.exe -c freelm.yaml send-report --to moi@entreprise.local   # envoi de test
+HeptagonesLM.exe -c heptagoneslm.yaml send-report --dry-run apercu      # .eml à ouvrir dans Outlook, rien n'est envoyé
+HeptagonesLM.exe -c heptagoneslm.yaml send-report --to moi@entreprise.local   # envoi de test
 ```
 
 La tâche planifiée « Envoi des rapports » (`send-report --skip-sent`, quotidienne)
@@ -270,12 +273,12 @@ les envois sont tracés en base (`report_delivery`).
 
 ## Configuration
 
-Exemple complet et commenté : [`config/freelm.example.yaml`](config/freelm.example.yaml).
+Exemple complet et commenté : [`config/heptagoneslm.example.yaml`](config/heptagoneslm.example.yaml).
 
 ```yaml
 database:
-  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=FreeLM;Trusted_Connection=yes;Encrypt=yes"
-lmutil_path: "C:/FreeLM/bin/lmutil.exe"
+  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=HeptagonesLM;Trusted_Connection=yes;Encrypt=yes"
+lmutil_path: "C:/HeptagonesLM/bin/lmutil.exe"
 
 servers:
   - name: AUTODESK
@@ -307,7 +310,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 
 ## Comparaison avec OpenLM
 
-| | FreeLM | OpenLM |
+| | HeptagonesLM | OpenLM |
 |---|:---:|:---:|
 | Coût de licence | Gratuit (MIT) | Payant |
 | Collecte FlexLM (lmstat + logs), sans agent client | ✅ | ✅ |
@@ -329,8 +332,8 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 
 | Document | Contenu |
 |---|---|
-| [docs/INSTALLATION.md](docs/INSTALLATION.md) | **Installation assistée** (FreeLM-Setup.exe), installation silencieuse, serveur hors ligne, dépannage |
-| [docs/DEX_FreeLM.docx](docs/DEX_FreeLM.docx) | **Dossier d'exploitation (Word)** : architecture, installation, exploitation, supervision, guide de l'interface illustré, sauvegarde, sécurité, incidents, maintenance, PRA |
+| [docs/INSTALLATION.md](docs/INSTALLATION.md) | **Installation assistée** (HeptagonesLM-Setup.exe), installation silencieuse, serveur hors ligne, dépannage |
+| [docs/DEX_HeptagonesLM.docx](docs/DEX_HeptagonesLM.docx) | **Dossier d'exploitation (Word)** : architecture, installation, exploitation, supervision, guide de l'interface illustré, sauvegarde, sécurité, incidents, maintenance, PRA |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
@@ -345,13 +348,13 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
 pip install -e ".[dev]"
 python -m pytest                     # ~90 tests, SQLite en mémoire, aucun serveur requis
-freelm web --demo --open             # interface sur données simulées
+heptagoneslm web --demo --open             # interface sur données simulées
 ```
 
 La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Linux et
 Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
 l'interface et de la page de connexion dans un vrai navigateur (Playwright), démonstration contre un vrai
-SQL Server 2022, construction et vérification de `FreeLM.exe`. Une étiquette
+SQL Server 2022, construction et vérification de `HeptagonesLM.exe`. Une étiquette
 `vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/FREE-LM/releases)
 avec l'exécutable.
 

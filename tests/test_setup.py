@@ -11,28 +11,28 @@ from pathlib import Path
 
 import yaml
 
-from freelm.config import parse_config
-from freelm.setup import iis
-from freelm.setup.answers import DB_PASSWORD_VAR, Answers
-from freelm.setup.checks import apply_fix, blocking, run_checks
-from freelm.setup.installer import Installer, build_plan
-from freelm.setup.server import make_server
-from freelm.setup.system import SimulatedSystem, TaskSpec, WindowsSystem, make_system
-from freelm.setup.unattended import run as run_unattended
-from freelm.setup.verify import verify
+from heptagoneslm.config import parse_config
+from heptagoneslm.setup import iis
+from heptagoneslm.setup.answers import DB_PASSWORD_VAR, Answers
+from heptagoneslm.setup.checks import apply_fix, blocking, run_checks
+from heptagoneslm.setup.installer import Installer, build_plan
+from heptagoneslm.setup.server import make_server
+from heptagoneslm.setup.system import SimulatedSystem, TaskSpec, WindowsSystem, make_system
+from heptagoneslm.setup.unattended import run as run_unattended
+from heptagoneslm.setup.verify import verify
 
 THUMB = "3F2A9C4D8E1B7A6F5C0D2E9B8A7F6C5D4E3B2A19"
 
 
 def answers(**over) -> Answers:
     base = {
-        "service_account": "ENTREPRISE\\svc_freelm", "service_password": "Secret-1",
+        "service_account": "ENTREPRISE\\svc_heptagoneslm", "service_password": "Secret-1",
         "db_server": "SQLSRV01", "lmutil_path": r"C:\Program Files\Autodesk\Network License Manager\lmutil.exe",
         "servers": [{"name": "AUTODESK", "port_at_host": "27000@licsrv-adsk"},
                     {"name": "ANSYS", "port_at_host": "1055@licsrv-ansys", "collectors": ["lmstat", "log"],
                      "log_path": r"\\licsrv-ansys\logs$\license.log"}],
-        "public_host": "freelm.entreprise.local", "iis_cert_thumbprint": THUMB,
-        "access_group": "ENTREPRISE\\GG_FreeLM_Lecteurs",
+        "public_host": "heptagoneslm.entreprise.local", "iis_cert_thumbprint": THUMB,
+        "access_group": "ENTREPRISE\\GG_HeptagonesLM_Lecteurs",
     }
     base.update(over)
     return Answers.from_dict(base)
@@ -52,12 +52,12 @@ class AnswersTest(unittest.TestCase):
         for mode in ("iis", "https", "local"):
             a = answers(web_mode=mode, **extra.get(mode, {}))
             self.assertEqual(a.validate(), [], mode)
-            cfg = parse_config(yaml.safe_load(a.yaml_text()))       # chargeur réel de FreeLM
+            cfg = parse_config(yaml.safe_load(a.yaml_text()))       # chargeur réel de HeptagonesLM
             self.assertEqual(len(cfg.servers), 2)
             self.assertEqual(cfg.web.auth.mode, {"iis": "header", "https": "ldap", "local": "none"}[mode])
         iis_cfg = parse_config(answers().config_dict())
         self.assertEqual(iis_cfg.web.host, "127.0.0.1")               # jamais exposé derrière IIS
-        self.assertEqual(iis_cfg.web.public_url, "https://freelm.entreprise.local")
+        self.assertEqual(iis_cfg.web.public_url, "https://heptagoneslm.entreprise.local")
         self.assertEqual(iis_cfg.servers[1].sessions_from, "log")
 
     def test_validation_errors_by_step(self):
@@ -67,7 +67,7 @@ class AnswersTest(unittest.TestCase):
         self.assertEqual({e["field"] for e in a.validate("licenses")} >= {"servers", "lmutil_path"}, True)
         self.assertIn("servers.0.port_at_host", {e["field"] for e in answers(servers=[{"name": "X", "port_at_host": "licsrv"}]).validate("licenses")})
         self.assertIn("service_account", {e["field"] for e in answers(service_account="NT AUTHORITY\\SYSTEM").validate("location")})
-        self.assertEqual(answers(service_account="ENTREPRISE\\gmsa_freelm$", service_password="").validate("location"), [])
+        self.assertEqual(answers(service_account="ENTREPRISE\\gmsa_heptagoneslm$", service_password="").validate("location"), [])
         self.assertIn("service_password", {e["field"] for e in answers(service_password="").validate("location")})
         self.assertIn("iis_cert_thumbprint", {e["field"] for e in answers(iis_cert_thumbprint="abc").validate("web")})
         self.assertIn("smtp_security", {e["field"] for e in answers(email_enabled=True, smtp_host="smtp.x.fr", smtp_user="u",
@@ -75,19 +75,19 @@ class AnswersTest(unittest.TestCase):
                                                                      recipients=["b@x.fr"]).validate("email")})
 
     def test_secrets_never_written(self):
-        a = answers(db_auth="sql", db_user="freelm", db_password="Pwd-SQL", email_enabled=True, smtp_host="smtp.x.fr",
-                    smtp_user="u", smtp_password="Pwd-SMTP", sender="FreeLM <freelm@x.fr>", recipients="dsi@x.fr")
+        a = answers(db_auth="sql", db_user="heptagoneslm", db_password="Pwd-SQL", email_enabled=True, smtp_host="smtp.x.fr",
+                    smtp_user="u", smtp_password="Pwd-SMTP", sender="HeptagonesLM <heptagoneslm@x.fr>", recipients="dsi@x.fr")
         text = a.yaml_text()
         for secret in ("Secret-1", "Pwd-SQL", "Pwd-SMTP"):
             self.assertNotIn(secret, text)
         self.assertIn("${" + DB_PASSWORD_VAR + "}", a.connection_string())
-        self.assertEqual(set(a.machine_secrets()), {"FREELM_DB_PASSWORD", "FREELM_SMTP_PASSWORD"})
+        self.assertEqual(set(a.machine_secrets()), {"HEPTAGONESLM_DB_PASSWORD", "HEPTAGONESLM_SMTP_PASSWORD"})
         self.assertEqual(a.to_dict()["db_password"], "********")
 
     def test_sqlite_mode(self):
         a = answers(db_mode="sqlite", db_server="")
         self.assertEqual(a.validate("database"), [])
-        self.assertEqual(a.connection_string(), "sqlite:///C:/FreeLM/data/freelm.db")
+        self.assertEqual(a.connection_string(), "sqlite:///C:/HeptagonesLM/data/heptagoneslm.db")
 
 
 class IisTest(unittest.TestCase):
@@ -95,19 +95,19 @@ class IisTest(unittest.TestCase):
         xml = iis.web_config(answers(web_port=8800))
         self.assertIn('url="http://127.0.0.1:8800/{R:1}"', xml)
         # utilisateur transmis par le module ASP.NET (après l'authentification), pas par URL Rewrite
-        self.assertIn('<add name="FreeLMUserHeader" type="FreeLMUserHeader" />', xml)
+        self.assertIn('<add name="HeptagonesLMUserHeader" type="HeptagonesLMUserHeader" />', xml)
         self.assertNotIn("LOGON_USER", xml)
         self.assertIn("PostAuthenticateRequest", iis.USER_MODULE_CS)
         self.assertIn('Headers.Remove(Header)', iis.USER_MODULE_CS)
         self.assertIn('"X-Remote-User"', iis.USER_MODULE_CS)
-        self.assertIn('roles="ENTREPRISE\\GG_FreeLM_Lecteurs"', xml)
+        self.assertIn('roles="ENTREPRISE\\GG_HeptagonesLM_Lecteurs"', xml)
         self.assertNotIn("<authorization>", iis.web_config(answers(access_group="")))
         import xml.dom.minidom
         xml.dom.minidom.parseString(iis.web_config(answers(access_group='ENT\\a"b&c')))    # échappement XML
 
     def test_powershell_quoting(self):
         self.assertEqual(iis.ps_quote("it's"), "'it''s'")
-        script = iis.configure_site_script(answers(iis_site="Free'; Remove-Item C:\\ -Recurse; '"), r"C:\FreeLM\iis")
+        script = iis.configure_site_script(answers(iis_site="Free'; Remove-Item C:\\ -Recurse; '"), r"C:\HeptagonesLM\iis")
         self.assertIn("$site = 'Free''; Remove-Item C:\\ -Recurse; '''", script)
 
 
@@ -117,33 +117,33 @@ class WindowsScriptsTest(unittest.TestCase):
     def setUp(self):
         self.calls = []
         self.sys = WindowsSystem()
-        from freelm.setup.system import Result
+        from heptagoneslm.setup.system import Result
         self.sys.ps = lambda script, secret=None, timeout=600: (self.calls.append((script, secret)), Result(0, "{}"))[1]
 
     def test_register_task_password_outside_script(self):
-        spec = TaskSpec("FreeLM - Collecte", r"C:\FreeLM\FreeLM.exe", '-c "C:\\FreeLM\\freelm.yaml" collect', r"C:\FreeLM", "repeat", 5)
-        self.sys.register_task(spec, "ENTREPRISE\\svc_freelm", "P@ss'w0rd")
+        spec = TaskSpec("HeptagonesLM - Collecte", r"C:\HeptagonesLM\HeptagonesLM.exe", '-c "C:\\HeptagonesLM\\heptagoneslm.yaml" collect', r"C:\HeptagonesLM", "repeat", 5)
+        self.sys.register_task(spec, "ENTREPRISE\\svc_heptagoneslm", "P@ss'w0rd")
         script, secret = self.calls[-1]
         self.assertNotIn("P@ss", script)
         self.assertEqual(secret, "P@ss'w0rd")
-        self.assertIn("-Password $env:FREELM_SETUP_SECRET", script)
+        self.assertIn("-Password $env:HEPTAGONESLM_SETUP_SECRET", script)
         self.assertIn("-RepetitionInterval (New-TimeSpan -Minutes 5)", script)
-        self.sys.register_task(TaskSpec("FreeLM - Interface web", "x.exe", "web", "C:\\", "startup", permanent=True),
-                               "ENTREPRISE\\gmsa_freelm$", "")
+        self.sys.register_task(TaskSpec("HeptagonesLM - Interface web", "x.exe", "web", "C:\\", "startup", permanent=True),
+                               "ENTREPRISE\\gmsa_heptagoneslm$", "")
         script, _ = self.calls[-1]
         self.assertIn("-LogonType Password", script)
         self.assertIn("-RestartCount 999", script)
 
     def test_machine_env_secret(self):
         import os
-        self.sys.set_machine_env("FREELM_TEST_VAR", "valeur-secrète")
+        self.sys.set_machine_env("HEPTAGONESLM_TEST_VAR", "valeur-secrète")
         script, secret = self.calls[-1]
         self.assertNotIn("valeur-secrète", script)
         self.assertEqual(secret, "valeur-secrète")
-        os.environ.pop("FREELM_TEST_VAR", None)
+        os.environ.pop("HEPTAGONESLM_TEST_VAR", None)
 
     def test_powershell_errors_are_readable(self):
-        from freelm.setup.system import Result, _clixml_errors
+        from heptagoneslm.setup.system import Result, _clixml_errors
         err = ('#< CLIXML\r\n<Objs Version="1.1.0.1" xmlns="http://schemas.microsoft.com/powershell/2004/04">'
                '<S S="Error">Get-Item : Cannot find drive. A drive with the name &apos;Cert&apos; does not exist._x000D__x000A_</S>'
                '<S S="Error">    + CategoryInfo : ObjectNotFound_x000D__x000A_</S></Objs>')
@@ -155,7 +155,7 @@ class WindowsScriptsTest(unittest.TestCase):
     def test_make_system_requires_windows_or_simulation(self):
         import os
         if os.name != "nt":
-            from freelm.setup.system import SetupError
+            from heptagoneslm.setup.system import SetupError
             with self.assertRaises(SetupError):
                 make_system(False)
         self.assertTrue(make_system(True).simulated)
@@ -191,20 +191,20 @@ class ChecksTest(unittest.TestCase):
 class InstallerTest(unittest.TestCase):
     def test_full_install_and_verification(self):
         s = ready_system()
-        a = answers(db_auth="sql", db_user="freelm", db_password="Pwd-SQL")
+        a = answers(db_auth="sql", db_user="heptagoneslm", db_password="Pwd-SQL")
         inst = Installer(s, a)
         self.assertIn("secrets", [st.id for st in inst.steps])
         inst.start(); inst.wait(30)
         st = inst.state()
         self.assertEqual(st["status"], "done", st["error"])
         self.assertEqual(st["percent"], 100.0)
-        self.assertEqual({t for t in s.tasks}, {"FreeLM - Collecte", "FreeLM - Rapport mensuel", "FreeLM - Purge",
-                                                "FreeLM - Interface web"})
-        self.assertIn('"C:\\FreeLM\\freelm.yaml" collect', s.tasks["FreeLM - Collecte"]["spec"])
+        self.assertEqual({t for t in s.tasks}, {"HeptagonesLM - Collecte", "HeptagonesLM - Rapport mensuel", "HeptagonesLM - Purge",
+                                                "HeptagonesLM - Interface web"})
+        self.assertIn('"C:\\HeptagonesLM\\heptagoneslm.yaml" collect', s.tasks["HeptagonesLM - Collecte"]["spec"])
         written = s.read_text(a.config_path)
         parse_config(yaml.safe_load(written))
         self.assertNotIn("Pwd-SQL", written)
-        self.assertIn('roles="ENTREPRISE\\GG_FreeLM_Lecteurs"', s.read_text(a.path("iis", "web.config")))
+        self.assertIn('roles="ENTREPRISE\\GG_HeptagonesLM_Lecteurs"', s.read_text(a.path("iis", "web.config")))
         self.assertTrue(any(rights == "M" and path.endswith("logs") for path, _, rights in s.acl))
         journal = inst.report_text()
         for secret in ("Secret-1", "Pwd-SQL"):
@@ -214,7 +214,7 @@ class InstallerTest(unittest.TestCase):
 
     def test_failure_then_resume(self):
         s = ready_system()
-        s.fail_once = {"register_task:FreeLM - Purge"}
+        s.fail_once = {"register_task:HeptagonesLM - Purge"}
         inst = Installer(s, answers())
         inst.start(); inst.wait(30)
         self.assertEqual(inst.status, "failed")
@@ -227,15 +227,15 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(inst.status, "done")
         self.assertNotIn("db_create", s.calls[calls_before:])            # reprise sans rejouer le début
 
-    def test_reinstall_stops_running_freelm(self):
+    def test_reinstall_stops_running_heptagoneslm(self):
         s, a = ready_system(), answers()
         first = Installer(s, a); first.start(); first.wait(30)
-        self.assertEqual(s.tasks["FreeLM - Interface web"]["state"], "Running")
+        self.assertEqual(s.tasks["HeptagonesLM - Interface web"]["state"], "Running")
         self.assertIn(iis.MODULE_NAME, s.read_text(a.path("iis", "App_Code", f"{iis.MODULE_NAME}.cs")))
         second = Installer(s, a); second.start(); second.wait(30)
         self.assertEqual(second.status, "done", second.error)
         self.assertIn("arrêté", second.report_text())                   # exécutable libéré avant la copie
-        self.assertEqual(s.tasks["FreeLM - Interface web"]["state"], "Running")
+        self.assertEqual(s.tasks["HeptagonesLM - Interface web"]["state"], "Running")
 
     def test_plan_depends_on_mode(self):
         local = [st.id for st in build_plan(answers(web_mode="local"))]
@@ -263,9 +263,9 @@ class SetupServerTest(unittest.TestCase):
         cls.httpd.server_close()
 
     def req(self, path, body=None, cookie=True, headers=None):
-        h = {"Cookie": "freelm_setup=jeton-test"} if cookie else {}
+        h = {"Cookie": "heptagoneslm_setup=jeton-test"} if cookie else {}
         if body is not None:
-            h.update({"Content-Type": "application/json", "X-FreeLM-Setup": "1"})
+            h.update({"Content-Type": "application/json", "X-HeptagonesLM-Setup": "1"})
         h.update(headers or {})
         data = json.dumps(body).encode() if body is not None else None
         try:
@@ -277,12 +277,12 @@ class SetupServerTest(unittest.TestCase):
     def test_security(self):
         self.assertEqual(self.req("/", cookie=False)[0], 403)
         self.assertEqual(self.req("/api/info", cookie=False)[0], 403)
-        self.assertEqual(self.req("/api/info", headers={"Cookie": "freelm_setup=faux"})[0], 403)
+        self.assertEqual(self.req("/api/info", headers={"Cookie": "heptagoneslm_setup=faux"})[0], 403)
         self.assertEqual(self.req("/api/info", headers={"Host": "attaquant.example"})[0], 421)
         # POST sans l'en-tête dédié (formulaire intersites) : refusé
         status, _ = self.req("/api/checks", None, headers={"Content-Type": "application/json"})
         self.assertIn(status, (403, 404))
-        r = urllib.request.Request(self.base + "/api/checks", data=b"{}", headers={"Cookie": "freelm_setup=jeton-test"})
+        r = urllib.request.Request(self.base + "/api/checks", data=b"{}", headers={"Cookie": "heptagoneslm_setup=jeton-test"})
         with self.assertRaises(urllib.error.HTTPError) as ctx:
             urllib.request.urlopen(r)
         self.assertEqual(ctx.exception.code, 403)
@@ -304,7 +304,7 @@ class SetupServerTest(unittest.TestCase):
         test = json.loads(self.req("/api/test", {"kind": "lmstat", "answers": a, "port_at_host": "1055@licsrv-ansys"})[1])
         self.assertEqual(test["status"], "ok")
         preview = json.loads(self.req("/api/preview", {"answers": a})[1])
-        self.assertIn("FreeLM - Collecte", [t["name"] for t in preview["plan"]["tasks"]])
+        self.assertIn("HeptagonesLM - Collecte", [t["name"] for t in preview["plan"]["tasks"]])
         self.assertNotIn("Secret-1", json.dumps(preview))
         self.assertEqual(self.req("/api/install", {"answers": a})[0], 200)
         for _ in range(200):
@@ -329,8 +329,8 @@ class UnattendedTest(unittest.TestCase):
 
     def test_success_with_auto_fix_and_env_secret(self):
         import os
-        os.environ["FREELM_TEST_PWD"] = "Secret-ENV"
-        data = answers().to_dict(secrets=True) | {"service_password": "${FREELM_TEST_PWD}", "auto_fix": True}
+        os.environ["HEPTAGONESLM_TEST_PWD"] = "Secret-ENV"
+        data = answers().to_dict(secrets=True) | {"service_password": "${HEPTAGONESLM_TEST_PWD}", "auto_fix": True}
         out = io.StringIO()
         code = run_unattended(SimulatedSystem(delay=0), self.write(data), out)
         self.assertEqual(code, 0, out.getvalue())

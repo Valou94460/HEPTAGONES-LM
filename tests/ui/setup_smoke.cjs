@@ -1,6 +1,6 @@
 /*
  * Parcours complet de l'assistant d'installation (mode simulation) dans un vrai navigateur.
- *   freelm setup --simulate --no-open --port 8790 --token test-token &
+ *   heptagoneslm setup --simulate --no-open --port 8790 --token test-token &
  *   node tests/ui/setup_smoke.cjs http://127.0.0.1:8790 test-token captures/
  * Échoue (code 1) si une étape bloque, si la vérification finale n'est pas verte,
  * ou en cas d'erreur JavaScript.

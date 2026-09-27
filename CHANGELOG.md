@@ -6,11 +6,11 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 ## [Non publié]
 
 ### Ajouté
-- **Assistant d'installation** `FreeLM-Setup.exe` / `freelm setup` : interface pas à pas dans le
+- **Assistant d'installation** `HeptagonesLM-Setup.exe` / `heptagoneslm setup` : interface pas à pas dans le
   navigateur (serveur local protégé par jeton) ; contrôle des prérequis avec installation
   automatique des rôles IIS, d'URL Rewrite et d'ARR ; tests de connexion (compte de service,
   SQL Server, lmstat, certificat, groupe AD, LDAP, SMTP) ; création de la base et des droits ;
-  configuration d'IIS (site HTTPS, authentification Windows, groupe autorisé, proxy vers FreeLM) ;
+  configuration d'IIS (site HTTPS, authentification Windows, groupe autorisé, proxy vers HeptagonesLM) ;
   tâches planifiées sous compte de service ; pare-feu ; barre de progression, journal en direct,
   reprise sur échec ; vérification de bout en bout et rapport d'installation.
 - **Installation silencieuse** `setup --answers reponses.json` et **démonstration** `setup --simulate`.
@@ -28,7 +28,7 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   `reporting.currency`), économies potentielles, coût par heure d'usage, recommandation ;
   colonne coût dans la répartition (refacturation par service).
 - **Dates d'expiration** lues dans la sortie `lmstat` (colonne `feature.expires_on`, schéma v3).
-- **Dossier d'exploitation** `docs/DEX_FreeLM.docx` (Word, une soixantaine de pages, captures d'écran et schémas).
+- **Dossier d'exploitation** `docs/DEX_HeptagonesLM.docx` (Word, une soixantaine de pages, captures d'écran et schémas).
 - **Nouvelle interface** : barre latérale de navigation, filtres en pastilles, préréglages de
   période en un clic, cartes et jauges, graphiques en aires, thème Auto / Clair / Sombre
   mémorisé, menu en tiroir sur mobile.
@@ -39,7 +39,7 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 - **HTTPS** intégré (`web.tls_cert` / `web.tls_key`) ; refus de démarrer la connexion AD en HTTP
   sur le réseau ; en-têtes de sécurité (HSTS, anti-iframe).
 - **Journal d'audit** : connexions, échecs, déconnexions, exports (utilisateur et filtres).
-- **Rapport par e-mail** (`freelm send-report`) : abonnements avec destinataires, période et
+- **Rapport par e-mail** (`heptagoneslm send-report`) : abonnements avec destinataires, période et
   filtres ; résumé HTML (pénuries, sous-utilisation) + classeur Excel joint ; une fois par
   période (`--skip-sent`), aperçu `.eml` (`--dry-run`), envoi de test (`--to`) ; journal
   `report_delivery` (schéma v2).
@@ -58,15 +58,22 @@ numérotation [SemVer](https://semver.org/lang/fr/).
   et `ldap_validate_cert: false`, exemples en `Encrypt=yes`, retrait de `db_ddladmin` documenté.
 - Publication : construction sans droit d'écriture, empreintes `SHA256SUMS` jointes à la release.
 
+### Modifié
+- **Nouveau nom : HeptagonesLM** (anciennement FreeLM), avec le logo heptagone dans l'interface,
+  l'assistant, l'icône des exécutables et la documentation. Commande `heptagoneslm`, exécutables
+  `HeptagonesLM.exe` / `HeptagonesLM-Setup.exe`, configuration `heptagoneslm.yaml`, variables
+  d'environnement `HEPTAGONESLM_*`, dossier par défaut `C:\HeptagonesLM`, tâches planifiées
+  sous `\HeptagonesLM\`, dossier d'exploitation `docs/DEX_HeptagonesLM.docx`.
+
 ### Corrigé
-- **Authentification unique derrière IIS** : l'utilisateur Windows n'était pas transmis à FreeLM
+- **Authentification unique derrière IIS** : l'utilisateur Windows n'était pas transmis à HeptagonesLM
   (variable `{LOGON_USER}` évaluée par URL Rewrite *avant* l'authentification, donc vide). Il est
-  désormais transmis par un module ASP.NET (`App_Code\FreeLMUserHeader.cs`) exécuté après
+  désormais transmis par un module ASP.NET (`App_Code\HeptagonesLMUserHeader.cs`) exécuté après
   l'authentification, qui ignore aussi tout en-tête `X-Remote-User` envoyé par le navigateur.
   L'assistant installe ASP.NET 4.x et configure le pool en .NET v4.0 ; procédure manuelle mise à
   jour dans `docs/AUTHENTIFICATION.md`.
-- **Réinstallation / mise à jour** avec l'assistant : les tâches et processus FreeLM en cours sont
-  arrêtés avant le remplacement de `FreeLM.exe` (fichier verrouillé), puis relancés.
+- **Réinstallation / mise à jour** avec l'assistant : les tâches et processus HeptagonesLM en cours sont
+  arrêtés avant le remplacement de `HeptagonesLM.exe` (fichier verrouillé), puis relancés.
 
 ## [0.1.0] — 2026-09-27
 
@@ -86,17 +93,17 @@ Première version.
 - Journal des collectes, état persistant des logs.
 
 ### Restitution
-- Interface web `freelm web` : 9 rapports, filtres, graphiques interactifs, mode sombre,
+- Interface web `heptagoneslm web` : 9 rapports, filtres, graphiques interactifs, mode sombre,
   liens partageables, exports Excel / CSV / JSON par rapport.
-- Rapport Excel complet 8 onglets (`freelm report`).
-- `FreeLM.exe` autonome pour Windows (double-clic → interface).
+- Rapport Excel complet 8 onglets (`heptagoneslm report`).
+- `HeptagonesLM.exe` autonome pour Windows (double-clic → interface).
 
 ### Exploitation
 - Verrou SQL Server empêchant deux collectes simultanées (pas de sessions en double).
 
 ### Outils
-- `freelm demo` : simulateur de serveurs FlexLM (Autodesk, Ansys, MATLAB) et faux `lmutil`.
-- `freelm import-users` (services AD), `import-log` (reprise d'historique), `apply-products`, `purge`.
+- `heptagoneslm demo` : simulateur de serveurs FlexLM (Autodesk, Ansys, MATLAB) et faux `lmutil`.
+- `heptagoneslm import-users` (services AD), `import-log` (reprise d'historique), `apply-products`, `purge`.
 - Scripts de tâches planifiées Windows.
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.

@@ -1,10 +1,10 @@
-# Plan de test FreeLM
+# Plan de test HeptagonesLM
 
 | | |
 |---|---|
 | **Version testée** | 0.1.0 |
-| **Objet** | Valider FreeLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
-| **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/freelm.example.yaml) |
+| **Objet** | Valider HeptagonesLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
+| **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/heptagoneslm.example.yaml) |
 
 ## Sommaire
 
@@ -49,11 +49,11 @@ l'utilité des rapports.
 | Id | Environnement | Composants | Données |
 |---|---|---|---|
 | **E1** | CI GitHub Actions | Ubuntu + Windows, Python 3.10 / 3.12, SQL Server 2022 (conteneur), Chromium | Simulateur, fixtures |
-| **E2** | Poste de test | `FreeLM.exe` ou Python, SQLite | `freelm demo` / `freelm web --demo` |
-| **E3** | Préproduction | Serveur Windows FreeLM, base SQL Server **dédiée au test** (`FreeLM_TEST`), accès en lecture aux serveurs de licences réels et à leurs logs | Réelles |
-| **E4** | Production | Idem E3, base `FreeLM` | Réelles |
+| **E2** | Poste de test | `HeptagonesLM.exe` ou Python, SQLite | `heptagoneslm demo` / `heptagoneslm web --demo` |
+| **E3** | Préproduction | Serveur Windows HeptagonesLM, base SQL Server **dédiée au test** (`HeptagonesLM_TEST`), accès en lecture aux serveurs de licences réels et à leurs logs | Réelles |
+| **E4** | Production | Idem E3, base `HeptagonesLM` | Réelles |
 
-Prérequis E3 : compte de service (ex. `DOMAINE\svc_freelm`) ; ouverture pare-feu vers
+Prérequis E3 : compte de service (ex. `DOMAINE\svc_heptagoneslm`) ; ouverture pare-feu vers
 les ports `lmgrd` et des démons vendeurs ; partage en lecture des logs ; ODBC Driver 18 ;
 droits `db_datareader`, `db_datawriter`, `db_ddladmin` sur la base de test.
 
@@ -98,7 +98,7 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/test_mailer.py` | 9 | Libellés de période, validation de la configuration, envoi réel à un serveur SMTP de test (destinataires, sujet, HTML, texte, lien, pièce jointe), abonnement filtré, une fois par période, aperçu `.eml`, erreur SMTP journalisée, destinataires de test, abonnement ponctuel |
 | `tests/test_security.py` | 14 | Non-régression de l'audit ([SECURITE.md](SECURITE.md)) : DNS rebinding (Host forgé → 421), `Content-Length` négatif, connexion inactive coupée, plafond de connexions, en-tête `Server` sans version, erreur interne non divulguée, date hors limites, injection dans le journal d'audit, formules neutralisées (CSV, Excel), échec STARTTLS avant bind, SMTP authentifié sans chiffrement refusé |
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
-| `tests/test_setup.py` | 21 | Assistant d'installation : réponses et `freelm.yaml` généré (3 modes, validé par le chargeur réel), secrets jamais écrits, `web.config` IIS, échappement PowerShell, scripts sans mot de passe, prérequis et corrections, installation complète, échec puis reprise, plan selon le mode, vérification, serveur local (jeton, Host, anti-CSRF), mode silencieux |
+| `tests/test_setup.py` | 21 | Assistant d'installation : réponses et `heptagoneslm.yaml` généré (3 modes, validé par le chargeur réel), secrets jamais écrits, `web.config` IIS, échappement PowerShell, scripts sans mot de passe, prérequis et corrections, installation complète, échec puis reprise, plan selon le mode, vérification, serveur local (jeton, Host, anti-CSRF), mode silencieux |
 | `tests/ui/setup_smoke.cjs` | — | Navigateur réel : parcours complet de l'assistant (simulation) : corrections automatiques, validation des champs, tous les tests de connexion, installation jusqu'à 100 %, vérification verte, rapport sans mot de passe, mobile |
 | `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 11 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
@@ -108,8 +108,8 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 |---|---|
 | Tests + démo (Linux, Windows × Python 3.10, 3.12) | Tests unitaires ; script SQL à jour ; démo 30 jours + rapport Excel ; collecte « en direct » via le faux lmutil ; relecture des classeurs ; rendu PDF (LibreOffice) |
 | Interface web (navigateur) | `tests/ui/ui_smoke.cjs`, `tests/ui/login_smoke.cjs`, `tests/ui/setup_smoke.cjs` + captures d'écran publiées |
-| Installation réelle sur Windows Server | `FreeLM-Setup.exe setup --answers` sur un runner Windows : installation d'IIS, d'URL Rewrite et d'ARR, site HTTPS (certificat), tâches sous un compte de service local, authentification unique vérifiée à travers IIS, collecte planifiée, réinstallation (idempotence) |
-| Exécutable Windows | Construction de `FreeLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
+| Installation réelle sur Windows Server | `HeptagonesLM-Setup.exe setup --answers` sur un runner Windows : installation d'IIS, d'URL Rewrite et d'ARR, site HTTPS (certificat), tâches sous un compte de service local, authentification unique vérifiée à travers IIS, collecte planifiée, réinstallation (idempotence) |
+| Exécutable Windows | Construction de `HeptagonesLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
 | SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; aperçu d'e-mail ; vues SQL non vides ; relance de la démo |
 
 | Id | Cas | Résultat attendu | Statut |
@@ -122,17 +122,17 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 
 ## 5. Cas de test fonctionnels
 
-Sauf mention contraire : E2 avec `freelm web --demo` / `freelm demo`, puis rejoués
+Sauf mention contraire : E2 avec `heptagoneslm web --demo` / `heptagoneslm demo`, puis rejoués
 sur E3 pour les cas marqués **[E3]**.
 
 ### 5.1 Installation (INS)
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| INS-01 🔴 | Exécutable autonome | Copier `FreeLM.exe` sur un poste **sans Python** ; `FreeLM.exe --version` | Affiche `FreeLM 0.1.0` | ☐ |
-| INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `freelm --version` | Installation sans erreur, version affichée | ☐ |
+| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 0.1.0` | ☐ |
+| INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `heptagoneslm --version` | Installation sans erreur, version affichée | ☐ |
 | INS-03 🔴 [E3] | Création de la base | DBA : `sqlcmd -S … -i sql\sqlserver\00_create_database.sql` (base de test) | Base et compte de service créés, rôles attribués | ☐ |
-| INS-04 🔴 [E3] | Création du schéma | `FreeLM.exe -c freelm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
+| INS-04 🔴 [E3] | Création du schéma | `HeptagonesLM.exe -c heptagoneslm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
 | INS-05 [E3] | Idempotence | Relancer `init-db` 2 fois | Aucune erreur, aucune donnée perdue, `schema_info` contient 1 ligne | ☐ |
 | INS-06 [E3] | Script SQL manuel | Exécuter `sql\sqlserver\01_schema.sql` sur une base vide, puis `init-db` | Schéma identique, `init-db` sans erreur | ☐ |
 | INS-07 [E3] | Pilote ODBC absent | Sur un poste sans ODBC Driver 18 : `init-db` | Message d'erreur explicite du pilote, code retour 1 | ☐ |
@@ -147,7 +147,7 @@ sur E3 pour les cas marqués **[E3]**.
 | CFG-04 | Deux serveurs de même nom | « Nom de serveur en double » | ☐ |
 | CFG-05 | `sessions_from: log` sans le collecteur `log` | Erreur « ce collecteur n'est pas activé » | ☐ |
 | CFG-06 | Collecteur `log` sans `log_path` | « log_path est obligatoire » | ☐ |
-| CFG-07 | Mot de passe SQL via `${FREELM_DB_PASSWORD}` (variable d'environnement du compte de service) | Connexion réussie ; le mot de passe n'apparaît pas dans le YAML | ☐ |
+| CFG-07 | Mot de passe SQL via `${HEPTAGONESLM_DB_PASSWORD}` (variable d'environnement du compte de service) | Connexion réussie ; le mot de passe n'apparaît pas dans le YAML | ☐ |
 | CFG-08 | Règle produit `*_Toolbox` avec `vendor: MLM` | Seules les features MLM correspondantes prennent le produit | ☐ |
 | CFG-09 | Modifier une règle produit puis `apply-products` | Le nouveau libellé apparaît sur tout l'historique (interface, rapports) | ☐ |
 
@@ -192,7 +192,7 @@ comparer. La validation sur les serveurs réels fait l'objet du § 6.
 
 ### 5.6 Interface web (WEB)
 
-Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
+Lancer `HeptagonesLM.exe` (double-clic) ou `heptagoneslm web --demo --open`.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
@@ -231,7 +231,7 @@ Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
 
 | Id | Étapes | Résultat attendu | Statut |
 |---|---|---|:---:|
-| EXP-01 🔴 | Excel sur chaque onglet | Fichier `FreeLM_<rapport>_<début>_<fin>.xlsx` ; s'ouvre dans Excel sans réparation ; titre, filtres appliqués, tableau Excel, graphique natif (onglet « Graphique ») | ☐ |
+| EXP-01 🔴 | Excel sur chaque onglet | Fichier `HeptagonesLM_<rapport>_<début>_<fin>.xlsx` ; s'ouvre dans Excel sans réparation ; titre, filtres appliqués, tableau Excel, graphique natif (onglet « Graphique ») | ☐ |
 | EXP-02 🔴 | CSV | S'ouvre par double-clic dans Excel français : colonnes séparées, accents corrects, décimales à virgule, pourcentages en % | ☐ |
 | EXP-03 | JSON | Fichier valide, mêmes lignes que l'écran | ☐ |
 | EXP-04 🔴 | Rapport complet | Classeur 8 onglets (Synthèse, Usage quotidien, Utilisateurs, Profil horaire, Contention, Refus, Sessions, À propos), filtres serveurs/produits appliqués | ☐ |
@@ -245,15 +245,15 @@ Lancer `FreeLM.exe` (double-clic) ou `freelm web --demo --open`.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| EXE-01 🔴 | Double-clic sans configuration | Double-clic sur `FreeLM.exe` dans un dossier vide | Console « Mode démonstration… », navigateur ouvert sur l'interface | ☐ |
-| EXE-02 🔴 [E3] | Double-clic avec configuration | Placer `freelm.yaml` à côté de l'exe, double-clic | Interface sur les **données réelles** | ☐ |
+| EXE-01 🔴 | Double-clic sans configuration | Double-clic sur `HeptagonesLM.exe` dans un dossier vide | Console « Mode démonstration… », navigateur ouvert sur l'interface | ☐ |
+| EXE-02 🔴 [E3] | Double-clic avec configuration | Placer `heptagoneslm.yaml` à côté de l'exe, double-clic | Interface sur les **données réelles** | ☐ |
 | EXE-03 | Fermeture | Fermer la console | Interface arrêtée (page injoignable) | ☐ |
 | EXE-04 | SmartScreen / antivirus | Premier lancement sur un poste standard | Avertissement éventuel contournable ; pas de blocage antivirus (sinon : liste blanche) | ☐ |
-| PLN-01 🔴 [E3] | Enregistrement des tâches | `scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount DOMAINE\svc_freelm` | 3 tâches sous `\FreeLM\` dans le Planificateur | ☐ |
+| PLN-01 🔴 [E3] | Enregistrement des tâches | `scripts\register_tasks.ps1 -HeptagonesLMHome C:\HeptagonesLM -ServiceAccount DOMAINE\svc_heptagoneslm` | 3 tâches sous `\HeptagonesLM\` dans le Planificateur | ☐ |
 | PLN-02 🔴 [E3] | Collecte toutes les 5 min | Attendre 30 min | 6 exécutions `OK` par collecteur dans l'onglet Collectes ; pas de chevauchement | ☐ |
 | PLN-03 [E3] | Droits du compte de service | Tâche exécutée sans session ouverte | Collecte OK (accès réseau lmgrd, partage des logs, SQL Server en authentification Windows) | ☐ |
 | PLN-04 [E3] | Rapport mensuel | Exécuter manuellement la tâche « Rapport mensuel » deux fois | Rapport du mois précédent créé une seule fois | ☐ |
-| PLN-05 [E3] | Redémarrage du serveur FreeLM | Redémarrer la machine | Tâches reprennent sans intervention | ☐ |
+| PLN-05 [E3] | Redémarrage du serveur HeptagonesLM | Redémarrer la machine | Tâches reprennent sans intervention | ☐ |
 | USR-01 [E3] | Import AD | Export `Get-ADUser … | Export-Csv users.csv` ; `import-users users.csv` | « N mis à jour, M créés » ; services visibles dans le filtre Services et la Répartition par service | ☐ |
 | USR-02 | Colonnes françaises / séparateur `;` / encodage ANSI | CSV `utilisateur;nom;service` enregistré par Excel | Import correct, accents conservés | ☐ |
 | USR-03 | Colonne identifiant absente | CSV sans colonne reconnue | Message listant les noms de colonnes attendus | ☐ |
@@ -269,19 +269,19 @@ prévoir un compte de test membre du groupe autorisé et un compte non membre.
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
 | AUTH-01 🔴 [E3] | Sécurité au démarrage | `auth.mode: ldap`, `host: 0.0.0.0`, **sans** certificat ; lancer `web` | Refus : « Connexion AD sur le réseau sans HTTPS… », code 1 | ☐ |
-| AUTH-02 🔴 [E3] | HTTPS | Certificat de l'AC d'entreprise ; ouvrir `https://freelm…:8765` depuis un poste du domaine | Cadenas sans avertissement ; `http://` refusé | ☐ |
+| AUTH-02 🔴 [E3] | HTTPS | Certificat de l'AC d'entreprise ; ouvrir `https://heptagoneslm…:8765` depuis un poste du domaine | Cadenas sans avertissement ; `http://` refusé | ☐ |
 | AUTH-03 🔴 [E3] | Redirection | Ouvrir un lien de rapport partagé sans être connecté | Page de connexion ; après connexion, retour **sur le rapport du lien** | ☐ |
 | AUTH-04 🔴 [E3] | Connexion nominale | Compte membre du groupe, formats `jdupont`, `DOMAINE\jdupont`, `jdupont@domaine` | Connexion ; nom complet affiché en haut à droite | ☐ |
 | AUTH-05 🔴 [E3] | Mauvais mot de passe | Saisir un mot de passe erroné | « Identifiant ou mot de passe incorrect » ; échec dans le journal d'audit | ☐ |
 | AUTH-06 🔴 [E3] | Restriction par groupe | Compte valide **hors** du groupe autorisé | « Accès refusé : vous n'appartenez à aucun groupe autorisé » | ☐ |
 | AUTH-07 [E3] | Groupe imbriqué | Compte membre d'un groupe lui-même membre du groupe autorisé | Connexion acceptée | ☐ |
-| AUTH-08 [E3] | Blocage | 5 échecs consécutifs puis bon mot de passe | « Trop de tentatives… » pendant 15 min ; **compte AD non verrouillé** (seuil FreeLM < seuil AD) | ☐ |
+| AUTH-08 [E3] | Blocage | 5 échecs consécutifs puis bon mot de passe | « Trop de tentatives… » pendant 15 min ; **compte AD non verrouillé** (seuil HeptagonesLM < seuil AD) | ☐ |
 | AUTH-09 [E3] | Déconnexion | « Se déconnecter », puis bouton Précédent du navigateur | Retour à la connexion ; données non accessibles | ☐ |
 | AUTH-10 [E3] | Expiration | `session_hours: 0.05` (3 min) ; attendre 4 min puis changer d'onglet | Retour à la page de connexion | ☐ |
 | AUTH-11 [E3] | Redondance des DC | Deux `ldap_servers`, le premier arrêté / filtré | Connexion via le second | ☐ |
-| AUTH-12 [E3] | Annuaire injoignable | Tous les DC filtrés | « Annuaire indisponible, réessayez plus tard » ; cause dans `freelm.log` | ☐ |
-| AUTH-13 🔴 [E3] | Journal d'audit | Se connecter, exporter un rapport, se déconnecter | `freelm.log` : connexion, export (utilisateur, rapport, format, filtres), déconnexion ; **aucun mot de passe** | ☐ |
-| AUTH-14 [E3] | SSO IIS (si mode header retenu) | Poste du domaine, navigateur Edge | Accès **sans saisie** ; nom affiché ; accès direct au port FreeLM impossible depuis un autre poste | ☐ |
+| AUTH-12 [E3] | Annuaire injoignable | Tous les DC filtrés | « Annuaire indisponible, réessayez plus tard » ; cause dans `heptagoneslm.log` | ☐ |
+| AUTH-13 🔴 [E3] | Journal d'audit | Se connecter, exporter un rapport, se déconnecter | `heptagoneslm.log` : connexion, export (utilisateur, rapport, format, filtres), déconnexion ; **aucun mot de passe** | ☐ |
+| AUTH-14 [E3] | SSO IIS (si mode header retenu) | Poste du domaine, navigateur Edge | Accès **sans saisie** ; nom affiché ; accès direct au port HeptagonesLM impossible depuis un autre poste | ☐ |
 | AUTH-15 [E3] | Usurpation d'en-tête (mode header) | Requête vers IIS avec un en-tête `X-Remote-User: admin` forgé | Ignoré : l'utilisateur reste celui authentifié par IIS | ☐ |
 | AUTH-16 [E3] | Service permanent | `register_tasks.ps1 … -WithWebInterface` ; redémarrer le serveur | Interface disponible sans intervention | ☐ |
 
@@ -292,14 +292,14 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
 | MAIL-01 🔴 | Aperçu sans envoi | `send-report --dry-run apercu` | Un `.eml` par abonnement, ouvrable dans Outlook ; rien n'est envoyé ni tracé | ☐ |
-| MAIL-02 🔴 [E3] | Envoi de test | `send-report --to moi@entreprise.local` | Message reçu (pas en indésirables) ; sujet « FreeLM — Utilisation des licences <mois> — <abonnement> » | ☐ |
+| MAIL-02 🔴 [E3] | Envoi de test | `send-report --to moi@entreprise.local` | Message reçu (pas en indésirables) ; sujet « HeptagonesLM — Utilisation des licences <mois> — <abonnement> » | ☐ |
 | MAIL-03 🔴 [E3] | Contenu | Lire le message reçu | Indicateurs, produits en pénurie / sous-utilisés, tableau par produit, lien qui ouvre l'interface **sur la bonne période et les bons filtres** ; lisible dans Outlook (bureau, web, mobile) | ☐ |
 | MAIL-04 🔴 [E3] | Pièce jointe | Ouvrir le classeur joint | Classeur 8 onglets du mois précédent, filtré comme l'abonnement | ☐ |
 | MAIL-05 | Abonnement filtré | Abonnement `servers: [ANSYS]` | Seuls les produits Ansys apparaissent | ☐ |
 | MAIL-06 🔴 [E3] | Une fois par période | Lancer 2 fois `send-report --skip-sent` | 2ᵉ exécution : `SKIPPED déjà envoyé…` ; un seul message reçu | ☐ |
 | MAIL-07 [E3] | Rattrapage | Tâche « Envoi des rapports » désactivée le 1er, réactivée le 2 | Envoi le 2, une seule fois | ☐ |
 | MAIL-08 [E3] | SMTP indisponible | `smtp_host` erroné | `ERROR` + code retour 2 ; échec tracé dans `report_delivery` ; nouvel essai le lendemain | ☐ |
-| MAIL-09 [E3] | Authentification SMTP | `security: starttls`, port 587, `username` / `password: ${FREELM_SMTP_PASSWORD}` | Envoi réussi ; mot de passe absent du YAML et des journaux | ☐ |
+| MAIL-09 [E3] | Authentification SMTP | `security: starttls`, port 587, `username` / `password: ${HEPTAGONESLM_SMTP_PASSWORD}` | Envoi réussi ; mot de passe absent du YAML et des journaux | ☐ |
 | MAIL-10 | Pièce jointe trop lourde | `max_attachment_mb: 0.01` | Message envoyé sans pièce jointe, avec la mention « Classeur Excel non joint… » | ☐ |
 | MAIL-11 | Configuration invalide | Abonnement sans destinataire ; période inconnue ; abonnements sans `smtp_host` | Erreur de configuration explicite | ☐ |
 | MAIL-12 [E3] | Traçabilité | `SELECT * FROM report_delivery ORDER BY sent_at DESC` | Une ligne par envoi : abonnement, période, destinataires, statut | ☐ |
@@ -308,11 +308,11 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 
 ### 5.11 Assistant d'installation (INST)
 
-Sur un serveur Windows de recette vierge, avec `FreeLM-Setup.exe`.
+Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| INST-01 🔴 | Élévation | Double-clic sur FreeLM-Setup.exe | Demande d'élévation UAC ; console avec l'adresse ; navigateur ouvert sur l'assistant | ☐ |
+| INST-01 🔴 | Élévation | Double-clic sur HeptagonesLM-Setup.exe | Demande d'élévation UAC ; console avec l'adresse ; navigateur ouvert sur l'assistant | ☐ |
 | INST-02 | Accès protégé | Ouvrir `http://127.0.0.1:<port>/` sans le jeton, depuis un autre profil | 403 | ☐ |
 | INST-03 🔴 | Prérequis | Étape 2 sur un serveur sans IIS | Rôles IIS, URL Rewrite, ARR signalés ; « Installer » les installe ; relance de la vérification verte | ☐ |
 | INST-04 | Hors ligne | Serveur sans Internet, MSI déposés dans `prerequis\` | Modules installés depuis les fichiers locaux | ☐ |
@@ -322,14 +322,14 @@ Sur un serveur Windows de recette vierge, avec `FreeLM-Setup.exe`.
 | INST-08 🔴 | IIS | Mode IIS, certificat du magasin, groupe AD | Site HTTPS démarré, authentification Windows seule, accès limité au groupe ; un membre du groupe arrive connecté sous son nom (en-tête `X-Remote-User` forgé par le navigateur ignoré) | ☐ |
 | INST-09 🔴 | Progression | Lancer l'installation | Barre de 0 à 100 %, étapes cochées, journal détaillé | ☐ |
 | INST-10 | Reprise | Provoquer un échec (compte sans droit), corriger, « Réessayer » | Reprise à l'étape en échec, installation terminée | ☐ |
-| INST-11 🔴 | Vérification | Fin d'installation | Tous les contrôles verts ; « Ouvrir FreeLM » ouvre l'interface sans saisie de mot de passe | ☐ |
+| INST-11 🔴 | Vérification | Fin d'installation | Tous les contrôles verts ; « Ouvrir HeptagonesLM » ouvre l'interface sans saisie de mot de passe | ☐ |
 | INST-12 | Réinstallation | Relancer l'assistant avec les mêmes réponses | Aucune erreur ; ancienne configuration sauvegardée en `.bak` | ☐ |
-| INST-13 | Silencieux | `FreeLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
-| INST-14 | Secrets | Rechercher les mots de passe dans `freelm.yaml`, `logs\*`, le rapport | Absents | ☐ |
+| INST-13 | Silencieux | `HeptagonesLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
+| INST-14 | Secrets | Rechercher les mots de passe dans `heptagoneslm.yaml`, `logs\*`, le rapport | Absents | ☐ |
 
 ## 6. Validation sur les serveurs réels
 
-Objectif : prouver que les chiffres de FreeLM sont **ceux de la réalité**, pour chaque
+Objectif : prouver que les chiffres de HeptagonesLM sont **ceux de la réalité**, pour chaque
 serveur de licences (Autodesk, Ansys, MATLAB…). Environnement E3, collecte planifiée
 active depuis au moins 24 h.
 
@@ -347,7 +347,7 @@ active depuis au moins 24 h.
 |---|---|---|:---:|
 | VSR-04 🔴 | Serveur avec log : compter les refus de la veille dans le log (`findstr /C:"DENIED:" license.log` sur la journée) | Égal au nombre de refus de l'onglet Refus pour ce jour | ☐ |
 | VSR-05 🔴 | Serveur avec log : compter les `OUT:` de la veille | Égal au nombre de sessions du jour (source log) | ☐ |
-| VSR-06 | Pic de la journée vs relevés lmstat manuels à 3 moments de forte charge | Pic FreeLM ≥ chacun des relevés et ≤ jetons émis | ☐ |
+| VSR-06 | Pic de la journée vs relevés lmstat manuels à 3 moments de forte charge | Pic HeptagonesLM ≥ chacun des relevés et ≤ jetons émis | ☐ |
 | VSR-07 | Si OpenLM (ou un autre outil) est encore en service : comparer pic journalier et heures par produit sur 1 semaine | Écart de pic ≤ 1 jeton ; écart d'heures ≤ 5 % | ☐ |
 
 ### 6.3 Test contrôlé avec un utilisateur volontaire
@@ -370,38 +370,38 @@ active depuis au moins 24 h.
 | PRF-05 [E3] | Rapport complet sur 1 an | < 2 min | | ☐ |
 | PRF-06 [E3] | Volume de base après 1 mois | Conforme à l'estimation (≈ 60 000 sondages / jour pour 200 features à 5 min) ; extrapolation sur 3 ans < capacité de l'instance | | ☐ |
 
-Aide : `freelm demo --days 365 --connection-string "<base de test>"` produit un an de
+Aide : `heptagoneslm demo --days 365 --connection-string "<base de test>"` produit un an de
 données simulées pour mesurer PRF-03 à PRF-05 avant d'avoir un an d'historique réel.
 
 ## 8. Sécurité
 
 | Id | Étapes | Résultat attendu | Statut |
 |---|---|---|:---:|
-| SEC-01 🔴 | `netstat -ano | findstr 8765` avec `freelm web` par défaut (`auth.mode: none`) | Écoute sur `127.0.0.1` uniquement | ☐ |
+| SEC-01 🔴 | `netstat -ano | findstr 8765` avec `heptagoneslm web` par défaut (`auth.mode: none`) | Écoute sur `127.0.0.1` uniquement | ☐ |
 | SEC-02 | Depuis un autre poste : `http://<serveur>:8765/` (configuration par défaut) | Injoignable ; accès réseau uniquement avec authentification + HTTPS (§ 5.9) | ☐ |
 | SEC-03 🔴 | Lecture seule | Aucune action de l'interface ne modifie la base (vérifier `SELECT COUNT(*)` des tables avant / après une session d'utilisation) | ☐ |
 | SEC-04 | Injection | Paramètres forgés dans l'URL : `server=' OR 1=1 --`, `type=../../etc`, `start=2026-01-01;DROP` | Réponse 400 ou résultat vide ; aucune erreur SQL | ☐ |
-| SEC-05 | Traversée de répertoire | `http://localhost:8765/../freelm.yaml`, `/static/../../freelm.yaml` | 404 | ☐ |
-| SEC-06 | Secrets | Parcourir `freelm.log` et l'onglet Collectes | Aucun mot de passe affiché | ☐ |
+| SEC-05 | Traversée de répertoire | `http://localhost:8765/../heptagoneslm.yaml`, `/static/../../heptagoneslm.yaml` | 404 | ☐ |
+| SEC-06 | Secrets | Parcourir `heptagoneslm.log` et l'onglet Collectes | Aucun mot de passe affiché | ☐ |
 | SEC-07 [E3] | Moindre privilège | Retirer `db_ddladmin` après `init-db` | Collecte et interface fonctionnent | ☐ |
 | SEC-09 🔴 | DNS rebinding | `curl -H "Host: attaquant.example.com" http://localhost:8765/api/meta` | **421** ; avec le vrai nom du serveur : 200 | ☐ |
 | SEC-10 | Connexions lentes | Ouvrir une connexion TCP sur le port sans rien envoyer | Fermée par le serveur après `request_timeout_s` (30 s) | ☐ |
 | SEC-11 🔴 | Injection de formule | Utilisateur de test nommé `=1+1` (ou poste) ; exporter Sessions en CSV et Excel | Affiché en texte `=1+1`, jamais calculé | ☐ |
-| SEC-12 [E3] | Compte des tâches | `Get-ScheduledTask -TaskPath \FreeLM\ | Select TaskName, @{n="Compte";e={$_.Principal.UserId}}` | Compte de service dédié, jamais SYSTEM ; `register_tasks.ps1` sans `-ServiceAccount` refusé | ☐ |
+| SEC-12 [E3] | Compte des tâches | `Get-ScheduledTask -TaskPath \HeptagonesLM\ | Select TaskName, @{n="Compte";e={$_.Principal.UserId}}` | Compte de service dédié, jamais SYSTEM ; `register_tasks.ps1` sans `-ServiceAccount` refusé | ☐ |
 | SEC-13 [E3] | Chiffrement SQL | Chaîne de connexion de production | `Encrypt=yes`, pas de `TrustServerCertificate=yes` ; aucun avertissement « SÉCURITÉ » au démarrage | ☐ |
-| SEC-14 | Intégrité de l'exécutable | `Get-FileHash FreeLM.exe -Algorithm SHA256` | Identique à `SHA256SUMS` de la release | ☐ |
+| SEC-14 | Intégrité de l'exécutable | `Get-FileHash HeptagonesLM.exe -Algorithm SHA256` | Identique à `SHA256SUMS` de la release | ☐ |
 | SEC-08 | Données personnelles | Identifier les destinataires des rapports (noms, services, horaires) ; informer le DPO | Traitement déclaré / validé (RGPD) | ☐ |
 
 ## 9. Robustesse
 
 | Id | Situation provoquée | Résultat attendu | Statut |
 |---|---|---|:---:|
-| ROB-01 🔴 [E3] | SQL Server arrêté pendant une collecte | Échec journalisé dans `freelm.log`, code retour 1 ; collecte suivante normale une fois SQL Server revenu | ☐ |
+| ROB-01 🔴 [E3] | SQL Server arrêté pendant une collecte | Échec journalisé dans `heptagoneslm.log`, code retour 1 ; collecte suivante normale une fois SQL Server revenu | ☐ |
 | ROB-02 [E3] | Serveur de licences arrêté 1 h | Collectes `ERROR` pendant l'arrêt ; sessions non fermées à tort ; reprise automatique | ☐ |
 | ROB-03 [E3] | Collecte interrompue (tâche désactivée) 1 journée | À la reprise, sessions disparues fermées avec une fin estimée ≤ 30 min après leur dernière observation | ☐ |
 | ROB-04 | Changement d'heure (fin octobre / fin mars) | Pas de doublon ni de session négative autour de 2 h–3 h | ☐ |
 | ROB-05 | Caractères accentués / cp1252 dans les noms (logs, AD) | Affichage correct dans l'interface et les exports | ☐ |
-| ROB-06 [E3] | Disque plein sur le serveur FreeLM | Message d'erreur, pas de corruption de la base | ☐ |
+| ROB-06 [E3] | Disque plein sur le serveur HeptagonesLM | Message d'erreur, pas de corruption de la base | ☐ |
 | ROB-07 [E3] | Deux collectes simultanées (lancement manuel pendant la tâche planifiée) | La 2ᵉ s'arrête aussitôt avec « Une collecte est déjà en cours : exécution ignorée » (verrou SQL Server) ; aucune session en double | ☐ |
 
 ## 10. Recette métier
@@ -440,7 +440,7 @@ achats, DSI) sur les données réelles (E3), après au moins 2 semaines de colle
 
 Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/FREE-LM/issues/new/choose)
 (modèle « Signaler un bug ») avec l'identifiant du cas (ex. `[COL-03]`), la gravité et
-les journaux (`freelm.log`, lancé avec `-v`). Pour un problème de parsing, joindre la
+les journaux (`heptagoneslm.log`, lancé avec `-v`). Pour un problème de parsing, joindre la
 sortie `lmstat` ou l'extrait de log **anonymisé** : il deviendra un test automatisé.
 
 ### 11.3 Procès-verbal de recette
@@ -457,7 +457,7 @@ sortie `lmstat` ou l'extrait de log **anonymisé** : il deviendra un test automa
 
 | Rôle | Nom | Date | Signature |
 |---|---|---|---|
-| Administrateur applicatif (FreeLM) | | | |
+| Administrateur applicatif (HeptagonesLM) | | | |
 | Administrateur des licences | | | |
 | Responsable métier | | | |
 | Responsable sécurité / DPO | | | |

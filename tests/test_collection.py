@@ -1,10 +1,10 @@
 import unittest
 from datetime import datetime, timedelta
 
-from freelm.collectors.flexlm.logfile import FlexlmLogParser
-from freelm.models import Checkout, FeatureStatus, ServerStatus
-from freelm.service import CollectionService
-from freelm.storage.schema import render_script
+from heptagoneslm.collectors.flexlm.logfile import FlexlmLogParser
+from heptagoneslm.models import Checkout, FeatureStatus, ServerStatus
+from heptagoneslm.service import CollectionService
+from heptagoneslm.storage.schema import render_script
 from tests.helpers import FIXTURES, make_config, make_db
 
 T0 = datetime(2024, 9, 23, 10, 0)

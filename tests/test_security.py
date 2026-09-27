@@ -15,11 +15,11 @@ import unittest
 from datetime import datetime, timedelta
 from unittest import mock
 
-from freelm.config import AuthConfig, ConfigError, load_config, parse_config
-from freelm.simulation.demo import run_demo
-from freelm.web import api
-from freelm.web.auth import Auth, AuthError, LdapAuthenticator, UserInfo
-from freelm.web.server import allowed_host_names, make_server
+from heptagoneslm.config import AuthConfig, ConfigError, load_config, parse_config
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.web import api
+from heptagoneslm.web.auth import Auth, AuthError, LdapAuthenticator, UserInfo
+from heptagoneslm.web.server import allowed_host_names, make_server
 
 HAS_OPENPYXL = importlib.util.find_spec("openpyxl") is not None
 MONDAY = datetime(2024, 9, 23)
@@ -85,10 +85,10 @@ class HostHeaderTest(_Server):
 
     def test_allowed_hosts_config(self):
         cfg = parse_config({"database": {"connection_string": "sqlite:///:memory:"}, "servers": [],
-                            "web": {"public_url": "https://freelm.entreprise.local:8443",
+                            "web": {"public_url": "https://heptagoneslm.entreprise.local:8443",
                                     "allowed_hosts": ["10.1.2.3"]}})
         names = allowed_host_names(cfg, "127.0.0.1")
-        self.assertTrue({"freelm.entreprise.local", "10.1.2.3", "localhost"} <= names)
+        self.assertTrue({"heptagoneslm.entreprise.local", "10.1.2.3", "localhost"} <= names)
         self.assertNotIn("attaquant.example.com", names)
         cfg.web.allowed_hosts = ["*"]
         self.assertIsNone(allowed_host_names(cfg, "0.0.0.0"))
@@ -116,7 +116,7 @@ class RobustnessTest(_Server):
 
     def test_no_version_in_server_header(self):
         _, r, _ = self.get("/login.html")
-        self.assertEqual(r.getheader("Server").strip(), "FreeLM")
+        self.assertEqual(r.getheader("Server").strip(), "HeptagonesLM")
 
     def test_internal_error_is_generic(self):
         with mock.patch.object(api, "run_report", side_effect=RuntimeError(r"C:\secret\chemin.db verrouillé")):
@@ -170,8 +170,8 @@ class AuditLogInjectionTest(_Server):
     web = {"auth": {"mode": "ldap", "ldap_servers": ["ldaps://dc"], "base_dn": "DC=x", "upn_suffix": "x"}}
 
     def test_newlines_neutralized(self):
-        forged = "x\n2026-09-27 13:00:00 INFO    freelm.audit - Connexion : admin depuis 10.0.0.1"
-        with self.assertLogs("freelm.audit", "INFO") as logs:
+        forged = "x\n2026-09-27 13:00:00 INFO    heptagoneslm.audit - Connexion : admin depuis 10.0.0.1"
+        with self.assertLogs("heptagoneslm.audit", "INFO") as logs:
             status, _, _ = self.get("/api/login", method="POST", body={"username": forged, "password": "y"})
         self.assertEqual(status, 401)
         line = logs.records[0].getMessage()

@@ -7,7 +7,7 @@ dist/
 venv/
 .pytest_cache/
 # données locales
-freelm.yaml
+heptagoneslm.yaml
 *.db
 reports/
 logs/

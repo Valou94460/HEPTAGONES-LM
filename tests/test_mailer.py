@@ -7,10 +7,10 @@ import unittest
 from datetime import date, datetime, timedelta
 from email import policy
 
-from freelm.config import ConfigError, Subscription, load_config, parse_config
-from freelm.mailer import deliver, period_label
-from freelm.simulation.demo import run_demo
-from freelm.storage import Database
+from heptagoneslm.config import ConfigError, Subscription, load_config, parse_config
+from heptagoneslm.mailer import deliver, period_label
+from heptagoneslm.simulation.demo import run_demo
+from heptagoneslm.storage import Database
 
 HAS_OPENPYXL = importlib.util.find_spec("openpyxl") is not None
 MONDAY = datetime(2024, 9, 23)
@@ -80,10 +80,10 @@ class DeliveryTest(unittest.TestCase):
         cls.cfg = parse_config({
             "database": {"connection_string": raw.database.connection_string},
             "servers": [{"name": s.name, "port_at_host": s.port_at_host} for s in raw.servers],
-            "web": {"public_url": "https://freelm.test.local:8443"},
+            "web": {"public_url": "https://heptagoneslm.test.local:8443"},
             "email": {
                 "smtp_host": "127.0.0.1", "smtp_port": cls.smtp.server_address[1], "security": "none",
-                "sender": "FreeLM <freelm@test.local>",
+                "sender": "HeptagonesLM <heptagoneslm@test.local>",
                 "subscriptions": [
                     {"name": "Direction", "recipients": ["dsi@test.local", "achats@test.local"],
                      "attach_excel": HAS_OPENPYXL},
@@ -116,15 +116,15 @@ class DeliveryTest(unittest.TestCase):
         rcpt, raw = self.smtp.messages[0]
         self.assertEqual(sorted(rcpt), ["<achats@test.local>", "<dsi@test.local>"])
         msg = email.message_from_bytes(raw, policy=policy.default)
-        self.assertEqual(msg["Subject"], "FreeLM — Utilisation des licences octobre 2024 — Direction")
+        self.assertEqual(msg["Subject"], "HeptagonesLM — Utilisation des licences octobre 2024 — Direction")
         html = msg.get_body(("html",)).get_content()
         self.assertIn("Utilisation des licences — octobre 2024", html)
         self.assertIn("AutoCAD 2024", html)
-        self.assertIn("https://freelm.test.local:8443/#type=summary", html)
+        self.assertIn("https://heptagoneslm.test.local:8443/#type=summary", html)
         self.assertIn("start=2024-10-01", html)
         self.assertIn("Heures saturées", msg.get_body(("plain",)).get_content())
         attachments = [p.get_filename() for p in msg.iter_attachments()]
-        self.assertEqual(attachments, ["FreeLM_Direction_20241001_20241031.xlsx"] if HAS_OPENPYXL else [])
+        self.assertEqual(attachments, ["HeptagonesLM_Direction_20241001_20241031.xlsx"] if HAS_OPENPYXL else [])
 
     def test_filtered_subscription(self):
         deliver(self.cfg, self.db, self.sub("Simulation"), today=self.today)

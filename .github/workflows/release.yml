@@ -41,33 +41,33 @@ jobs:
           pip install -e ".[dev]" pyinstaller
           python -m pytest -q
 
-      - name: Construction de FreeLM.exe
+      - name: Construction de HeptagonesLM.exe
         run: |
-          pyinstaller --noconfirm --clean --onefile --console --name FreeLM \
-            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
-            --add-data "freelm/setup/static:freelm/setup/static" freelm/launcher.py
-          ./dist/FreeLM.exe --version
-          pyinstaller --noconfirm --onefile --console --uac-admin --name FreeLM-Setup \
-            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" \
-            --add-data "freelm/setup/static:freelm/setup/static" --add-data "dist/FreeLM.exe:." freelm/launcher.py
-          ./dist/FreeLM-Setup.exe --version
+          pyinstaller --noconfirm --clean --onefile --console --name HeptagonesLM --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
+          ./dist/HeptagonesLM.exe --version
+          pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
+          ./dist/HeptagonesLM-Setup.exe --version
 
       - name: Vérification rapide
         run: |
           cd dist
-          ./FreeLM.exe demo --days 3 --output-dir verif
+          ./HeptagonesLM.exe demo --days 3 --output-dir verif
           test -s verif/reports/*.xlsx
 
       - name: Paquet de distribution
         run: |
-          mkdir -p paquet/FreeLM/sql paquet/FreeLM/scripts
-          cp dist/FreeLM.exe dist/FreeLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/FreeLM/
-          cp config/freelm.example.yaml paquet/FreeLM/freelm.example.yaml
-          cp sql/sqlserver/*.sql paquet/FreeLM/sql/
-          cp scripts/*.ps1 scripts/*.bat paquet/FreeLM/scripts/
+          mkdir -p paquet/HeptagonesLM/sql paquet/HeptagonesLM/scripts
+          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/HeptagonesLM/
+          cp config/heptagoneslm.example.yaml paquet/HeptagonesLM/heptagoneslm.example.yaml
+          cp sql/sqlserver/*.sql paquet/HeptagonesLM/sql/
+          cp scripts/*.ps1 scripts/*.bat paquet/HeptagonesLM/scripts/
           mkdir -p livrables
-          cp dist/FreeLM.exe dist/FreeLM-Setup.exe livrables/
-          (cd paquet && 7z a -tzip "../livrables/FreeLM-${GITHUB_REF_NAME}-windows.zip" FreeLM > /dev/null)
+          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe livrables/
+          (cd paquet && 7z a -tzip "../livrables/HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" HeptagonesLM > /dev/null)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -90,7 +90,7 @@ jobs:
       - name: Empreintes SHA-256
         run: |
           cd livrables
-          sha256sum FreeLM.exe FreeLM-Setup.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
+          sha256sum HeptagonesLM.exe HeptagonesLM-Setup.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publication
@@ -100,6 +100,6 @@ jobs:
         run: |
           cd livrables
           gh release create "$GITHUB_REF_NAME" \
-            FreeLM-Setup.exe FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
-            --title "FreeLM $GITHUB_REF_NAME" --generate-notes \
-            --notes "Installation sur serveur : FreeLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash FreeLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
+            HeptagonesLM-Setup.exe HeptagonesLM.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
+            --title "HeptagonesLM $GITHUB_REF_NAME" --generate-notes \
+            --notes "Installation sur serveur : HeptagonesLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash HeptagonesLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."

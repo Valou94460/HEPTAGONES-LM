@@ -1,4 +1,4 @@
-# Sécurité de FreeLM
+# Sécurité de HeptagonesLM
 
 Ce document résume l'audit de sécurité de la version 0.1.0, les corrections
 appliquées et les recommandations de déploiement. Signaler une vulnérabilité :
@@ -31,7 +31,7 @@ chaque correction est couverte par un test qui rejoue l'attaque
 | M6 | Moyenne | Identifiants SMTP acceptés sans chiffrement ; vérification du certificat LDAP désactivable sans alerte | Configuration refusée ; avertissement si `ldap_validate_cert: false` |
 | M7 | Moyenne | Publication : job de release en écriture exécutant du code tiers ; pas d'empreinte | Construction en lecture seule, publication séparée, `SHA256SUMS` joint ; Playwright figé en CI |
 | L1 | Faible | Messages d'erreur internes renvoyés au client (prouvé) | Message générique ; détail dans le journal |
-| L2 | Faible | Versions de FreeLM et de Python dans l'en-tête `Server` | `Server: FreeLM` |
+| L2 | Faible | Versions de HeptagonesLM et de Python dans l'en-tête `Server` | `Server: HeptagonesLM` |
 | L4 | Faible | Le refus « hors groupe » confirmait la validité du mot de passe | Message unique ; cause précise uniquement dans l'audit |
 | L5 | Faible | Droit `db_ddladmin` laissé en permanence | Script et documentation : retrait après `init-db` |
 
@@ -54,7 +54,7 @@ chaque correction est couverte par un test qui rejoue l'attaque
 - [ ] `public_url` / `allowed_hosts` renseignés avec les noms réellement utilisés par les navigateurs.
 - [ ] LDAPS (`ldaps://`) avec vérification du certificat (`ldap_ca_file` si AC interne).
 - [ ] SMTP en `starttls` ou `ssl` ; mots de passe dans des variables d'environnement, jamais dans le YAML.
-- [ ] Droits NTFS : `freelm.yaml`, clé TLS et journaux lisibles uniquement par le compte de service et les administrateurs.
-- [ ] Journal `freelm.log` (audit) collecté par le SIEM ou archivé ; durée de conservation définie avec le DPO.
+- [ ] Droits NTFS : `heptagoneslm.yaml`, clé TLS et journaux lisibles uniquement par le compte de service et les administrateurs.
+- [ ] Journal `heptagoneslm.log` (audit) collecté par le SIEM ou archivé ; durée de conservation définie avec le DPO.
 - [ ] Pare-feu : port de l'interface ouvert uniquement vers les réseaux des utilisateurs ; flux sortants limités (serveurs de licences, SQL, DC, SMTP).
-- [ ] Intégrité de `FreeLM.exe` vérifiée (`Get-FileHash … -Algorithm SHA256` = `SHA256SUMS` de la release).
+- [ ] Intégrité de `HeptagonesLM.exe` vérifiée (`Get-FileHash … -Algorithm SHA256` = `SHA256SUMS` de la release).
