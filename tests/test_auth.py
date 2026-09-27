@@ -233,7 +233,9 @@ class LdapAuthenticatorTest(unittest.TestCase):
     def test_group_restriction(self):
         with self.assertRaises(AuthError) as ctx:
             self.make(["GG_FreeLM"]).authenticate("asmith", "Secret-2")
-        self.assertIn("groupe", str(ctx.exception))
+        # message générique pour l'utilisateur, cause précise pour l'audit
+        self.assertIn("non autorisé", str(ctx.exception))
+        self.assertIn("groupes autorisés", ctx.exception.reason)
         self.assertEqual(self.make([]).authenticate("asmith", "Secret-2").username, "asmith")
 
 

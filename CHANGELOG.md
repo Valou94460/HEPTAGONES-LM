@@ -20,6 +20,18 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 - Tâches planifiées « Envoi des rapports » et, en option, « Interface web » permanente.
 - Documentation `docs/AUTHENTIFICATION.md`.
 
+### Sécurité (audit du 27/09/2026 — voir `docs/SECURITE.md`)
+- Protection contre le DNS rebinding : contrôle de l'en-tête `Host` (`web.allowed_hosts`).
+- STARTTLS LDAP vérifié avant tout envoi du mot de passe.
+- Tâches planifiées : compte de service obligatoire, SYSTEM refusé pour l'interface web.
+- Serveur web : validation de `Content-Length`, délai d'expiration des requêtes, plafond de
+  connexions simultanées, erreurs internes non divulguées, en-tête `Server` sans version.
+- Exports CSV / Excel protégés contre l'injection de formules.
+- Journal d'audit protégé contre l'injection de lignes ; message de refus unique à la connexion.
+- Configuration : SMTP authentifié sans chiffrement refusé, avertissements `TrustServerCertificate`
+  et `ldap_validate_cert: false`, exemples en `Encrypt=yes`, retrait de `db_ddladmin` documenté.
+- Publication : construction sans droit d'écriture, empreintes `SHA256SUMS` jointes à la release.
+
 ## [0.1.0] — 2026-09-27
 
 Première version.

@@ -1,5 +1,11 @@
 # Publication d'une version : `git tag v0.2.0 && git push origin v0.2.0`
-# -> construit FreeLM.exe, le vérifie et crée la release GitHub avec les fichiers.
+#
+# Sécurité de la chaîne de publication :
+# - le job « build » (tests, installation des dépendances, PyInstaller) n'a qu'un
+#   droit de LECTURE sur le dépôt : une dépendance compromise ne peut pas altérer
+#   la release ni le code ;
+# - le job « publish » a le droit d'écriture mais n'exécute aucun code tiers : il
+#   calcule les empreintes SHA-256 et crée la release avec les fichiers construits.
 
 name: Release
 
@@ -8,18 +14,22 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
 
 defaults:
   run:
     shell: bash
 
 jobs:
-  release:
-    name: Release ${{ github.ref_name }}
+  build:
+    name: Construction ${{ github.ref_name }}
     runs-on: windows-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -50,12 +60,41 @@ jobs:
           cp config/freelm.example.yaml paquet/FreeLM/freelm.example.yaml
           cp sql/sqlserver/*.sql paquet/FreeLM/sql/
           cp scripts/*.ps1 scripts/*.bat paquet/FreeLM/scripts/
-          cd paquet && 7z a -tzip "../FreeLM-${GITHUB_REF_NAME}-windows.zip" FreeLM > /dev/null
+          mkdir -p livrables
+          cp dist/FreeLM.exe livrables/
+          (cd paquet && 7z a -tzip "../livrables/FreeLM-${GITHUB_REF_NAME}-windows.zip" FreeLM > /dev/null)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: livrables
+          path: livrables/
+          if-no-files-found: error
+
+  publish:
+    name: Publication ${{ github.ref_name }}
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: livrables
+          path: livrables
+
+      - name: Empreintes SHA-256
+        run: |
+          cd livrables
+          sha256sum FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
+          cat SHA256SUMS
 
       - name: Publication
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
+          cd livrables
           gh release create "$GITHUB_REF_NAME" \
-            "FreeLM-${GITHUB_REF_NAME}-windows.zip" dist/FreeLM.exe \
-            --title "FreeLM $GITHUB_REF_NAME" --generate-notes
+            FreeLM.exe "FreeLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
+            --title "FreeLM $GITHUB_REF_NAME" --generate-notes \
+            --notes "Vérifier l'intégrité : \`Get-FileHash FreeLM.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."

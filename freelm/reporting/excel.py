@@ -33,6 +33,7 @@ from openpyxl.worksheet.table import Table, TableStyleInfo
 from openpyxl.worksheet.worksheet import Worksheet
 
 from freelm.reporting.dataset import WEEKDAYS_FR, ReportData
+from freelm.reporting.sanitize import excel_text
 
 PCT = "0.0%"
 DEC1 = "0.0"
@@ -66,12 +67,13 @@ def _write_table(
     """Écrit un Tableau Excel à partir de la ligne ``top``. Retourne (1re, dernière ligne)."""
     formats = formats or {}
     for c, h in enumerate(headers, start=1):
-        ws.cell(row=top, column=c, value=h)
+        excel_text(ws.cell(row=top, column=c, value=h))
     for r, row in enumerate(rows, start=top + 1):
         for c, value in enumerate(row, start=1):
             if isinstance(value, str):  # caractères de contrôle éventuels des logs
                 value = ILLEGAL_CHARACTERS_RE.sub("", value)
             cell = ws.cell(row=r, column=c, value=value)
+            excel_text(cell)  # jamais de formule issue des données
             if c in formats:
                 cell.number_format = formats[c]
     last = top + len(rows)

@@ -11,12 +11,26 @@
 #>
 param(
     [string]$FreeLMHome = "C:\FreeLM",
-    [string]$ServiceAccount = "NT AUTHORITY\SYSTEM",
+    # Compte dédié et non administrateur (idéalement un gMSA « DOMAINE\gmsa_freelm$ »).
+    [Parameter(Mandatory = $true)]
+    [string]$ServiceAccount,
+    [switch]$AllowSystem,
     [int]$CollectIntervalMinutes = 5,
     [switch]$WithWebInterface
 )
 
 $ErrorActionPreference = "Stop"
+
+# Moindre privilège : SYSTEM donnerait le contrôle total de la machine à quiconque
+# exploiterait une faille de FreeLM. Refusé pour l'interface web, et sur demande
+# explicite (-AllowSystem) seulement pour les tâches sans exposition réseau.
+$isSystem = $ServiceAccount -match '^(NT AUTHORITY\\)?SYSTEM$'
+if ($isSystem -and $WithWebInterface) {
+    throw "L'interface web ne doit pas tourner en SYSTEM : utiliser un compte de service dédié (gMSA recommandé)."
+}
+if ($isSystem -and -not $AllowSystem) {
+    throw "Compte SYSTEM refusé par défaut : indiquer un compte de service dédié, ou -AllowSystem en connaissance de cause."
+}
 $python = Join-Path $FreeLMHome "venv\Scripts\python.exe"
 $config = Join-Path $FreeLMHome "freelm.yaml"
 
@@ -30,8 +44,8 @@ $settings = New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances 
 if ($ServiceAccount -like "*$") {
     $principal = New-ScheduledTaskPrincipal -UserId $ServiceAccount -LogonType Password
     $register = @{ Principal = $principal }
-} elseif ($ServiceAccount -eq "NT AUTHORITY\SYSTEM") {
-    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Highest
+} elseif ($isSystem) {
+    $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -LogonType ServiceAccount -RunLevel Limited
     $register = @{ Principal = $principal }
 } else {
     $cred = Get-Credential -UserName $ServiceAccount -Message "Mot de passe du compte de service FreeLM"

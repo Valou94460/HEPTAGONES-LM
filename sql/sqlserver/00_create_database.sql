@@ -24,6 +24,13 @@ GO
 
 ALTER ROLE db_datareader ADD MEMBER [svc_freelm];
 ALTER ROLE db_datawriter ADD MEMBER [svc_freelm];
--- Nécessaire uniquement pour `freelm init-db` (création / évolution du schéma).
+-- Droit TEMPORAIRE, nécessaire uniquement pour `freelm init-db` (création / évolution
+-- du schéma). Le retirer dès l'initialisation faite (moindre privilège) :
+--     ALTER ROLE db_ddladmin DROP MEMBER [svc_freelm];
+-- et ne le redonner que le temps d'une mise à jour de version.
 ALTER ROLE db_ddladmin ADD MEMBER [svc_freelm];
 GO
+
+-- À exécuter APRÈS `freelm init-db` :
+-- ALTER ROLE db_ddladmin DROP MEMBER [svc_freelm];
+-- GO

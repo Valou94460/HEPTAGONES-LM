@@ -4,10 +4,12 @@
 # ---------------------------------------------------------------------------
 
 database:
-  # SQL Server via ODBC (authentification Windows du compte de la tâche planifiée)
-  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;Trusted_Connection=yes;TrustServerCertificate=yes"
+  # SQL Server via ODBC (authentification Windows du compte de la tâche planifiée).
+  # Encrypt=yes : échanges chiffrés ET certificat du serveur SQL vérifié (nom complet
+  # du serveur = nom du certificat). Ne mettre TrustServerCertificate=yes qu'en test.
+  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=FreeLM;Trusted_Connection=yes;Encrypt=yes"
   # Authentification SQL (mot de passe via variable d'environnement) :
-  # connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;UID=freelm;PWD=${FREELM_DB_PASSWORD};TrustServerCertificate=yes"
+  # connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=FreeLM;UID=freelm;PWD=${FREELM_DB_PASSWORD};Encrypt=yes"
   # Pour un essai local sans SQL Server :
   # connection_string: "sqlite:///C:/FreeLM/data/freelm.db"
 
@@ -68,6 +70,9 @@ web:
   # tls_cert: "C:/FreeLM/certs/freelm.pem"     # HTTPS (obligatoire avec ldap sur le réseau)
   # tls_key:  "C:/FreeLM/certs/freelm.key"
   # public_url: "https://freelm.entreprise.local:8765"   # lien cité dans les e-mails
+  # allowed_hosts: ["freelm", "10.1.2.3"]   # noms/IP acceptés en plus (anti « DNS rebinding »)
+  # request_timeout_s: 30                   # coupe les connexions lentes
+  # max_connections: 64                     # requêtes simultanées
   auth:
     mode: none               # none | ldap (identifiants Windows) | header (SSO via IIS)
     # --- mode ldap ---
@@ -88,7 +93,7 @@ web:
 # email:
 #   smtp_host: smtp.entreprise.local
 #   smtp_port: 25                # 587 avec starttls + authentification, 465 avec ssl
-#   security: starttls           # starttls | ssl | none
+#   security: starttls           # starttls | ssl | none (none : interdit avec username)
 #   # username: svc_freelm@entreprise.local
 #   # password: ${FREELM_SMTP_PASSWORD}
 #   sender: "FreeLM <freelm@entreprise.local>"

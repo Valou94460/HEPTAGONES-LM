@@ -29,6 +29,7 @@ déconnecte les utilisateurs.
 from __future__ import annotations
 
 import logging
+import re
 import secrets
 import ssl
 import threading
@@ -41,10 +42,42 @@ log = logging.getLogger(__name__)
 audit = logging.getLogger("freelm.audit")
 
 COOKIE_NAME = "freelm_session"
+_CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f\u2028\u2029]")
+
+
+def clean_for_log(value, limit: int = 200):
+    """Neutralise les caractères de contrôle (retours à la ligne…) d'une valeur journalisée :
+    un identifiant saisi par un attaquant ne doit pas pouvoir forger de fausses lignes d'audit."""
+    if not isinstance(value, str):
+        return value
+    text = _CONTROL_CHARS.sub(lambda m: f"\\x{ord(m.group()):02x}", value)
+    return text[:limit] + ("…" if len(text) > limit else "")
+
+
+class _SanitizeFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if isinstance(record.args, tuple):
+            record.args = tuple(clean_for_log(a) for a in record.args)
+        elif isinstance(record.args, dict):
+            record.args = {k: clean_for_log(v) for k, v in record.args.items()}
+        record.msg = clean_for_log(record.msg, limit=2000) if isinstance(record.msg, str) else record.msg
+        return True
+
+
+audit.addFilter(_SanitizeFilter())
+log.addFilter(_SanitizeFilter())
 
 
 class AuthError(Exception):
-    """Échec d'authentification (message présentable à l'utilisateur)."""
+    """Échec d'authentification.
+
+    Le message est présenté à l'utilisateur ; ``reason`` (facultatif) détaille la
+    cause pour le journal d'audit sans la révéler au client.
+    """
+
+    def __init__(self, message: str, reason: str | None = None):
+        super().__init__(message)
+        self.reason = reason or message
 
 
 @dataclass
@@ -133,12 +166,18 @@ class LdapAuthenticator:
     """Vérifie un identifiant / mot de passe auprès de l'Active Directory (ldap3)."""
 
     GENERIC_ERROR = "Identifiant ou mot de passe incorrect"
+    # Même message pour un compte hors des groupes autorisés : ne pas confirmer
+    # qu'un mot de passe est valide (la cause exacte va au journal d'audit).
+    DENIED_ERROR = "Identifiant ou mot de passe incorrect, ou accès non autorisé à FreeLM"
 
     def __init__(self, cfg: AuthConfig, server=None, client_strategy=None):
         import ldap3  # dépendance chargée seulement si le mode ldap est utilisé
 
         self.ldap3 = ldap3
         self.cfg = cfg
+        if not cfg.ldap_validate_cert:
+            log.warning("SÉCURITÉ : ldap_validate_cert est désactivé — le certificat des contrôleurs de "
+                        "domaine n'est pas vérifié (mots de passe exposés à une interception)")
         self.client_strategy = client_strategy or ldap3.SYNC
         if server is not None:          # injection (tests : serveur fictif ldap3)
             self.server = server
@@ -162,7 +201,14 @@ class LdapAuthenticator:
         )
         if self.cfg.ldap_starttls:
             conn.open()
-            conn.start_tls()
+            # Sans chiffrement établi, le mot de passe partirait en clair au bind : refus.
+            if not conn.start_tls() or not getattr(conn, "tls_started", False):
+                log.error("STARTTLS refusé ou échoué vers l'annuaire (%s) : connexion annulée", conn.result)
+                try:
+                    conn.unbind()
+                except Exception:
+                    pass
+                raise AuthError("Annuaire indisponible, réessayez plus tard", "STARTTLS non établi")
         return conn
 
     def _find_user(self, conn, username: str):
@@ -245,7 +291,7 @@ class LdapAuthenticator:
         if self.cfg.allowed_groups:
             wanted = {g.lower() for g in self.cfg.allowed_groups}
             if not any(g.lower() in wanted or _cn(g).lower() in wanted for g in groups):
-                raise AuthError("Accès refusé : vous n'appartenez à aucun groupe autorisé")
+                raise AuthError(self.DENIED_ERROR, "compte valide mais hors des groupes autorisés")
         return UserInfo(
             username=username.lower(),
             display_name=self._value(entry, "displayName"),
@@ -280,7 +326,7 @@ class Auth:
             user = self.authenticator.authenticate(username, password)
         except AuthError as exc:
             self.throttle.failure(key_user, key_ip)
-            audit.warning("Échec de connexion : %s depuis %s (%s)", username, client_ip, exc)
+            audit.warning("Échec de connexion : %s depuis %s (%s)", username, client_ip, exc.reason)
             raise
         self.throttle.success(key_user, key_ip)
         audit.info("Connexion : %s depuis %s", user.username, client_ip)

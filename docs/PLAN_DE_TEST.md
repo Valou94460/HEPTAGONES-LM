@@ -31,7 +31,7 @@ dans un tableur.
 
 | Niveau | Quoi | Comment | Qui | Où |
 |---|---|---|---|---|
-| **N1 — Unitaire** | Parsers lmstat / log, sessions, indicateurs, API, authentification, e-mails | 75 tests automatisés (`python -m pytest`) | CI | E1 |
+| **N1 — Unitaire** | Parsers lmstat / log, sessions, indicateurs, API, authentification, e-mails | 89 tests automatisés (`python -m pytest`) | CI | E1 |
 | **N2 — Intégration** | Chaîne complète simulée : simulateur → parsers → base → rapports ; SQL Server réel ; exécutable Windows | Workflow CI (5 jobs) | CI | E1 |
 | **N3 — Bout en bout** | Interface web et page de connexion dans un vrai navigateur | Playwright (`tests/ui/*.cjs`) | CI | E1 |
 | **N4 — Recette fonctionnelle** | Cas de test manuels du § 5 sur les données de démonstration | Manuel | Admin applicatif | E2 |
@@ -96,6 +96,7 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/test_web.py` | 12 | Paramètres (défauts, listes, validation), fichiers statiques et types MIME, métadonnées, les 9 rapports, filtres (serveur, utilisateur, produit), granularités, exports CSV / JSON / Excel (9 rapports + classeur complet), erreurs 400 / 404, import utilisateurs (format AD) |
 | `tests/test_auth.py` | 16 | Mode ldap (routes protégées, redirection, connexion / déconnexion, cookie `HttpOnly` `SameSite`, cookie forgé, blocage après échecs, audit des exports, en-têtes de sécurité), mode header (proxy de confiance, utilisateur non autorisé, proxy non fiable), refus de l'AD sans HTTPS, configurations invalides, expiration des sessions, serveur HTTPS, **vrai code LDAP** contre l'annuaire fictif ldap3 (groupes imbriqués, mauvais mot de passe, mot de passe vide, restriction par groupe) |
 | `tests/test_mailer.py` | 9 | Libellés de période, validation de la configuration, envoi réel à un serveur SMTP de test (destinataires, sujet, HTML, texte, lien, pièce jointe), abonnement filtré, une fois par période, aperçu `.eml`, erreur SMTP journalisée, destinataires de test, abonnement ponctuel |
+| `tests/test_security.py` | 14 | Non-régression de l'audit ([SECURITE.md](SECURITE.md)) : DNS rebinding (Host forgé → 421), `Content-Length` négatif, connexion inactive coupée, plafond de connexions, en-tête `Server` sans version, erreur interne non divulguée, date hors limites, injection dans le journal d'audit, formules neutralisées (CSV, Excel), échec STARTTLS avant bind, SMTP authentifié sans chiffrement refusé |
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
 | `tests/ui/ui_smoke.cjs` | — | Navigateur réel : 9 onglets en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
@@ -112,7 +113,7 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 |---|---|---|:---:|
 | AUT-01 🔴 | Consulter la dernière exécution CI de la version testée | Tous les jobs verts | ☐ |
 | AUT-02 | Télécharger l'artefact `captures-interface-web` | Captures lisibles, cohérentes avec § 5.6 | ☐ |
-| AUT-03 | `python -m pytest` sur le poste de test (E2) | 75 tests passés (« skipped » uniquement si openpyxl, ldap3 ou openssl sont absents) | ☐ |
+| AUT-03 | `python -m pytest` sur le poste de test (E2) | 89 tests passés (« skipped » uniquement si openpyxl, ldap3 ou openssl sont absents) | ☐ |
 
 ---
 
@@ -350,6 +351,12 @@ données simulées pour mesurer PRF-03 à PRF-05 avant d'avoir un an d'historiqu
 | SEC-05 | Traversée de répertoire | `http://localhost:8765/../freelm.yaml`, `/static/../../freelm.yaml` | 404 | ☐ |
 | SEC-06 | Secrets | Parcourir `freelm.log` et l'onglet Collectes | Aucun mot de passe affiché | ☐ |
 | SEC-07 [E3] | Moindre privilège | Retirer `db_ddladmin` après `init-db` | Collecte et interface fonctionnent | ☐ |
+| SEC-09 🔴 | DNS rebinding | `curl -H "Host: attaquant.example.com" http://localhost:8765/api/meta` | **421** ; avec le vrai nom du serveur : 200 | ☐ |
+| SEC-10 | Connexions lentes | Ouvrir une connexion TCP sur le port sans rien envoyer | Fermée par le serveur après `request_timeout_s` (30 s) | ☐ |
+| SEC-11 🔴 | Injection de formule | Utilisateur de test nommé `=1+1` (ou poste) ; exporter Sessions en CSV et Excel | Affiché en texte `=1+1`, jamais calculé | ☐ |
+| SEC-12 [E3] | Compte des tâches | `Get-ScheduledTask -TaskPath \FreeLM\ | Select TaskName, @{n="Compte";e={$_.Principal.UserId}}` | Compte de service dédié, jamais SYSTEM ; `register_tasks.ps1` sans `-ServiceAccount` refusé | ☐ |
+| SEC-13 [E3] | Chiffrement SQL | Chaîne de connexion de production | `Encrypt=yes`, pas de `TrustServerCertificate=yes` ; aucun avertissement « SÉCURITÉ » au démarrage | ☐ |
+| SEC-14 | Intégrité de l'exécutable | `Get-FileHash FreeLM.exe -Algorithm SHA256` | Identique à `SHA256SUMS` de la release | ☐ |
 | SEC-08 | Données personnelles | Identifier les destinataires des rapports (noms, services, horaires) ; informer le DPO | Traitement déclaré / validé (RGPD) | ☐ |
 
 ## 9. Robustesse

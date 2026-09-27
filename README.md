@@ -109,10 +109,11 @@ cd C:\FreeLM
 **4. Planification** :
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm"
+powershell -ExecutionPolicy Bypass -File scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\gmsa_freelm$"
 ```
 
-Crée les tâches : collecte toutes les 5 minutes, rapport Excel du mois précédent
+Le compte de service est obligatoire (compte dédié non administrateur, gMSA
+recommandé ; SYSTEM est refusé). Crée les tâches : collecte toutes les 5 minutes, rapport Excel du mois précédent
 (généré une fois par mois, même si le 1er est manqué), envoi des rapports par e-mail,
 purge hebdomadaire ; `-WithWebInterface` ajoute l'interface web permanente.
 
@@ -231,7 +232,7 @@ Exemple complet et commenté : [`config/freelm.example.yaml`](config/freelm.exam
 
 ```yaml
 database:
-  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;Trusted_Connection=yes;TrustServerCertificate=yes"
+  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=FreeLM;Trusted_Connection=yes;Encrypt=yes"
 lmutil_path: "C:/FreeLM/bin/lmutil.exe"
 
 servers:
@@ -275,6 +276,7 @@ products:                                # feature FlexLM -> produit lisible
 |---|---|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
+| [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
 | [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation et évolutions prévues |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
@@ -285,7 +287,7 @@ products:                                # feature FlexLM -> produit lisible
 ```bash
 git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
 pip install -e ".[dev]"
-python -m pytest                     # ~80 tests, SQLite en mémoire, aucun serveur requis
+python -m pytest                     # ~90 tests, SQLite en mémoire, aucun serveur requis
 freelm web --demo --open             # interface sur données simulées
 ```
 

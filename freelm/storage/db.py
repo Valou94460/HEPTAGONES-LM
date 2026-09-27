@@ -8,13 +8,15 @@ récupération de l'identifiant inséré, types longs) sont isolées ici.
 Chaînes de connexion acceptées :
 
 * SQL Server (ODBC) :
-  ``DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01;DATABASE=FreeLM;Trusted_Connection=yes;TrustServerCertificate=yes``
+  ``DRIVER={ODBC Driver 18 for SQL Server};SERVER=sqlsrv01.entreprise.local;DATABASE=FreeLM;Trusted_Connection=yes;Encrypt=yes``
+  (le certificat du serveur SQL est vérifié ; ``TrustServerCertificate=yes`` uniquement en test)
 * SQLite : ``sqlite:///chemin/vers/freelm.db`` ou ``sqlite:///:memory:``
 """
 
 from __future__ import annotations
 
 import logging
+import re
 import sqlite3
 from contextlib import contextmanager
 from datetime import date, datetime
@@ -50,6 +52,9 @@ class Database:
                 import pyodbc  # import tardif : inutile pour SQLite
             except ImportError as exc:  # pragma: no cover
                 raise RuntimeError("pyodbc est requis pour SQL Server (pip install pyodbc)") from exc
+            if re.search(r"trustservercertificate\s*=\s*(yes|true)", connection_string, re.IGNORECASE):
+                log.warning("SÉCURITÉ : TrustServerCertificate=yes — le certificat de SQL Server n'est pas "
+                            "vérifié (interception possible). À réserver aux tests.")
             self.conn = pyodbc.connect(connection_string, autocommit=False)
             self.conn.timeout = 300
 

@@ -142,12 +142,26 @@ administrateurs. Pour un simple essai : certificat auto-signé
 `openssl req -x509 -newkey rsa:2048 -nodes -days 365 -subj "/CN=freelm.entreprise.local" -keyout freelm.key -out freelm.pem`
 (le navigateur affichera un avertissement).
 
-## 4. Interface permanente
+## 4. Noms d'hôte autorisés
+
+Pour contrer le « DNS rebinding », FreeLM n'accepte que les requêtes adressées à un nom
+connu : `localhost`, `127.0.0.1`, `::1`, le nom de `public_url` et, en écoute réseau
+(`host: 0.0.0.0`), le nom court, le nom complet et les adresses IP du serveur. Les autres
+reçoivent une erreur 421. Ajouter les alias DNS ou adresses supplémentaires :
+
+```yaml
+web:
+  allowed_hosts: ["freelm", "licences.entreprise.local"]
+```
+
+## 5. Interface permanente
 
 ```powershell
-scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\svc_freelm" -WithWebInterface
+scripts\register_tasks.ps1 -FreeLMHome C:\FreeLM -ServiceAccount "DOMAINE\gmsa_freelm$" -WithWebInterface
 ```
 
 Ajoute la tâche « FreeLM - Interface web », démarrée avec le serveur et relancée
 automatiquement en cas d'arrêt ; adresse, HTTPS et authentification sont lus dans la
 section `web` du YAML. Ouvrir le port choisi dans le pare-feu Windows du serveur.
+Le compte de service est obligatoire et ne peut pas être SYSTEM pour l'interface web
+(moindre privilège : voir [SECURITE.md](SECURITE.md)).

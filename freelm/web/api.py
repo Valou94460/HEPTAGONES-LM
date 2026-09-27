@@ -27,6 +27,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Callable
 
 from freelm.reporting.dataset import WEEKDAYS_FR, _server_filter, build_report_data, load_features
+from freelm.reporting.sanitize import csv_text, excel_row
 from freelm.storage.db import Database
 
 GRANULARITIES = ("hour", "day", "week", "month")
@@ -92,8 +93,9 @@ def parse_params(query: dict[str, list[str]], today: date | None = None,
     try:
         end_day = date.fromisoformat(one("end") or today.isoformat())
         start_day = date.fromisoformat(one("start") or (end_day - timedelta(days=29)).isoformat())
-    except ValueError:
-        raise ParamError("Dates attendues au format AAAA-MM-JJ") from None
+        end_day + timedelta(days=1)  # la fin exclue doit rester représentable
+    except (ValueError, OverflowError):
+        raise ParamError("Dates attendues au format AAAA-MM-JJ (entre 0001-01-02 et 9999-12-30)") from None
     if start_day > end_day:
         raise ParamError("La date de début doit précéder la date de fin")
     if (end_day - start_day).days > 3660:
@@ -551,6 +553,8 @@ def _filename(report_type: str, p: ReportParams, ext: str) -> str:
 def _csv_value(value: Any, type_: str) -> str:
     if value is None:
         return ""
+    if isinstance(value, str):
+        return csv_text(value)  # pas de formule exécutable à l'ouverture dans Excel
     if isinstance(value, float):
         if type_ == "pct":
             value = value * 100
@@ -566,7 +570,7 @@ def export_csv(result: dict) -> bytes:
     buf = io.StringIO()
     writer = csv.writer(buf, delimiter=";", lineterminator="\r\n")
     cols = result["columns"]
-    writer.writerow([c["label"] + (" (%)" if c["type"] == "pct" else "") for c in cols])
+    writer.writerow([csv_text(c["label"] + (" (%)" if c["type"] == "pct" else "")) for c in cols])
     for row in result["rows"]:
         writer.writerow([_csv_value(row.get(c["key"]), c["type"]) for c in cols])
     return ("﻿" + buf.getvalue()).encode("utf-8")
@@ -624,6 +628,7 @@ def export_xlsx(result: dict) -> bytes:
     elif chart and chart["kind"] == "line" and chart["series"]:
         cs = wb.create_sheet("Graphique")
         cs.append([result["columns"][0]["label"]] + [s["name"] for s in chart["series"]])
+        excel_row(cs)
         for i, x in enumerate(chart["x"]):
             cs.append([x] + [s["values"][i] for s in chart["series"]])
         lc = LineChart()
@@ -641,6 +646,7 @@ def export_xlsx(result: dict) -> bytes:
         cs.append(["Libellé", chart["title"]])
         for item in chart["items"]:
             cs.append([item["label"], item["value"]])
+            excel_row(cs)
         bc = BarChart()
         bc.type = "bar"
         bc.title = chart["title"]

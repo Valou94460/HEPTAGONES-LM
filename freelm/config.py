@@ -105,6 +105,12 @@ class WebConfig:
     tls_key: str | None = None
     public_url: str | None = None          # adresse de l'interface, citée dans les e-mails
     allow_insecure_http: bool = False      # autoriser la connexion LDAP en HTTP sur le réseau (déconseillé)
+    # Noms d'hôte acceptés dans l'en-tête Host (protection contre le « DNS rebinding »).
+    # Toujours acceptés : localhost, 127.0.0.1, ::1, le nom de public_url, et en écoute
+    # réseau le nom et les adresses du serveur. "*" désactive le contrôle (déconseillé).
+    allowed_hosts: list[str] = field(default_factory=list)
+    request_timeout_s: int = 30            # délai max d'une requête (connexions lentes)
+    max_connections: int = 64              # requêtes traitées simultanément
     auth: AuthConfig = field(default_factory=AuthConfig)
 
 
@@ -302,6 +308,9 @@ def _parse_web(w: dict) -> WebConfig:
         tls_key=_expand(w.get("tls_key")),
         public_url=w.get("public_url"),
         allow_insecure_http=bool(w.get("allow_insecure_http", False)),
+        allowed_hosts=[h.lower() for h in _as_list(w.get("allowed_hosts"))],
+        request_timeout_s=max(1, int(w.get("request_timeout_s", 30))),
+        max_connections=max(1, int(w.get("max_connections", 64))),
         auth=auth,
     )
     if bool(web.tls_cert) != bool(web.tls_key):
@@ -346,6 +355,9 @@ def _parse_email(e: dict) -> EmailConfig:
     )
     if cfg.security not in ("starttls", "ssl", "none"):
         raise ConfigError("email.security doit valoir starttls, ssl ou none")
+    if cfg.security == "none" and cfg.username:
+        raise ConfigError("email : authentification SMTP sans chiffrement refusée (identifiants en clair) — "
+                          "utiliser security: starttls ou ssl")
     if subs and not cfg.smtp_host:
         raise ConfigError("email.smtp_host est obligatoire pour envoyer des rapports")
     return cfg
