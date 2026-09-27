@@ -13,6 +13,8 @@ réelles avant de passer à la suivante.
 - [x] Rapport Excel (8 feuilles)
 - [x] Scripts de tâches planifiées, tests unitaires
 - [x] Simulateur FlexLM + `freelm demo` + faux `lmutil` ; CI Linux / Windows / SQL Server 2022
+- [x] Interface web (`freelm web`) : 9 rapports, filtres, exports Excel/CSV/JSON ; `FreeLM.exe` autonome
+- [x] Import du référentiel utilisateurs (services, noms) depuis un CSV AD/RH
 
 ## Étape 1 — Validation des parsers sur vos serveurs (½ à 1 jour)
 
@@ -50,9 +52,8 @@ Points d'attention connus selon les éditeurs :
 
 ## Étape 4 — Enrichissements (à la demande)
 
-- [ ] Import `display_name` / `department` depuis l'AD ou un CSV
-      (`freelm import-users users.csv`) pour des rapports par service.
-- [ ] Rapport par service / site (nouvelle feuille, données déjà en base).
+- [ ] Authentification de l'interface web (Windows/AD) pour un usage partagé sur le réseau.
+- [ ] Rapports planifiés envoyés par e-mail depuis l'interface.
 - [ ] Onglet « Optimisation » : jetons jamais utilisés au-delà de N
       (pic < émis sur 3 mois) → pistes de réduction du parc.
 - [ ] Features regroupées par produit avec calcul du pic simultané

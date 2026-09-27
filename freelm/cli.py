@@ -10,6 +10,8 @@ Exemples ::
     freelm parse-lmstat sortie_lmstat.txt         # diagnostic du parser, sans base
     freelm ddl --dialect mssql > 01_schema.sql
     freelm demo --days 30                         # environnement de démonstration simulé
+    freelm -c freelm.yaml web --open              # interface web (rapports, exports)
+    freelm web --demo --open                      # interface web sur données simulées
 
 Codes retour : 0 = succès, 1 = erreur, 2 = collecte partiellement en échec.
 """
@@ -187,6 +189,18 @@ def cmd_test_server(cfg: AppConfig, args) -> int:
     return 0
 
 
+def cmd_import_users(cfg: AppConfig, args) -> int:
+    from freelm.storage import Repository
+    from freelm.users import import_users, read_users_csv
+
+    users = read_users_csv(args.file)
+    with _open_db(cfg) as db:
+        with db.transaction():
+            updated, created = import_users(Repository(db), users)
+    print(f"{updated} utilisateur(s) mis à jour, {created} créé(s)")
+    return 0
+
+
 def cmd_purge(cfg: AppConfig, args) -> int:
     from freelm.service import CollectionService
 
@@ -221,6 +235,33 @@ def cmd_demo(args) -> int:
         f"  freelm -c \"{result.config_path}\" collect\n"
         f"  freelm -c \"{result.config_path}\" report --period this-month"
     )
+    return 0
+
+
+def demo_home() -> Path:
+    """Répertoire de la démo utilisée par ``freelm web --demo`` (et le .exe sans configuration)."""
+    base = os.environ.get("LOCALAPPDATA") or os.path.join(Path.home(), ".local", "share")
+    return Path(base) / "FreeLM" / "demo"
+
+
+def cmd_web(args) -> int:
+    from freelm.web.server import serve
+
+    if args.demo:
+        from freelm.simulation.demo import run_demo
+
+        home = demo_home()
+        db = home / "freelm_demo.db"
+        fresh = db.exists() and date.fromtimestamp(db.stat().st_mtime) == date.today()
+        if not fresh:
+            print(f"Préparation des données de démonstration ({args.demo_days} jours simulés)…")
+            run_demo(home, days=args.demo_days, make_report=False)
+        cfg = load_config(home / "freelm.demo.yaml")
+        print("Mode démonstration : données simulées (Autodesk, Ansys, MATLAB).")
+    else:
+        cfg = load_config(args.config)
+    _setup_logging("DEBUG" if args.verbose else cfg.log_level, None)
+    serve(cfg, host=args.host, port=args.port, open_browser=args.open)
     return 0
 
 
@@ -265,6 +306,9 @@ def build_parser() -> argparse.ArgumentParser:
     t = sub.add_parser("test-server", help="interroge un serveur via lmstat sans rien écrire")
     t.add_argument("--server", required=True)
 
+    iu = sub.add_parser("import-users", help="importe nom complet et service des utilisateurs (CSV AD/RH)")
+    iu.add_argument("file", help="CSV avec colonnes username;display_name;department (ou utilisateur;nom;service)")
+
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
@@ -274,6 +318,13 @@ def build_parser() -> argparse.ArgumentParser:
     dm.add_argument("--connection-string", help="base cible (défaut : SQLite dans le répertoire de sortie)")
     dm.add_argument("--poll-minutes", type=int, default=5, help="intervalle de sondage simulé")
     dm.add_argument("--no-report", action="store_true", help="ne pas générer le rapport Excel")
+
+    w = sub.add_parser("web", help="interface web : rapports à la demande et exports")
+    w.add_argument("--host", default="127.0.0.1", help="adresse d'écoute (défaut : poste local uniquement)")
+    w.add_argument("--port", type=int, default=8765)
+    w.add_argument("--open", action="store_true", help="ouvrir le navigateur")
+    w.add_argument("--demo", action="store_true", help="utiliser des données de démonstration simulées")
+    w.add_argument("--demo-days", type=int, default=90, help=argparse.SUPPRESS)
 
     d = sub.add_parser("ddl", help="affiche le script SQL de création du schéma")
     d.add_argument("--dialect", choices=["mssql", "sqlite"], default="mssql")
@@ -287,14 +338,22 @@ WITH_CONFIG = {
     "report": cmd_report,
     "import-log": cmd_import_log,
     "test-server": cmd_test_server,
+    "import-users": cmd_import_users,
     "purge": cmd_purge,
     "apply-products": cmd_apply_products,
 }
 
 
 def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv[:1] == ["fake-lmutil"]:  # faux lmutil de la démo (utilisé par le .exe)
+        from freelm.simulation.fake_lmutil import main as fake_main
+
+        return fake_main(argv[1:])
     args = build_parser().parse_args(argv)
     try:
+        if args.command == "web":
+            return cmd_web(args)
         if args.command in NO_CONFIG:
             _setup_logging("DEBUG" if args.verbose else "INFO", None)
             return NO_CONFIG[args.command](args)

@@ -87,6 +87,18 @@ def _make_users(n: int = 45) -> tuple[str, ...]:
 USERS = _make_users()
 
 
+DEPARTMENTS = ("Bureau d'études mécanique", "Simulation & calcul", "Méthodes industrialisation",
+               "R&D électronique", "Architecture & BIM")
+
+
+def department_of(user: str) -> str:
+    return DEPARTMENTS[zlib.crc32(("dep|" + user).encode()) % len(DEPARTMENTS)]
+
+
+def display_name_of(user: str) -> str:
+    return " ".join(part.capitalize() for part in user.split("."))
+
+
 def host_of(user: str) -> str:
     return f"PC-{zlib.crc32(user.encode()) % 9000 + 1000}"
 

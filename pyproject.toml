@@ -24,5 +24,8 @@ freelm = "freelm.cli:main"
 [tool.setuptools.packages.find]
 include = ["freelm*"]
 
+[tool.setuptools.package-data]
+"freelm.web" = ["static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

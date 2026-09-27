@@ -8,12 +8,50 @@ et/ou lit leurs logs debug, historise la consommation dans SQL Server, et produi
 des rapports Excel : qui utilise quoi, quand, taux d'utilisation par produit, pics
 de contention et refus.
 
-- Pas d'agent sur les postes clients, pas d'interface web : une CLI planifiable.
+- Pas d'agent sur les postes clients : collecte par tâche planifiée.
+- **Interface web locale** (`freelm web`) : rapports à la demande, filtres, graphiques,
+  exports Excel / CSV / JSON — et **`FreeLM.exe`** autonome pour Windows (double-clic).
 - Python 3.10+, dépendances minimales : `PyYAML`, `openpyxl`, `pyodbc`.
 - Architecture modulaire : d'autres gestionnaires (RLM…) peuvent être ajoutés.
 
 ➡️ [Architecture, schéma de base et flux](docs/ARCHITECTURE.md) ·
 [Plan d'implémentation](docs/PLAN.md)
+
+## Interface web et FreeLM.exe
+
+```bash
+freelm -c freelm.yaml web --open      # sur votre base
+freelm web --demo --open              # sur des données simulées
+```
+
+Ou, sans installer Python : télécharger **`FreeLM.exe`** (onglet *Actions* du
+dépôt › dernière exécution › artefact `FreeLM-windows`, ou `packaging/build_exe.ps1`)
+et double-cliquer. L'exécutable ouvre l'interface dans le navigateur sur le
+`freelm.yaml` placé à côté de lui (ou désigné par `FREELM_CONFIG`), à défaut sur
+des données de démonstration. Avec des arguments, il remplace la commande `freelm`
+(`FreeLM.exe -c freelm.yaml collect` dans le Planificateur de tâches).
+
+| Onglet | Contenu |
+|---|---|
+| Synthèse | Indicateurs clés, taux d'occupation par produit, tableau complet |
+| Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
+| Répartition | Heures par utilisateur, poste, service, produit, serveur ou éditeur |
+| Croisement | Tableau croisé (utilisateur, poste ou service) × produit |
+| Profil horaire | Carte de chaleur heure × jour de semaine |
+| Contention / Refus | Jours saturés, refus DENIED détaillés |
+| Sessions | Données brutes filtrables |
+| Collectes | Journal et état des collectes |
+
+Filtres : période (préréglages ou dates), serveurs, produits, utilisateurs,
+services. L'URL conserve les filtres (lien partageable). Chaque onglet s'exporte
+en **Excel** (avec graphique natif), **CSV** (format Excel français) ou **JSON** ;
+**Rapport complet** produit le classeur 8 onglets filtré. L'interface est en
+lecture seule et n'écoute que sur le poste local par défaut (`--host 0.0.0.0`
+pour la partager sur le réseau : pas d'authentification, réseau de confiance
+uniquement).
+
+Services et noms complets : `freelm import-users users.csv` (export AD/RH,
+colonnes `username;display_name;department`).
 
 ## Essayer sans serveur de licences : environnement de démonstration
 
@@ -87,6 +125,8 @@ Le compte de service doit pouvoir joindre les ports lmgrd/démons vendeurs
 | `freelm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
 | `freelm ddl --dialect mssql` | Affiche le script SQL du schéma |
 | `freelm demo [--days N] [--connection-string ...]` | Environnement de démonstration simulé |
+| `freelm web [--open] [--port 8765] [--host ...] [--demo]` | Interface web (rapports, exports) |
+| `freelm import-users users.csv` | Noms complets et services des utilisateurs (export AD/RH) |
 
 Options globales : `-c freelm.yaml` (ou variable `FREELM_CONFIG`), `-v` (logs détaillés).
 

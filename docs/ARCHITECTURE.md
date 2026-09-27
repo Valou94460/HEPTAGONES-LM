@@ -48,9 +48,16 @@ freelm/
 │   ├── db.py               Connexion DB-API (pyodbc / sqlite3) et différences de dialecte
 │   ├── schema.py           Schéma unique → DDL SQL Server et SQLite, vues de reporting
 │   └── repository.py       Toutes les requêtes d'écriture
-└── reporting/
-    ├── dataset.py          Calcul des indicateurs (pur Python, testable)
-    └── excel.py            Mise en forme du classeur (openpyxl)
+├── reporting/
+│   ├── dataset.py          Calcul des indicateurs (pur Python, testable)
+│   └── excel.py            Mise en forme du classeur (openpyxl)
+├── web/
+│   ├── api.py              Rapports à la demande + exports (Excel, CSV, JSON)
+│   ├── server.py           Serveur HTTP (bibliothèque standard), lecture seule
+│   └── static/             Interface HTML/JS/CSS, graphiques SVG, sans CDN
+├── simulation/             Simulateur FlexLM, faux lmutil, `freelm demo`
+├── users.py                Import du référentiel utilisateurs (CSV AD/RH)
+└── launcher.py             Point d'entrée de FreeLM.exe (double-clic → interface)
 ```
 
 Principes :

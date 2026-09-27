@@ -11,3 +11,8 @@ freelm.yaml
 *.db
 reports/
 logs/
+node_modules/
+package-lock.json
+*.spec
+.build-venv/
+ui-captures/

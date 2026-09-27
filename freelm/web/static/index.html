@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FreeLM — Licences</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <svg class="logo" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="12" width="4" height="8" rx="1"/><rect x="10" y="7" width="4" height="13" rx="1"/><rect x="17" y="3" width="4" height="17" rx="1"/></svg>
+      <div>
+        <h1>FreeLM</h1>
+        <p class="subtitle">Suivi et reporting des licences FlexLM</p>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <span id="coverage" class="muted"></span>
+      <button id="health" class="health" type="button" hidden></button>
+    </div>
+  </header>
+
+  <section class="filters" aria-label="Filtres">
+    <label class="field">
+      <span>Période</span>
+      <select id="preset">
+        <option value="7d">7 derniers jours</option>
+        <option value="30d" selected>30 derniers jours</option>
+        <option value="90d">90 derniers jours</option>
+        <option value="mtd">Mois en cours</option>
+        <option value="lastm">Mois précédent</option>
+        <option value="ytd">Année en cours</option>
+        <option value="lasty">Année précédente</option>
+        <option value="all">Toutes les données</option>
+        <option value="custom">Personnalisée…</option>
+      </select>
+    </label>
+    <label class="field"><span>Du</span><input type="date" id="start"></label>
+    <label class="field"><span>Au</span><input type="date" id="end"></label>
+    <div class="field"><span>Serveurs</span><div class="ms" id="ms-server"></div></div>
+    <div class="field"><span>Produits</span><div class="ms" id="ms-product"></div></div>
+    <div class="field"><span>Utilisateurs</span><div class="ms" id="ms-user"></div></div>
+    <div class="field"><span>Services</span><div class="ms" id="ms-department"></div></div>
+    <button id="reset" class="btn ghost" type="button">Réinitialiser</button>
+  </section>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Rapports"></nav>
+
+  <section class="toolbar">
+    <div class="options" id="options">
+      <label class="field inline" data-for="timeseries">
+        <span>Pas</span>
+        <select id="granularity">
+          <option value="hour">Heure</option>
+          <option value="day" selected>Jour</option>
+          <option value="week">Semaine</option>
+          <option value="month">Mois</option>
+        </select>
+      </label>
+      <label class="field inline" data-for="timeseries">
+        <span>Mesure</span>
+        <select id="metric">
+          <option value="peak" selected>Pic de jetons</option>
+          <option value="avg">Moyenne de jetons</option>
+          <option value="utilization">Taux d'occupation</option>
+        </select>
+      </label>
+      <label class="field inline" data-for="breakdown matrix">
+        <span>Par</span>
+        <select id="dimension"></select>
+      </label>
+    </div>
+    <div class="exports">
+      <span class="muted">Exporter</span>
+      <button class="btn" type="button" data-export="xlsx" title="Ce rapport, au format Excel (avec graphique)">Excel</button>
+      <button class="btn" type="button" data-export="csv" title="Ce rapport, CSV pour Excel (séparateur ;)">CSV</button>
+      <button class="btn" type="button" data-export="json" title="Ce rapport, au format JSON">JSON</button>
+      <button class="btn primary" type="button" data-export="full" title="Classeur complet 8 onglets, filtres serveurs et produits appliqués">Rapport complet</button>
+    </div>
+  </section>
+
+  <main id="main">
+    <div id="error" class="error" role="alert" hidden></div>
+    <div id="kpis" class="kpis"></div>
+    <section id="chart-card" class="card" hidden>
+      <div class="card-head">
+        <h2 id="chart-title"></h2>
+        <div id="legend" class="legend"></div>
+      </div>
+      <div id="chart" class="chart"></div>
+    </section>
+    <ul id="notes" class="notes"></ul>
+    <section class="card">
+      <div class="card-head">
+        <h2 id="table-title">Chargement…</h2>
+        <div class="table-tools">
+          <span id="row-count" class="muted"></span>
+          <input type="search" id="table-search" placeholder="Rechercher dans le tableau" aria-label="Rechercher dans le tableau">
+        </div>
+      </div>
+      <div class="table-wrap"><table id="table"></table></div>
+      <div class="table-foot"><button id="more" class="btn ghost" type="button" hidden>Afficher plus</button></div>
+    </section>
+  </main>
+
+  <div id="tooltip" class="tooltip" role="status" hidden></div>
+  <footer class="footer muted">FreeLM <span id="version"></span> — logiciel libre (MIT)</footer>
+
+  <script src="charts.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

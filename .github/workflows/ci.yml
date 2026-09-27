@@ -96,6 +96,82 @@ jobs:
             demo/freelm.demo.yaml
           if-no-files-found: warn
 
+  ui:
+    name: Interface web (navigateur)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Installation
+        run: |
+          pip install -e ".[dev]"
+          npm install --no-save --no-package-lock playwright
+          npx playwright install --with-deps chromium
+
+      - name: Démarrage de l'interface (données de démonstration)
+        run: |
+          freelm web --demo --demo-days 60 --port 8765 > web.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8765/api/meta > /dev/null && break; sleep 1; done
+          curl -sf localhost:8765/api/meta > /dev/null || (cat web.log; exit 1)
+
+      - name: Test de bout en bout (Playwright)
+        run: node tests/ui/ui_smoke.cjs http://localhost:8765 ui-captures
+
+      - name: Captures d'écran
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-interface-web
+          path: ui-captures/
+          if-no-files-found: warn
+
+  exe:
+    name: Exécutable Windows (FreeLM.exe)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Construction
+        run: |
+          python -m pip install --upgrade pip
+          pip install . pyinstaller
+          pyinstaller --noconfirm --clean --onefile --console --name FreeLM \
+            --collect-submodules freelm --add-data "freelm/web/static:freelm/web/static" freelm/launcher.py
+
+      - name: Vérification de l'exécutable
+        run: |
+          cd dist
+          ./FreeLM.exe --version
+          ./FreeLM.exe demo --days 5 --output-dir exe-demo
+          ./FreeLM.exe -c exe-demo/freelm.demo.yaml collect
+          ./FreeLM.exe web --demo --demo-days 10 --port 8799 > web.log 2>&1 &
+          for i in $(seq 1 60); do curl -sf localhost:8799/api/meta > /dev/null && break; sleep 1; done
+          curl -sf localhost:8799/ | grep -q "FreeLM"
+          curl -sf "localhost:8799/api/report?type=summary" | grep -q "Synthèse"
+          curl -sf "localhost:8799/api/export?type=full&format=xlsx" -o complet.xlsx
+          test -s complet.xlsx
+          taskkill //F //IM FreeLM.exe || true
+
+      - name: Publication de FreeLM.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: FreeLM-windows
+          path: |
+            dist/FreeLM.exe
+            config/freelm.example.yaml
+
   sqlserver:
     name: SQL Server 2022 (base réelle)
     runs-on: ubuntu-latest

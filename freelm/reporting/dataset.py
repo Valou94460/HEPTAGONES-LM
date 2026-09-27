@@ -92,6 +92,44 @@ def _server_filter(servers: list[str] | None, column: str = "srv.name") -> tuple
     return f" AND {column} IN ({marks})", list(servers)
 
 
+def load_features(
+    db: Database,
+    start: datetime,
+    end: datetime,
+    servers: list[str] | None = None,
+    products: list[str] | None = None,
+) -> list[dict]:
+    """Features actives sur la période, avec un libellé lisible et unique.
+
+    Le libellé est le produit, suffixé de la feature (et du serveur) en cas
+    d'ambiguïté. ``products`` filtre sur le nom de produit (ou de feature si
+    aucun produit n'est associé).
+    """
+    sql_srv, p_srv = _server_filter(servers)
+    features = db.query_dicts(
+        "SELECT f.id, srv.name AS server, f.name AS feature, COALESCE(f.product, f.name) AS product, "
+        "f.publisher FROM feature f JOIN license_server srv ON srv.id = f.server_id "
+        "WHERE f.last_seen >= ? AND f.first_seen < ?" + sql_srv + " ORDER BY srv.name, f.name",
+        [start, end, *p_srv],
+    )
+    if products:
+        wanted = set(products)
+        features = [f for f in features if f["product"] in wanted]
+    product_count: dict[str, int] = defaultdict(int)
+    pair_count: dict[tuple[str, str], int] = defaultdict(int)
+    for f in features:
+        product_count[f["product"]] += 1
+        pair_count[(f["product"], f["feature"])] += 1
+    for f in features:
+        if product_count[f["product"]] == 1:
+            f["label"] = f["product"]
+        elif pair_count[(f["product"], f["feature"])] == 1:
+            f["label"] = f"{f['product']} [{f['feature']}]"
+        else:  # même feature sur plusieurs serveurs
+            f["label"] = f"{f['product']} [{f['feature']}@{f['server']}]"
+    return features
+
+
 def build_report_data(
     db: Database,
     start: datetime,
@@ -99,41 +137,24 @@ def build_report_data(
     servers: list[str] | None = None,
     business_hours: tuple[int, int] = (8, 19),
     now: datetime | None = None,
+    products: list[str] | None = None,
 ) -> ReportData:
     """Construit l'ensemble des données du rapport pour la période [start, end[."""
     now = now or datetime.now().replace(microsecond=0)
     data = ReportData(start=start, end=end, generated_at=now, servers=list(servers or []))
     sql_srv, p_srv = _server_filter(servers)
 
-    # -- référentiel des features présentes sur la période ----------------
-    features = db.query_dicts(
-        "SELECT f.id, srv.name AS server, f.name AS feature, COALESCE(f.product, f.name) AS product, "
-        "f.publisher FROM feature f JOIN license_server srv ON srv.id = f.server_id "
-        "WHERE f.last_seen >= ? AND f.first_seen < ?" + sql_srv + " ORDER BY srv.name, f.name",
-        [start, end, *p_srv],
-    )
-    # Libellé lisible : le produit, suffixé de la feature en cas d'ambiguïté.
-    product_count: dict[str, int] = defaultdict(int)
-    pair_count: dict[tuple[str, str], int] = defaultdict(int)
-    for f in features:
-        product_count[f["product"]] += 1
-        pair_count[(f["product"], f["feature"])] += 1
-    summaries: dict[int, FeatureSummary] = {}
-    for f in features:
-        if product_count[f["product"]] == 1:
-            label = f["product"]
-        elif pair_count[(f["product"], f["feature"])] == 1:
-            label = f"{f['product']} [{f['feature']}]"
-        else:  # même feature sur plusieurs serveurs
-            label = f"{f['product']} [{f['feature']}@{f['server']}]"
-        summaries[f["id"]] = FeatureSummary(
+    summaries: dict[int, FeatureSummary] = {
+        f["id"]: FeatureSummary(
             feature_id=f["id"],
             server=f["server"],
             feature=f["feature"],
             product=f["product"],
             publisher=f["publisher"],
-            label=label,
+            label=f["label"],
         )
+        for f in load_features(db, start, end, servers, products)
+    }
 
     # -- agrégats horaires -------------------------------------------------
     hourly = db.query(

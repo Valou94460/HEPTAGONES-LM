@@ -344,10 +344,8 @@ def _sheet_about(wb: Workbook, data: ReportData) -> None:
     ws.column_dimensions["B"].width = 100
 
 
-def write_excel_report(data: ReportData, output: str | Path, top_n: int = 10) -> Path:
-    """Écrit le classeur Excel et retourne son chemin."""
-    output = Path(output)
-    output.parent.mkdir(parents=True, exist_ok=True)
+def build_workbook(data: ReportData, top_n: int = 10) -> Workbook:
+    """Construit le classeur complet (8 feuilles) en mémoire."""
     wb = Workbook()
     _sheet_summary(wb, data, top_n)
     _sheet_daily(wb, data, top_n)
@@ -357,5 +355,12 @@ def write_excel_report(data: ReportData, output: str | Path, top_n: int = 10) ->
     _sheet_denials(wb, data)
     _sheet_sessions(wb, data)
     _sheet_about(wb, data)
-    wb.save(output)
+    return wb
+
+
+def write_excel_report(data: ReportData, output: str | Path, top_n: int = 10) -> Path:
+    """Écrit le classeur Excel et retourne son chemin."""
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    build_workbook(data, top_n).save(output)
     return output

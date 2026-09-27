@@ -119,6 +119,21 @@ class Repository:
             self._hosts[key] = hid
         return hid
 
+    def update_user_info(self, username: str, display_name: str | None, department: str | None) -> bool:
+        """Renseigne le nom complet et le service d'un utilisateur (créé s'il n'existe pas).
+
+        Retourne True si l'utilisateur existait déjà.
+        """
+        key = _norm(username)
+        existed = bool(self.db.query("SELECT id FROM app_user WHERE username = ?", [key]))
+        uid = self.get_or_create_user(key)
+        self.db.execute(
+            "UPDATE app_user SET display_name = COALESCE(?, display_name), department = COALESCE(?, department) "
+            "WHERE id = ?",
+            [display_name or None, department or None, uid],
+        )
+        return existed
+
     def apply_product_mapping(self, resolver) -> int:
         """Réapplique les règles produit à toutes les features. Retourne le nb modifié."""
         changed = 0

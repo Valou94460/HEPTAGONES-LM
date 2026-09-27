@@ -36,8 +36,11 @@ from freelm.collectors.flexlm.logfile import read_log_incremental
 from freelm.config import AppConfig, parse_config
 from freelm.reporting.dataset import ReportData, build_report_data
 from freelm.service import CollectionService
-from freelm.simulation.model import DEFAULT_SCENARIO, SimServer, render_lmstat, sync_log
+from freelm.simulation.model import (
+    DEFAULT_SCENARIO, USERS, SimServer, department_of, display_name_of, render_lmstat, sync_log,
+)
 from freelm.storage import Database, create_schema
+from freelm.users import import_users, read_users_csv
 
 log = logging.getLogger(__name__)
 
@@ -56,13 +59,18 @@ def _write_fake_lmutil(output_dir: Path) -> Path:
     """Script d'appel du faux lmutil (chemin absolu de Python et du package)."""
     package_root = Path(freelm.__file__).resolve().parent.parent
     python = Path(sys.executable).resolve()
+    # Exécutable autonome (PyInstaller) : le .exe sert lui-même de faux lmutil.
+    if getattr(sys, "frozen", False):
+        command = f'"{python}" fake-lmutil'
+    else:
+        command = f'"{python}" -m freelm.simulation.fake_lmutil'
     if os.name == "nt":
         path = output_dir / "fake_lmutil.bat"
         path.write_text(
             "@echo off\r\n"
             f'set "FREELM_SIM_DIR={output_dir}"\r\n'
             f'set "PYTHONPATH={package_root};%PYTHONPATH%"\r\n'
-            f'"{python}" -m freelm.simulation.fake_lmutil %*\r\n'
+            f"{command} %*\r\n"
             "exit /b %ERRORLEVEL%\r\n",
             encoding="utf-8",
         )
@@ -72,7 +80,7 @@ def _write_fake_lmutil(output_dir: Path) -> Path:
             "#!/bin/sh\n"
             f'export FREELM_SIM_DIR="{output_dir}"\n'
             f'export PYTHONPATH="{package_root}${{PYTHONPATH:+:$PYTHONPATH}}"\n'
-            f'exec "{python}" -m freelm.simulation.fake_lmutil "$@"\n',
+            f'exec {command} "$@"\n',
             encoding="utf-8",
         )
         path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
@@ -180,6 +188,16 @@ def run_demo(
         svc = CollectionService(cfg, db)
         server_ids = svc.sync_servers()
         _reset_demo_data(db, list(server_ids.values()))
+
+        # Référentiel utilisateurs (comme un export AD) : noms complets et services.
+        users_csv = output_dir / "users.csv"
+        users_csv.write_text(
+            "username;display_name;department\n"
+            + "".join(f"{u};{display_name_of(u)};{department_of(u)}\n" for u in USERS),
+            encoding="utf-8",
+        )
+        with db.transaction():
+            import_users(svc.repo, read_users_csv(users_csv))
 
         log.info("Simulation du %s au %s (sondage toutes les %d min)", f"{start:%d/%m/%Y}", f"{end:%d/%m/%Y %H:%M}", poll_minutes)
         day = start
