@@ -1,0 +1,74 @@
+# Plan d'implémentation
+
+Chaque étape produit quelque chose d'utilisable et se valide sur données
+réelles avant de passer à la suivante.
+
+## Étape 0 — Socle (fait dans cette version)
+
+- [x] Structure du projet, configuration YAML, CLI
+- [x] Parser `lmstat -a` (totaux, checkouts, files d'attente, utilisateurs avec espaces, changement d'année)
+- [x] Parser du log debug FlexLM (OUT/IN/DENIED/QUEUED/UNSUPPORTED, dates, minuit, rotation)
+- [x] Schéma SQL Server / SQLite, vues de reporting
+- [x] Reconstruction des sessions (lmstat et log), agrégats horaires
+- [x] Rapport Excel (8 feuilles)
+- [x] Scripts de tâches planifiées, tests unitaires
+
+## Étape 1 — Validation des parsers sur vos serveurs (½ à 1 jour)
+
+1. Sur le futur serveur FreeLM, capturer une sortie réelle par serveur :
+   `lmutil lmstat -a -c 27000@licsrv1 > lmstat_autodesk.txt`
+2. `freelm parse-lmstat lmstat_autodesk.txt` : vérifier features, totaux,
+   utilisateurs, heures de début.
+3. Idem pour les logs : `freelm parse-log \\licsrv2\...\license.log`.
+4. Ajouter chaque sortie un peu particulière dans `tests/fixtures/` avec un
+   test (anonymiser les noms) : c'est la meilleure protection contre les
+   régressions quand les éditeurs changent leur version de FlexNet.
+
+Points d'attention connus selon les éditeurs :
+- Ansys : plusieurs démons (`ansyslmd`), features très nombreuses (`a_*`) → mapping produit par motifs.
+- MATLAB : toolboxes = une feature chacune ; `lmstat` affiche aussi les réservations (ignorées).
+- Autodesk : features codées (`87545ACD_2024_0F`) → table de correspondance à compléter.
+
+## Étape 2 — Mise en service de la collecte (1 jour)
+
+1. Base : `sql/sqlserver/00_create_database.sql` (DBA), puis `freelm init-db`.
+2. Installer Python + venv + ODBC Driver 18 sur le serveur FreeLM (voir README).
+3. `freelm test-server --server AUTODESK` pour chaque serveur.
+4. `scripts/register_tasks.ps1` → collecte toutes les 5 minutes.
+5. Surveiller la table `collection_run` pendant quelques jours
+   (`SELECT * FROM collection_run WHERE status = 'ERROR'`).
+
+## Étape 3 — Référentiel et premiers rapports (1 à 2 jours)
+
+1. Compléter `products:` dans le YAML (liste des features :
+   `SELECT DISTINCT name, vendor FROM feature WHERE product IS NULL`),
+   puis `freelm apply-products`.
+2. Importer l'historique des logs disponibles : `freelm import-log --server ANSYS archive1.log archive2.log`.
+3. Premier rapport : `freelm report --period last-7d`, relecture avec les
+   utilisateurs clés, ajustement des indicateurs.
+
+## Étape 4 — Enrichissements (à la demande)
+
+- [ ] Import `display_name` / `department` depuis l'AD ou un CSV
+      (`freelm import-users users.csv`) pour des rapports par service.
+- [ ] Rapport par service / site (nouvelle feuille, données déjà en base).
+- [ ] Onglet « Optimisation » : jetons jamais utilisés au-delà de N
+      (pic < émis sur 3 mois) → pistes de réduction du parc.
+- [ ] Features regroupées par produit avec calcul du pic simultané
+      *réel* (et non la somme des pics) à partir des sondages bruts.
+- [ ] Liste d'exclusion d'utilisateurs / postes (comptes de service, tests).
+- [ ] Envoi du rapport par e-mail (SMTP) en fin de tâche mensuelle.
+- [ ] Migrations de schéma versionnées (`schema_info.version`).
+
+## Étape 5 — Autres gestionnaires (si besoin)
+
+- [ ] RLM (`rlmutil rlmstat -a`, log RLM « report log ») : voir
+      [ARCHITECTURE.md §6](ARCHITECTURE.md#6-ajouter-un-autre-gestionnaire-de-licences-ex-rlm).
+- [ ] LM-X, Sentinel RMS, DSLS : même principe, un collecteur par outil.
+
+## Dimensionnement indicatif
+
+Avec 200 features sondées toutes les 5 minutes :
+`usage_snapshot` ≈ 58 000 lignes/jour (≈ 5 M sur 90 jours de rétention),
+`usage_hourly` ≈ 4 800 lignes/jour (≈ 1,7 M/an, conservées). Largement
+dans les capacités d'un SQL Server Express (limite 10 Go) pendant des années.

@@ -1,0 +1,64 @@
+# ---------------------------------------------------------------------------
+# FreeLM - fichier de configuration (copier en freelm.yaml et adapter)
+# Les variables d'environnement sont développées : %FREELM_HOME% ou ${VAR}
+# ---------------------------------------------------------------------------
+
+database:
+  # SQL Server via ODBC (authentification Windows du compte de la tâche planifiée)
+  connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;Trusted_Connection=yes;TrustServerCertificate=yes"
+  # Authentification SQL (mot de passe via variable d'environnement) :
+  # connection_string: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=SQLSRV01;DATABASE=FreeLM;UID=freelm;PWD=${FREELM_DB_PASSWORD};TrustServerCertificate=yes"
+  # Pour un essai local sans SQL Server :
+  # connection_string: "sqlite:///C:/FreeLM/data/freelm.db"
+
+# Chemin de lmutil.exe (fourni avec le gestionnaire de licences, ex. Autodesk NLM)
+lmutil_path: "C:/FreeLM/bin/lmutil.exe"
+
+logging:
+  file: "C:/FreeLM/logs/freelm.log"
+  level: INFO
+
+servers:
+  # Collecte par lmstat uniquement (cas le plus simple, aucun accès fichier)
+  - name: AUTODESK
+    port_at_host: "27000@licsrv1"
+    collectors: [lmstat]
+    sessions_from: lmstat
+
+  # lmstat pour les jetons + log debug pour les refus et des sessions à la seconde
+  - name: ANSYS
+    port_at_host: "1055@licsrv2"
+    collectors: [lmstat, log]
+    sessions_from: log
+    log_path: "\\\\licsrv2\\ansys_logs$\\license.log"
+
+  # Triade redondante : lister les trois serveurs
+  - name: MATLAB
+    port_at_host: "27000@mlm1:27000@mlm2:27000@mlm3"
+    collectors: [lmstat]
+    sessions_from: lmstat
+    timeout_s: 90
+    # lmutil_path: "C:/MATLAB/etc/win64/lmutil.exe"   # surcharge par serveur
+    # enabled: false
+
+# Correspondance feature FlexLM -> produit lisible dans les rapports.
+# Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
+# Après modification : `freelm apply-products` pour réappliquer à l'historique.
+products:
+  - { pattern: "87545ACD_2024_*",   product: "AutoCAD 2024",            publisher: Autodesk }
+  - { pattern: "87048INVPROSA_*",   product: "Inventor Professional",   publisher: Autodesk }
+  - { pattern: "*ACDLT*",           product: "AutoCAD LT",              publisher: Autodesk }
+  - { pattern: "MATLAB",            product: "MATLAB",                  publisher: MathWorks }
+  - { pattern: "SIMULINK",          product: "Simulink",                publisher: MathWorks }
+  - { pattern: "*_Toolbox",         product: "MATLAB Toolboxes",        publisher: MathWorks, vendor: MLM }
+  - { pattern: "ansys",             product: "Ansys Mechanical Enterprise", publisher: Ansys }
+  - { pattern: "a_spaceclaim_*",    product: "Ansys SpaceClaim",        publisher: Ansys }
+
+reporting:
+  output_dir: "C:/FreeLM/reports"
+  top_n_chart: 10          # éléments affichés dans les graphiques
+  business_hours: [8, 19]  # plage des heures ouvrées (jours ouvrés lundi-vendredi)
+
+retention:
+  snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés
+  events_days: 730         # refus, journal des collectes

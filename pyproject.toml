@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "freelm"
+version = "0.1.0"
+description = "Suivi et reporting open source de la consommation de licences FlexLM/FlexNet"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+    "PyYAML>=6.0",
+    "openpyxl>=3.1",
+    "pyodbc>=5.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+freelm = "freelm.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["freelm*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

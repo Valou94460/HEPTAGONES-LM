@@ -1,0 +1,39 @@
+lmutil - Copyright (c) 1989-2019 Flexera. All Rights Reserved.
+Flexible License Manager status on Mon 9/23/2024 10:12
+
+[Detecting lmgrd processes...]
+License server status: 27000@licsrv1
+    License file(s) on licsrv1: C:\Autodesk\Network License Manager\license.lic:
+
+   licsrv1: license server UP (MASTER) v11.16.2
+
+Vendor daemon status (on licsrv1):
+
+   adskflex: UP v11.16.2
+        MLM: UP v11.16.2
+
+Feature usage info:
+
+Users of 87545ACD_2024_0F:  (Total of 10 licenses issued;  Total of 3 licenses in use)
+
+  "87545ACD_2024_0F" v1.000, vendor: adskflex, expiry: permanent(no expiration date)
+  vendor_string: commercial:permanent
+  floating license
+
+    jdoe PC123 PC123 (v1.0) (licsrv1/27000 1302), start Mon 9/23 8:15
+    asmith PC456 PC456 (v1.0) (licsrv1/27000 1502), start Mon 9/23 9:02, 2 licenses
+
+Users of 87048INVPROSA_2024_0F:  (Total of 1 license issued;  Total of 1 license in use)
+
+  "87048INVPROSA_2024_0F" v1.000, vendor: adskflex, expiry: permanent(no expiration date)
+  floating license
+
+    Jean Dupont CAO-WS01 CAO-WS01 (v1.0) (licsrv1/27000 2001), start Sun 9/22 23:40
+    bob PC999 PC999 (v1.0) (licsrv1/27000 2102) queued for 1 license
+
+Users of MATLAB:  (Total of 5 licenses issued;  Total of 0 licenses in use)
+
+Users of Simulink:  (Uncounted, node-locked)
+
+Users of OLD_FEATURE:  (Error: 1 licenses, unsupported by licensed server)
+
