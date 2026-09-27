@@ -170,7 +170,7 @@ class CollectionService:
                 continue
             else:
                 last_seen = sess["last_seen"]
-                checkin = last_seen + min((now - last_seen) / 2, _MAX_CHECKIN_ESTIMATE)
+                checkin = (last_seen + min((now - last_seen) / 2, _MAX_CHECKIN_ESTIMATE)).replace(microsecond=0)
                 self.repo.close_session(sess["id"], max(checkin, sess["checkout_time"]), "not_seen")
         self.repo.touch_sessions(still_open, now)
 

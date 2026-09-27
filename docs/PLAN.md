@@ -12,6 +12,7 @@ réelles avant de passer à la suivante.
 - [x] Reconstruction des sessions (lmstat et log), agrégats horaires
 - [x] Rapport Excel (8 feuilles)
 - [x] Scripts de tâches planifiées, tests unitaires
+- [x] Simulateur FlexLM + `freelm demo` + faux `lmutil` ; CI Linux / Windows / SQL Server 2022
 
 ## Étape 1 — Validation des parsers sur vos serveurs (½ à 1 jour)
 

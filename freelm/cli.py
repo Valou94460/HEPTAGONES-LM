@@ -9,6 +9,7 @@ Exemples ::
     freelm -c freelm.yaml import-log --server AUTODESK D:\\archives\\adsk_2024-08.log
     freelm parse-lmstat sortie_lmstat.txt         # diagnostic du parser, sans base
     freelm ddl --dialect mssql > 01_schema.sql
+    freelm demo --days 30                         # environnement de démonstration simulé
 
 Codes retour : 0 = succès, 1 = erreur, 2 = collecte partiellement en échec.
 """
@@ -204,6 +205,25 @@ def cmd_apply_products(cfg: AppConfig, args) -> int:
     return 0
 
 
+def cmd_demo(args) -> int:
+    from freelm.simulation.demo import format_summary, run_demo
+
+    result = run_demo(
+        output_dir=args.output_dir,
+        days=args.days,
+        connection_string=args.connection_string,
+        poll_minutes=args.poll_minutes,
+        make_report=not args.no_report,
+    )
+    print(format_summary(result))
+    print(
+        "\nPour continuer en direct avec le faux lmutil :\n"
+        f"  freelm -c \"{result.config_path}\" collect\n"
+        f"  freelm -c \"{result.config_path}\" report --period this-month"
+    )
+    return 0
+
+
 def cmd_ddl(args) -> int:
     from freelm.storage.schema import render_script
 
@@ -248,12 +268,19 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
+    dm = sub.add_parser("demo", help="environnement de démonstration : simule des serveurs et génère un rapport")
+    dm.add_argument("--days", type=int, default=30, help="nombre de jours d'historique simulé (défaut : 30)")
+    dm.add_argument("--output-dir", default="demo", help="répertoire de sortie (défaut : ./demo)")
+    dm.add_argument("--connection-string", help="base cible (défaut : SQLite dans le répertoire de sortie)")
+    dm.add_argument("--poll-minutes", type=int, default=5, help="intervalle de sondage simulé")
+    dm.add_argument("--no-report", action="store_true", help="ne pas générer le rapport Excel")
+
     d = sub.add_parser("ddl", help="affiche le script SQL de création du schéma")
     d.add_argument("--dialect", choices=["mssql", "sqlite"], default="mssql")
     return p
 
 
-NO_CONFIG = {"parse-lmstat": cmd_parse_lmstat, "parse-log": cmd_parse_log, "ddl": cmd_ddl}
+NO_CONFIG = {"parse-lmstat": cmd_parse_lmstat, "parse-log": cmd_parse_log, "ddl": cmd_ddl, "demo": cmd_demo}
 WITH_CONFIG = {
     "init-db": cmd_init_db,
     "collect": cmd_collect,

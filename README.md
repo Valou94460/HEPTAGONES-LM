@@ -15,6 +15,30 @@ de contention et refus.
 ➡️ [Architecture, schéma de base et flux](docs/ARCHITECTURE.md) ·
 [Plan d'implémentation](docs/PLAN.md)
 
+## Essayer sans serveur de licences : environnement de démonstration
+
+```bash
+pip install .
+freelm demo --days 30          # simule 30 jours sur 3 serveurs, génère ./demo/reports/*.xlsx
+freelm -c demo/freelm.demo.yaml collect                  # collecte « en direct » (faux lmutil)
+freelm -c demo/freelm.demo.yaml report --period this-month
+```
+
+`freelm demo` simule trois serveurs (Autodesk, Ansys avec log debug, MATLAB), ~45
+utilisateurs, heures de bureau, week-ends et pénuries de jetons. Le simulateur
+produit de vraies sorties `lmstat` et de vrais logs FlexNet, analysés par les
+parsers de FreeLM : toute la chaîne est exercée (parsing, sessions, base,
+rapport). Le répertoire `demo/` contient aussi un faux `lmutil` et une
+configuration prête à l'emploi : on peut planifier `collect` dessus pour tester
+le Planificateur de tâches. Pour cibler SQL Server :
+`freelm demo --connection-string "DRIVER={ODBC Driver 18 for SQL Server};SERVER=...;DATABASE=FreeLM_TEST;..."`
+(les données des serveurs de démonstration y sont remplacées à chaque exécution :
+utiliser une base de test dédiée).
+
+La CI GitHub Actions exécute cette démo sous Linux, Windows et contre un vrai
+SQL Server 2022 ; les rapports produits sont téléchargeables dans l'onglet
+**Actions** › exécution › **Artifacts**.
+
 ## Installation (serveur Windows)
 
 Prérequis : Python 3.10+ (64 bits), [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server),
@@ -62,6 +86,7 @@ Le compte de service doit pouvoir joindre les ports lmgrd/démons vendeurs
 | `freelm test-server --server X` | Interroge un serveur sans rien écrire |
 | `freelm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
 | `freelm ddl --dialect mssql` | Affiche le script SQL du schéma |
+| `freelm demo [--days N] [--connection-string ...]` | Environnement de démonstration simulé |
 
 Options globales : `-c freelm.yaml` (ou variable `FREELM_CONFIG`), `-v` (logs détaillés).
 

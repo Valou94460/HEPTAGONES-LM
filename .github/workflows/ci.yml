@@ -1,0 +1,189 @@
+# Intégration continue + environnement de test simulé.
+#
+# - tests      : tests unitaires + démo (historique simulé, collecte en direct via
+#                le faux lmutil, rapport Excel) sous Linux et Windows.
+# - sqlserver  : la même démo contre un vrai SQL Server 2022 (conteneur).
+#
+# Les rapports Excel générés sont téléchargeables dans l'onglet « Actions »
+# du dépôt, section « Artifacts » de chaque exécution.
+
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Nombre de jours d'historique simulé"
+        default: "30"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  tests:
+    name: Tests + démo (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Installation
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Tests unitaires
+        run: python -m pytest -v
+
+      - name: Script SQL Server à jour
+        if: runner.os == 'Linux'
+        run: freelm ddl --dialect mssql | diff - sql/sqlserver/01_schema.sql
+
+      - name: Démo - historique simulé et rapport Excel
+        run: freelm demo --days "${{ inputs.days || '30' }}" --output-dir demo
+
+      - name: Démo - collecte en direct avec le faux lmutil
+        run: |
+          freelm -c demo/freelm.demo.yaml test-server --server AUTODESK
+          freelm -c demo/freelm.demo.yaml collect
+          freelm -c demo/freelm.demo.yaml collect
+          freelm -c demo/freelm.demo.yaml report --period last-7d -o demo/reports/FreeLM_7_derniers_jours.xlsx
+          freelm -c demo/freelm.demo.yaml report --period last-7d -o demo/reports/FreeLM_7_derniers_jours.xlsx --skip-existing
+
+      - name: Vérification des classeurs Excel
+        run: |
+          python - <<'EOF'
+          import glob
+          from openpyxl import load_workbook
+          files = sorted(glob.glob("demo/reports/*.xlsx"))
+          assert files, "aucun rapport généré"
+          for path in files:
+              wb = load_workbook(path)
+              print(path)
+              for ws in wb.worksheets:
+                  print(f"  {ws.title:<16} {ws.max_row:>6} lignes  {len(ws.tables)} tableau(x)")
+              assert wb["Synthèse"].max_row > 5, "synthèse vide"
+              assert wb["Sessions"].max_row > 5, "aucune session"
+          EOF
+
+      - name: Rendu PDF du rapport (LibreOffice)
+        if: runner.os == 'Linux' && matrix.python == '3.12'
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-calc > /dev/null
+          soffice --headless --convert-to pdf --outdir demo/reports demo/reports/FreeLM_demo_*.xlsx
+
+      - name: Publication du rapport de démonstration
+        if: always() && matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-demo-${{ runner.os }}
+          path: |
+            demo/reports/
+            demo/logs/
+            demo/freelm.demo.yaml
+          if-no-files-found: warn
+
+  sqlserver:
+    name: SQL Server 2022 (base réelle)
+    runs-on: ubuntu-latest
+    services:
+      mssql:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: "Y"
+          # Mot de passe d'un conteneur jetable, propre à la CI.
+          MSSQL_SA_PASSWORD: "FreeLM-CI-2024!"
+        ports:
+          - 1433:1433
+    env:
+      FREELM_DB: "DRIVER={ODBC Driver 18 for SQL Server};SERVER=localhost,1433;DATABASE=FreeLM;UID=sa;PWD=FreeLM-CI-2024!;TrustServerCertificate=yes"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Pilote ODBC Driver 18 for SQL Server
+        run: |
+          if ! odbcinst -q -d | grep -q "ODBC Driver 18 for SQL Server"; then
+            curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | sudo gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg
+            curl -fsSL "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/prod.list" | sudo tee /etc/apt/sources.list.d/mssql-release.list
+            sudo apt-get update -qq
+            sudo ACCEPT_EULA=Y apt-get install -y -qq msodbcsql18
+          fi
+          odbcinst -q -d
+
+      - name: Installation
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Création de la base FreeLM
+        run: |
+          python - <<'EOF'
+          import os, time, pyodbc
+          cs = os.environ["FREELM_DB"].replace("DATABASE=FreeLM", "DATABASE=master")
+          for attempt in range(60):
+              try:
+                  conn = pyodbc.connect(cs, autocommit=True, timeout=5)
+                  break
+              except pyodbc.Error as exc:
+                  print("En attente de SQL Server...", exc)
+                  time.sleep(2)
+          else:
+              raise SystemExit("SQL Server indisponible")
+          print(conn.execute("SELECT @@VERSION").fetchone()[0])
+          conn.execute("IF DB_ID('FreeLM') IS NULL CREATE DATABASE FreeLM")
+          EOF
+
+      - name: Démo sur SQL Server
+        run: freelm demo --days 14 --output-dir demo-mssql --connection-string "$FREELM_DB"
+
+      - name: Idempotence du schéma et collecte en direct
+        run: |
+          freelm -c demo-mssql/freelm.demo.yaml init-db
+          freelm -c demo-mssql/freelm.demo.yaml init-db
+          freelm -c demo-mssql/freelm.demo.yaml collect
+          freelm -c demo-mssql/freelm.demo.yaml purge
+          freelm -c demo-mssql/freelm.demo.yaml report --period last-7d -o demo-mssql/reports/FreeLM_mssql_7j.xlsx
+
+      - name: Contrôle des vues SQL
+        run: |
+          python - <<'EOF'
+          import os, pyodbc
+          conn = pyodbc.connect(os.environ["FREELM_DB"])
+          for view in ("v_session_detail", "v_usage_hourly", "v_denial"):
+              n = conn.execute(f"SELECT COUNT(*) FROM dbo.{view}").fetchone()[0]
+              print(f"{view:<18} {n:>8} lignes")
+              assert n > 0, view
+          for row in conn.execute(
+              "SELECT TOP 5 product, username, checkout_time, checkin_time, duration_min "
+              "FROM dbo.v_session_detail ORDER BY duration_min DESC"
+          ):
+              print(" ", tuple(row))
+          EOF
+
+      - name: Relance de la démo (remplacement des données de démonstration)
+        run: freelm demo --days 3 --output-dir demo-mssql-bis --connection-string "$FREELM_DB" --no-report
+
+      - name: Publication du rapport SQL Server
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rapport-demo-sqlserver
+          path: demo-mssql/reports/
+          if-no-files-found: warn
