@@ -149,6 +149,17 @@ def verify(system: System, a: Answers) -> dict:
             add("dns", "Réseau", f"Nom DNS {a.public_host}", "warning",
                 "Ne résout pas : créer l'enregistrement DNS (A ou CNAME) vers ce serveur")
 
+    # -- Authentification unique et tests depuis les postes ---------------------------------
+    from heptagoneslm.setup import sso
+    if a.web_mode == "iis" and a.public_host:
+        try:
+            info = system.os_info()
+        except SetupError:
+            info = None
+        out.extend(c for c in (sso.spn_check(system, a, info), sso.zone_check(system, a)) if c)
+    out.extend(sso.access_checks(system, a))
+
     counts = {k: sum(1 for c in out if c.status == k) for k in ("ok", "warning", "error")}
+    access_url = a.public_url.rstrip("/") + "/acces" if a.public_url and a.web_mode != "local" else None
     return {"checks": [c.to_dict() for c in out], "counts": counts, "success": counts["error"] == 0,
-            "url": a.public_url}
+            "url": a.public_url, "access_url": access_url}

@@ -381,3 +381,19 @@ td.empty-cell { color: var(--muted); }
   .top-actions .health span.txt { display: none; }
   .live-hero { flex-direction: column; align-items: flex-start; }
 }
+
+/* Test d'accès depuis un poste (/acces) */
+.access-card { max-width: 480px; }
+.access-status { padding: 12px 14px; border-radius: 10px; background: var(--surface-2, rgba(127,127,127,.08)); font-size: 14px; }
+.access-status.ok { background: rgba(12, 163, 12, .10); }
+.access-status.error { background: rgba(214, 60, 42, .10); }
+.access-details { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 14px; margin: 0; font-size: 13px; }
+.access-details dt { color: var(--muted); }
+.access-details dd { margin: 0; overflow-wrap: anywhere; }
+.access-card fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.access-card legend { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.access-card .choice { display: flex; gap: 8px; align-items: center; font-size: 13.5px; }
+.access-card form { display: flex; flex-direction: column; gap: 14px; }
+.access-result { padding: 10px 12px; border-radius: 10px; font-size: 13.5px; }
+.access-result.ok { background: rgba(12, 163, 12, .10); }
+.access-result.error { background: rgba(214, 60, 42, .10); }

@@ -136,7 +136,22 @@ const fs = require("fs");
   check(heading.includes("opérationnel"), `vérification finale : ${heading}`);
   const verrors = await page.$$eval(".check-row .sev-critical", e => e.length);
   check(verrors === 0, `${verrors} contrôle(s) en erreur à la vérification`);
+  // Authentification unique : test reçu d'un poste, SPN proposé puis déclaré
+  const vtext = await page.textContent("#step-body");
+  check(vtext.includes("Test depuis un poste utilisateur") && vtext.includes("PC-ETU-037"), "test d'accès depuis un poste absent de la vérification");
+  check(vtext.includes("heptagoneslm.entreprise.local/acces"), "adresse du test d'accès absente");
+  check(vtext.includes("Zone Intranet local"), "contrôle de la zone Intranet absent");
   await shot("11_verification");
+  const spnFix = await page.$('[data-vfix="register_spn"]');
+  check(!!spnFix, "déclaration du SPN non proposée");
+  if (spnFix) {
+    await spnFix.click();
+    await page.waitForFunction(() => { const r = document.getElementById("fix-result"); return r && /déclaré sur le compte/.test(r.textContent); },
+      null, { timeout: 20000 }).catch(() => failures.push("déclaration du SPN sans résultat"));
+    await page.waitForSelector(".hero-result");
+    check(!(await page.$('[data-vfix="register_spn"]')), "SPN toujours signalé après sa déclaration");
+    console.log("SPN ->", await page.textContent("#fix-result"));
+  }
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click('a[href="/api/report"]')]);
   const report = `${out}/${dl.suggestedFilename()}`;
   await dl.saveAs(report);

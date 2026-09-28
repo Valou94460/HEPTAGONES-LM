@@ -195,3 +195,8 @@ table.servers .result { margin-top: 6px; min-width: 0; }
 a.btn { color: var(--text); text-decoration: none; }
 a.btn.primary { color: var(--accent-ink); }
 table.servers .toggle span { white-space: nowrap; }
+/* Commande à copier (SPN, zone Intranet, adresse du test d'accès) */
+.cmd { display: flex; gap: 8px; align-items: flex-start; margin-top: 6px; }
+.cmd code { flex: 1; min-width: 0; font: 12px/1.5 Consolas, "Cascadia Mono", monospace; background: var(--surface-2);
+  border: 1px solid var(--grid); border-radius: 8px; padding: 6px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd .btn { flex-shrink: 0; }

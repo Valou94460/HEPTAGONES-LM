@@ -5,6 +5,19 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+### Ajouté
+- **Contrôles d'authentification unique** dans l'assistant d'installation (avant l'installation
+  et à la vérification finale), avec la commande à exécuter :
+  - SPN Kerberos `HTTP/<nom>` sur le compte ordinateur (absent : bouton « Déclarer le SPN » ;
+    porté par un autre compte : commandes `setspn` de correction) ;
+  - zone Intranet local (GPO d'attribution des sites aux zones) et stratégies
+    `AuthServerAllowlist` d'Edge / Chrome.
+- **Test d'accès depuis un poste utilisateur** : page `/acces` (nom reconnu, méthode Kerberos /
+  NTLM, saisie ou non d'un mot de passe) ; les résultats remontent dans la vérification finale.
+  Le module IIS transmet la méthode d'authentification (`X-Remote-Auth-Method`).
+- Publication d'une version depuis l'onglet Actions (étiquette créée sur `main`), avec contrôle
+  de la correspondance entre l'étiquette et la version du code.
+
 ## [26.1.0] — 2026-09-28
 
 Première version publiée (développée sous le nom de travail FreeLM).

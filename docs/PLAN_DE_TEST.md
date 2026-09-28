@@ -326,6 +326,8 @@ Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 | INST-12 | Réinstallation | Relancer l'assistant avec les mêmes réponses | Aucune erreur ; ancienne configuration sauvegardée en `.bak` | ☐ |
 | INST-13 | Silencieux | `HeptagonesLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
 | INST-14 | Secrets | Rechercher les mots de passe dans `heptagoneslm.yaml`, `logs\*`, le rapport | Absents | ☐ |
+| INST-15 🔴 | SPN / zone Intranet | Vérification finale avec un nom DNS alias ; « Déclarer le SPN » (compte administrateur du domaine) | SPN déclaré sur le compte ordinateur, puis contrôle vert ; zone Intranet signalée si la GPO est absente, avec la commande | ☐ |
+| INST-16 🔴 | Test depuis un poste | Depuis 2 postes (membre du groupe, poste hors GPO), ouvrir `/acces`, répondre, puis « Relancer la vérification » | Utilisateur reconnu avec la méthode (Kerberos / NTLM) ; poste sans GPO signalé « mot de passe demandé » ; non-membre refusé | ☐ |
 
 ## 6. Validation sur les serveurs réels
 

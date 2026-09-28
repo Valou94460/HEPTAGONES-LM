@@ -16,7 +16,8 @@ installe avec une barre de progression, puis **vérifie chaque composant de bout
 5. [Installation silencieuse](#5-installation-silencieuse-industrialisation)
 6. [Serveur sans accès Internet](#6-serveur-sans-accès-internet)
 7. [Sécurité de l'assistant](#7-sécurité-de-lassistant)
-8. [Dépannage](#8-dépannage)
+8. [Authentification unique : SPN, zone Intranet et test depuis un poste](#8-authentification-unique--spn-zone-intranet-et-test-depuis-un-poste)
+9. [Dépannage](#9-dépannage)
 
 ## 1. Avant de commencer
 
@@ -171,10 +172,30 @@ téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté d
   variable d'environnement du seul processus enfant (jamais en ligne de commande), absents du
   journal et du rapport d'installation.
 - Compte SYSTEM refusé pour les tâches ; droits minimaux sur les dossiers et la base.
-- HeptagonesLM n'écoute que sur la boucle locale derrière IIS ; l'en-tête `X-Remote-User` n'est
-  accepté que du proxy local et est toujours écrasé par IIS.
+- HeptagonesLM n'écoute que sur la boucle locale derrière IIS ; les en-têtes `X-Remote-User` et
+  `X-Remote-Auth-Method` ne sont acceptés que du proxy local et sont toujours supprimés puis
+  posés par le module IIS (une valeur envoyée par le navigateur est ignorée).
 
-## 8. Dépannage
+## 8. Authentification unique : SPN, zone Intranet et test depuis un poste
+
+Pour que les utilisateurs arrivent connectés **sans saisir de mot de passe**, trois conditions
+côté infrastructure sont contrôlées par l'assistant (juste avant l'installation, puis à la
+vérification finale). Ces contrôles ne bloquent jamais l'installation ; chacun donne la
+commande à exécuter (bouton *Copier*).
+
+| Contrôle | Ce qui est vérifié | Correction |
+|---|---|---|
+| **SPN Kerberos** | `HTTP/<nom public>` est déclaré sur le compte ordinateur du serveur (recherche dans l'annuaire). Nom du serveur lui-même : couvert d'office. | SPN absent : bouton **Déclarer le SPN** (droits d'administrateur du domaine) ou `setspn -S HTTP/heptagoneslm.entreprise.local NOMSERVEUR` par un administrateur. SPN porté par un autre compte (erreur : Kerberos échouerait) : commandes `setspn -D` / `setspn -S` fournies. Sans SPN, l'accès fonctionne en NTLM. |
+| **Zone Intranet local** | Le site est attribué à la zone 1 par la GPO « Liste des attributions de sites aux zones », et les stratégies `AuthServerAllowlist` d'Edge / Chrome (si définies) incluent le nom. Un nom avec des points est en zone Internet par défaut : sans GPO, les navigateurs demandent les identifiants. | GPO *Configuration ordinateur › Modèles d'administration › Composants Windows › Internet Explorer › Panneau de configuration Internet › Page Sécurité › Liste des attributions de sites aux zones* : `https://heptagoneslm.entreprise.local` = `1`. Commande fournie pour tester sur un seul poste. Le contrôle lit les stratégies du serveur : il est indicatif, le test depuis un poste le confirme. |
+| **Test depuis un poste utilisateur** | Un utilisateur ouvre `https://<nom public>/acces` depuis son poste : la page affiche le nom sous lequel il est reconnu, la méthode (Kerberos ou NTLM, transmise par le module IIS) et lui demande s'il a dû saisir un mot de passe. | Les résultats (poste, navigateur, méthode, saisie ou non) apparaissent dans la vérification finale après *Relancer la vérification*. « Mot de passe demandé » : zone Intranet à corriger sur ce poste ; « NTLM » : déclarer le SPN. |
+
+<img src="images/test-acces.png" alt="Page de test d'accès /acces" width="420">
+
+Les résultats des tests sont conservés dans `C:\HeptagonesLM\logs\tests-acces.jsonl`
+(200 derniers) et tracés dans le journal d'audit. La page `/acces` reste disponible après
+l'installation pour diagnostiquer le poste d'un utilisateur.
+
+## 9. Dépannage
 
 | Symptôme | Solution |
 |---|---|
@@ -186,4 +207,4 @@ téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté d
 | Échec à l'étape « Tâches planifiées » | Mot de passe du compte de service ; pour un gMSA : `Install-ADServiceAccount` sur le serveur |
 | Vérification : « IIS ne joint pas HeptagonesLM (502) » | La tâche « HeptagonesLM - Interface web » est arrêtée : consulter `C:\HeptagonesLM\logs\heptagoneslm.log` |
 | Navigateur : avertissement de certificat | Le certificat ne couvre pas le nom DNS choisi (test « Vérifier le certificat ») |
-| Connexion Windows qui redemande un mot de passe | Ajouter l'adresse à la zone *Intranet local* des navigateurs (GPO) ; nom DNS alias : `setspn -S HTTP/heptagoneslm.entreprise.local NOMSERVEUR` |
+| Connexion Windows qui redemande un mot de passe | Faire ouvrir `https://heptagoneslm.entreprise.local/acces` depuis le poste concerné, puis suivre les contrôles *SPN Kerberos* et *Zone Intranet local* de la vérification finale (§ 8) |

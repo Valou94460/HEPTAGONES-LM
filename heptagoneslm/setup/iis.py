@@ -47,26 +47,87 @@ HEADER_NAME = "X-Remote-User"
 MODULE_NAME = "HeptagonesLMUserHeader"
 
 # Module ASP.NET compilé par IIS au premier appel (dossier App_Code du site).
+METHOD_HEADER = "X-Remote-Auth-Method"
+
+# Module ASP.NET compilé par IIS au premier appel (dossier App_Code du site). C# 5 (compilateur .NET 4.x).
 USER_MODULE_CS = f"""// Généré par l'assistant d'installation HeptagonesLM.
-// Transmet l'utilisateur authentifié par IIS (Windows) à HeptagonesLM dans l'en-tête {HEADER_NAME}.
+// Transmet l'utilisateur authentifié par IIS (Windows) à HeptagonesLM dans l'en-tête {HEADER_NAME},
+// et la méthode d'authentification (Kerberos ou NTLM) dans l'en-tête {METHOD_HEADER}.
 // Les règles URL Rewrite s'exécutent avant l'authentification : ce module intervient après.
+using System;
+using System.Security.Principal;
+using System.Text;
 using System.Web;
 
 public class {MODULE_NAME} : IHttpModule
 {{
     const string Header = "{HEADER_NAME}";
+    const string MethodHeader = "{METHOD_HEADER}";
+    static readonly byte[] KerberosOid = {{ 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x02 }};
 
     public void Init(HttpApplication app)
     {{
         // Jamais de valeur fournie par le navigateur
-        app.BeginRequest += (s, e) => ((HttpApplication)s).Context.Request.Headers.Remove(Header);
+        app.BeginRequest += (s, e) =>
+        {{
+            HttpRequest req = ((HttpApplication)s).Context.Request;
+            req.Headers.Remove(Header);
+            req.Headers.Remove(MethodHeader);
+        }};
         app.PostAuthenticateRequest += (s, e) =>
         {{
             HttpContext ctx = ((HttpApplication)s).Context;
             ctx.Request.Headers.Remove(Header);
+            ctx.Request.Headers.Remove(MethodHeader);
             if (ctx.User != null && ctx.User.Identity != null && ctx.User.Identity.IsAuthenticated)
+            {{
                 ctx.Request.Headers.Set(Header, ctx.User.Identity.Name);
+                string method = Method(ctx);
+                if (method != null) ctx.Request.Headers.Set(MethodHeader, method);
+            }}
         }};
+    }}
+
+    // Kerberos ou NTLM : jeton de la requête (première requête de la connexion), sinon session Windows.
+    static string Method(HttpContext ctx)
+    {{
+        string auth = ctx.Request.Headers["Authorization"];
+        if (auth != null)
+        {{
+            int space = auth.IndexOf(' ');
+            if (space > 0)
+            {{
+                try
+                {{
+                    byte[] token = Convert.FromBase64String(auth.Substring(space + 1).Trim());
+                    if (Contains(token, Encoding.ASCII.GetBytes("NTLMSSP"))) return "NTLM";
+                    if (Contains(token, KerberosOid)) return "Kerberos";
+                }}
+                catch (FormatException) {{ }}
+            }}
+        }}
+        try
+        {{
+            WindowsIdentity id = ctx.User.Identity as WindowsIdentity;
+            if (id != null)
+            {{
+                string type = new WindowsIdentity(id.Token).AuthenticationType;
+                if (type == "Kerberos" || type == "NTLM") return type;
+            }}
+        }}
+        catch (Exception) {{ }}
+        return null;
+    }}
+
+    static bool Contains(byte[] data, byte[] pattern)
+    {{
+        for (int i = 0; i + pattern.Length <= data.Length; i++)
+        {{
+            int j = 0;
+            while (j < pattern.Length && data[i + j] == pattern[j]) j++;
+            if (j == pattern.Length) return true;
+        }}
+        return false;
     }}
 
     public void Dispose() {{ }}
