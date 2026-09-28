@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version testée** | 0.1.0 |
+| **Version testée** | 26.1.0 |
 | **Objet** | Valider HeptagonesLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
 | **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/heptagoneslm.example.yaml) |
 
@@ -129,7 +129,7 @@ sur E3 pour les cas marqués **[E3]**.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 0.1.0` | ☐ |
+| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 26.1.0` | ☐ |
 | INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `heptagoneslm --version` | Installation sans erreur, version affichée | ☐ |
 | INS-03 🔴 [E3] | Création de la base | DBA : `sqlcmd -S … -i sql\sqlserver\00_create_database.sql` (base de test) | Base et compte de service créés, rôles attribués | ☐ |
 | INS-04 🔴 [E3] | Création du schéma | `HeptagonesLM.exe -c heptagoneslm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
