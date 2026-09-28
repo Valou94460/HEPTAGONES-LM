@@ -1,4 +1,8 @@
-# Publication d'une version : `git tag v26.2.0 && git push origin v26.2.0`
+# Publication d'une version, au choix :
+# - `git tag v26.2.0 && git push origin v26.2.0` ;
+# - onglet Actions › Release › « Run workflow » avec l'étiquette v26.2.0 : l'étiquette
+#   est créée sur le commit construit (main) au moment de la publication.
+# L'étiquette doit correspondre à la version du code (heptagoneslm/__init__.py).
 #
 # Sécurité de la chaîne de publication :
 # - le job « build » (tests, installation des dépendances, PyInstaller) n'a qu'un
@@ -12,9 +16,18 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Étiquette à créer sur main (ex. v26.1.0)"
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+env:
+  TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 defaults:
   run:
@@ -22,7 +35,7 @@ defaults:
 
 jobs:
   build:
-    name: Construction ${{ github.ref_name }}
+    name: Construction ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -34,6 +47,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+
+      - name: Contrôle de l'étiquette
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "Publication manuelle réservée à la branche main (lancée depuis $GITHUB_REF)"; exit 1
+          fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "Étiquette invalide : $TAG (attendu vAA.N.C)"; exit 1; }
+          version=$(python -c "import re; print(re.search(r'__version__ = \"(.+)\"', open('heptagoneslm/__init__.py').read()).group(1))")
+          [ "v$version" = "$TAG" ] || { echo "L'étiquette $TAG ne correspond pas à la version du code ($version)"; exit 1; }
+          echo "Publication de $TAG (version du code : $version, commit $GITHUB_SHA)"
 
       - name: Tests
         run: |
@@ -67,7 +90,7 @@ jobs:
           cp scripts/*.ps1 scripts/*.bat paquet/HeptagonesLM/scripts/
           mkdir -p livrables
           cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe livrables/
-          (cd paquet && 7z a -tzip "../livrables/HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" HeptagonesLM > /dev/null)
+          (cd paquet && 7z a -tzip "../livrables/HeptagonesLM-${TAG}-windows.zip" HeptagonesLM > /dev/null)
 
       - uses: actions/upload-artifact@v4
         with:
@@ -76,7 +99,7 @@ jobs:
           if-no-files-found: error
 
   publish:
-    name: Publication ${{ github.ref_name }}
+    name: Publication ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
     needs: build
     runs-on: ubuntu-latest
     permissions:
@@ -90,7 +113,7 @@ jobs:
       - name: Empreintes SHA-256
         run: |
           cd livrables
-          sha256sum HeptagonesLM.exe HeptagonesLM-Setup.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" > SHA256SUMS
+          sha256sum HeptagonesLM.exe HeptagonesLM-Setup.exe "HeptagonesLM-${TAG}-windows.zip" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publication
@@ -99,7 +122,13 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           cd livrables
-          gh release create "$GITHUB_REF_NAME" \
-            HeptagonesLM-Setup.exe HeptagonesLM.exe "HeptagonesLM-${GITHUB_REF_NAME}-windows.zip" SHA256SUMS \
-            --title "HeptagonesLM $GITHUB_REF_NAME" --generate-notes \
-            --notes "Installation sur serveur : HeptagonesLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash HeptagonesLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
+          files=(HeptagonesLM-Setup.exe HeptagonesLM.exe "HeptagonesLM-${TAG}-windows.zip" SHA256SUMS)
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            # Release déjà créée (depuis l'interface GitHub) : on y joint les fichiers construits
+            gh release upload "$TAG" "${files[@]}" --clobber
+          else
+            # Crée l'étiquette sur le commit construit si elle n'existe pas encore (lancement manuel)
+            gh release create "$TAG" "${files[@]}" --target "$GITHUB_SHA" \
+              --title "HeptagonesLM $TAG" --generate-notes \
+              --notes "Installation sur serveur : HeptagonesLM-Setup.exe (assistant graphique). Vérifier l'intégrité : \`Get-FileHash HeptagonesLM-Setup.exe -Algorithm SHA256\` doit correspondre à SHA256SUMS."
+          fi
