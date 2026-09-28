@@ -121,6 +121,10 @@ nom à HeptagonesLM, qui n'écoute que sur la boucle locale.
    }
    ```
 
+   Le module généré par `HeptagonesLM-Setup.exe` transmet en plus la méthode d'authentification
+   (`Kerberos` ou `NTLM`) dans l'en-tête `X-Remote-Auth-Method`, affichée par la page de test
+   `/acces` : préférer le fichier généré (`C:\HeptagonesLM\iis\App_Code\HeptagonesLMUserHeader.cs`).
+
 4. `web.config` du site :
 
    ```xml
@@ -165,6 +169,16 @@ nom à HeptagonesLM, qui n'écoute que sur la boucle locale.
    La section `<authorization>` du `web.config` réserve l'accès au groupe
    `GG_HeptagonesLM_Lecteurs` (supprimer la section pour tout utilisateur authentifié) ;
    la liste `allowed_users` de HeptagonesLM permet un filtrage supplémentaire.
+
+### Connexion sans saisie : SPN, zone Intranet, test depuis un poste
+
+- **SPN** : `setspn -S HTTP/heptagoneslm.entreprise.local NOMSERVEUR` si le nom public n'est
+  pas celui du serveur (sinon repli NTLM ; SPN sur un autre compte : Kerberos échoue).
+- **Zone Intranet local** (GPO « Liste des attributions de sites aux zones ») :
+  `https://heptagoneslm.entreprise.local` = `1`, sinon les navigateurs demandent les identifiants.
+- **Test** : ouvrir `https://heptagoneslm.entreprise.local/acces` depuis un poste utilisateur :
+  nom reconnu, méthode (Kerberos / NTLM) et saisie ou non d'un mot de passe, résultat repris
+  par la vérification de l'assistant (voir [INSTALLATION.md § 8](INSTALLATION.md)).
 
 ## 3. Certificat HTTPS
 

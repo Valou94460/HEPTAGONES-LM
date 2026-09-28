@@ -145,7 +145,7 @@
     { id: "email", title: "Rapport par e-mail", desc: "Envoi automatique du rapport mensuel (optionnel, modifiable plus tard).", render: renderEmail, validate: "email" },
     { id: "summary", title: "Récapitulatif", desc: "Vérifiez la configuration avant de lancer l'installation.", render: renderSummary, enter: () => loadSummary(), next: "Installer" },
     { id: "install", title: "Installation", desc: "Ne fermez pas cette page pendant l'installation.", render: renderInstall },
-    { id: "verify", title: "Vérification de l'installation", desc: "Contrôle de bout en bout de chaque composant installé.", render: renderVerify, enter: () => runVerify() },
+    { id: "verify", title: "Vérification de l'installation", desc: "Contrôle de bout en bout de chaque composant installé.", render: renderVerify, enter: () => { fixResult = null; runVerify(); } },
   ];
 
   function renderStepper() {
@@ -225,6 +225,22 @@
       </div>`;
   }
 
+  /* Commande à copier (SPN, zone Intranet, adresse de test…) */
+  function cmdHtml(c) {
+    return c.command ? `<div class="cmd"><code>${esc(c.command)}</code><button type="button" class="btn small ghost" data-copy="${esc(c.command)}">Copier</button></div>` : "";
+  }
+  function bindCopy(root = document) {
+    root.querySelectorAll("[data-copy]").forEach(b => b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(b.dataset.copy); b.textContent = "Copié"; }
+      catch (e) { b.textContent = "Sélectionner et copier"; }
+      setTimeout(() => { b.textContent = "Copier"; }, 1800);
+    }));
+  }
+  function checkRow(c) {
+    return `<div class="check-row">${dot(c.status)}<div><div class="lbl">${esc(c.label)}</div><div class="det">${esc(c.detail)}
+      ${c.help ? ` · <a href="${esc(c.help)}" target="_blank" rel="noopener">documentation</a>` : ""}</div>${cmdHtml(c)}</div><span></span></div>`;
+  }
+
   /* 2. Vérification du serveur */
   function checksHtml(list) {
     if (!list) return `<div class="panel"><span class="spinner"></span> Vérification en cours…</div>`;
@@ -245,12 +261,12 @@
         <div class="actions">${fixes.map(c => `<button type="button" class="btn primary" data-fix="${c.fix}" ${checksBusy ? "disabled" : ""}>${esc(c.fix_label || "Corriger")}${c.fix === "install_iis" ? "" : ` : ${esc(c.label)}`}</button>`).join("")}</div></div>` : ""}
       <div class="result" id="fix-result">${renderResult(fixResult)}</div>
       <div class="panel">${Object.entries(groups).map(([g, items]) => `<div class="check-group"><h3>${esc(g)}</h3><div class="check-list">
-        ${items.map(c => `<div class="check-row">${dot(c.status)}<div><div class="lbl">${esc(c.label)}</div><div class="det">${esc(c.detail)}
-          ${c.help ? ` · <a href="${esc(c.help)}" target="_blank" rel="noopener">documentation</a>` : ""}</div></div><span></span></div>`).join("")}
+        ${items.map(checkRow).join("")}
       </div></div>`).join("")}</div>`;
   }
   function renderChecks() { return checksHtml(checks); }
   function bindChecks(root = document) {
+    bindCopy(root);
     root.querySelector("#recheck")?.addEventListener("click", () => runChecks());
     root.querySelectorAll("[data-fix]").forEach(b => b.addEventListener("click", () => runFix(b.dataset.fix)));
   }
@@ -544,6 +560,7 @@
     const ok = v.success;
     const groups = {};
     v.checks.forEach(c => (groups[c.category] = groups[c.category] || []).push(c));
+    const fixes = [...new Map(v.checks.filter(c => c.fix).map(c => [c.fix, c])).values()];
     return `
       <div class="panel"><div class="hero-result ${ok ? "sev-good" : "sev-critical"}"><span class="big">${ok ? "✓" : "!"}</span><div>
         <h2>${ok ? "HeptagonesLM est installé et opérationnel" : "Installation terminée avec des points à corriger"}</h2>
@@ -555,12 +572,28 @@
           <button type="button" class="btn" id="reverify">Relancer la vérification</button>
           <button type="button" class="btn ghost" id="close">Fermer l'assistant</button>
         </div></div>
+      ${v.access_url ? `<div class="panel"><h2>Test depuis un poste utilisateur</h2>
+        <p class="muted">Depuis le poste d'un utilisateur membre du groupe autorisé, ouvrir l'adresse ci-dessous : la page indique sous quel nom il est reconnu (Kerberos ou NTLM) et lui demande s'il a dû saisir un mot de passe. Le résultat apparaît ici après « Relancer la vérification ».</p>
+        ${cmdHtml({ command: v.access_url })}</div>` : ""}
+      ${fixes.length || fixResult ? `<div class="panel">${fixes.length ? `<div class="actions">${fixes.map(c => `<button type="button" class="btn primary" data-vfix="${c.fix}">${esc(c.fix_label || "Corriger")}</button>`).join("")}</div>` : ""}
+        <div class="result" id="fix-result">${renderResult(fixResult)}</div></div>` : ""}
       <div class="panel">${Object.entries(groups).map(([g, items]) => `<div class="check-group"><h3>${esc(g)}</h3><div class="check-list">
-        ${items.map(c => `<div class="check-row">${dot(c.status)}<div><div class="lbl">${esc(c.label)}</div><div class="det">${esc(c.detail)}</div></div><span></span></div>`).join("")}
+        ${items.map(checkRow).join("")}
       </div></div>`).join("")}</div>`;
   }
   STEPS[9].after = () => {
+    bindCopy();
     $("reverify")?.addEventListener("click", () => runVerify());
+    document.querySelectorAll("[data-vfix]").forEach(b => b.addEventListener("click", async () => {
+      fixResult = { busy: "Correction en cours…" }; render();
+      try {
+        const res = await api("/api/fix", { fix: b.dataset.vfix, answers: A, final: true });
+        fixResult = { status: "ok", message: res.message };
+      } catch (e) {
+        fixResult = { status: "error", message: e.message };
+      }
+      await runVerify();
+    }));
     $("close")?.addEventListener("click", async () => {
       try { await api("/api/shutdown", {}); } catch (e) { /* déjà arrêté */ }
       try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }

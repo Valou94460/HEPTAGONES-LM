@@ -21,6 +21,7 @@ class Check:
     fix: str | None = None       # identifiant de correction automatique
     fix_label: str | None = None
     help: str | None = None
+    command: str | None = None   # commande à copier (poste, administrateur du domaine…)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -150,16 +151,36 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
         certs = [c for c in system.certificates() if not c.get("expired")]
     except SetupError as exc:
         add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "warning", f"Lecture du magasin impossible : {exc}")
-        return out
-    add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "ok" if certs else "warning",
-        f"{len(certs)} certificat(s) avec clé privée disponible(s)" if certs else
-        "Aucun certificat avec clé privée : en demander un à l'AC d'entreprise puis l'importer "
-        "dans « Ordinateur local › Personnel »")
+        certs = None
+    if certs is not None:
+        add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "ok" if certs else "warning",
+            f"{len(certs)} certificat(s) avec clé privée disponible(s)" if certs else
+            "Aucun certificat avec clé privée : en demander un à l'AC d'entreprise puis l'importer "
+            "dans « Ordinateur local › Personnel »")
+
+    # -- Authentification unique (nom public connu : juste avant l'installation) ------------------
+    if final and a.public_host:
+        from heptagoneslm.setup import sso
+        spn = sso.spn_check(system, a, info)
+        if spn:
+            if spn.status == "error":        # à corriger dans l'annuaire : ne bloque pas l'installation
+                spn.status = "warning"
+            out.append(spn)
+        zone = sso.zone_check(system, a)
+        if zone:
+            out.append(zone)
     return out
 
 
-def apply_fix(system: System, fix: str) -> str:
+def apply_fix(system: System, fix: str, a: Answers | None = None) -> str:
     """Exécute une correction automatique ; renvoie un message de résultat."""
+    if fix == "register_spn":
+        if not a or not a.public_host:
+            raise SetupError("Nom public de l'interface non renseigné (étape « Interface web et IIS »)")
+        computer = str(system.os_info().get("hostname") or "").upper()
+        spn = f"HTTP/{a.public_host.strip().lower()}"
+        system.register_spn(spn, computer)
+        return f"SPN {spn} déclaré sur le compte {computer}$"
     if fix == "install_iis":
         state = system.iis_state() or {}
         features = state.get("features") or {}

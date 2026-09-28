@@ -66,12 +66,14 @@ def run(system: System, answers_path: str, out=None) -> int:
     checks = run_checks(system, a, final=True)
     for c in checks:
         p(f"  [{SYMBOL[c.status]}] {c.category} · {c.label} : {c.detail}")
+        if c.command:
+            p(f"        commande : {c.command}")
     fixes = list(dict.fromkeys(c.fix for c in blocking(checks) if c.fix))
     if fixes and a.auto_fix:
         for fix in fixes:
             p(f"  Correction automatique : {fix} …")
             try:
-                p("   ", apply_fix(system, fix))
+                p("   ", apply_fix(system, fix, a))
             except SetupError as exc:
                 p(f"    échec : {exc}")
         checks = run_checks(system, a, final=True)
@@ -107,6 +109,8 @@ def run(system: System, answers_path: str, out=None) -> int:
     v = verify(system, a)
     for c in v["checks"]:
         p(f"  [{SYMBOL[c['status']]}] {c['category']} · {c['label']} : {c['detail']}")
+        if c.get("command"):
+            p(f"        commande : {c['command']}")
     p(f"Résultat : {v['counts']['ok']} conforme(s), {v['counts']['warning']} avertissement(s), "
       f"{v['counts']['error']} erreur(s)" + (f" — {v['url']}" if v.get("url") else ""))
     return 0 if v["success"] else 2

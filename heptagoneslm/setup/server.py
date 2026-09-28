@@ -215,7 +215,7 @@ class SetupHandler(BaseHTTPRequestHandler):
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"checks": [c.to_dict() for c in checks], "blocking": len(blocking(checks))})
             if path == "/api/fix":
-                message = apply_fix(app.system, str(body.get("fix", "")))
+                message = apply_fix(app.system, str(body.get("fix", "")), a)
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"message": message, "checks": [c.to_dict() for c in checks],
                                    "blocking": len(blocking(checks))})

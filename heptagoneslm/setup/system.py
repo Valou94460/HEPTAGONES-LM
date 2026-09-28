@@ -103,8 +103,11 @@ class System:
     def task_info(self, name: str) -> dict | None: raise NotImplementedError
     def site_state(self, name: str) -> dict: raise NotImplementedError
     def firewall_exists(self, name: str) -> bool: raise NotImplementedError
+    def spn_owners(self, spn: str) -> list[str]: raise NotImplementedError
+    def browser_policies(self) -> dict: raise NotImplementedError
 
     # -- actions ----------------------------------------------------------------------
+    def register_spn(self, spn: str, computer: str) -> None: raise NotImplementedError
     def install_iis_features(self, names: list[str]) -> dict: raise NotImplementedError
     def install_module(self, key: str) -> dict: raise NotImplementedError
     def run(self, cmd: list[str], env: dict | None = None, timeout: int = 180) -> Result: raise NotImplementedError
@@ -336,7 +339,47 @@ $i = $t | Get-ScheduledTaskInfo
                             "-ErrorAction SilentlyContinue) } | ConvertTo-Json -Compress")
         return bool((data or {}).get("exists"))
 
+    def spn_owners(self, spn: str) -> list[str]:
+        """Comptes AD portant ce SPN (recherche LDAP dans le domaine du serveur)."""
+        data = self.ps_json(f"""
+$s = New-Object System.DirectoryServices.DirectorySearcher
+$s.Filter = '(servicePrincipalName=' + {ps_quote(ldap_escape(spn))} + ')'
+[void]$s.PropertiesToLoad.Add('samaccountname')
+$owners = @($s.FindAll() | ForEach-Object {{ [string]$_.Properties['samaccountname'][0] }})
+[pscustomobject]@{{ owners = $owners }} | ConvertTo-Json -Compress
+""", timeout=60) or {}
+        owners = data.get("owners") or []
+        return [owners] if isinstance(owners, str) else list(owners)
+
+    def browser_policies(self) -> dict:
+        """Stratégies des navigateurs appliquées à ce serveur (zones Internet Explorer / Windows, Edge, Chrome)."""
+        return self.ps_json(r"""
+$skip = 'PSPath','PSParentPath','PSChildName','PSDrive','PSProvider'
+$zones = @()
+foreach ($root in @(@('ordinateur', 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMapKey'),
+                    @('utilisateur', 'HKCU:\SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\Internet Settings\ZoneMapKey'))) {
+    if (Test-Path $root[1]) {
+        (Get-ItemProperty $root[1]).PSObject.Properties | Where-Object { $skip -notcontains $_.Name } | ForEach-Object {
+            $zones += [pscustomobject]@{ pattern = $_.Name; zone = [string]$_.Value; scope = $root[0] } }
+    }
+}
+$allow = @{}
+foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome', 'HKLM:\SOFTWARE\Policies\Google\Chrome'))) {
+    $v = (Get-ItemProperty $k[1] -Name AuthServerAllowlist -ErrorAction SilentlyContinue).AuthServerAllowlist
+    if ($v) { $allow[$k[0]] = [string]$v }
+}
+[pscustomobject]@{ zones = @($zones); allowlist = $allow } | ConvertTo-Json -Compress -Depth 4
+""", timeout=60) or {}
+
     # -- actions ----------------------------------------------------------------------
+    def register_spn(self, spn: str, computer: str) -> None:
+        r = self.run(["setspn", "-S", spn, computer], timeout=60)
+        owners = self.spn_owners(spn)
+        if not any(o.lower() == computer.lower() + "$" for o in owners):
+            detail = (r.stdout or "").strip().splitlines()[-1:] or [r.message]
+            raise SetupError(f"setspn -S {spn} {computer} : {detail[0] if detail else 'échec'} "
+                             "(droits d'administrateur du domaine nécessaires)")
+
     def install_iis_features(self, names: list[str]) -> dict:
         return self.ps_json(iis.install_features_script(names), timeout=1800) or {}
 
@@ -552,6 +595,11 @@ New-NetFirewallRule -DisplayName {ps_quote(name)} -Direction Inbound -Protocol T
         return done
 
 
+def ldap_escape(value: str) -> str:
+    """Échappement d'une valeur de filtre LDAP (RFC 4515)."""
+    return "".join({"\\": r"\5c", "*": r"\2a", "(": r"\28", ")": r"\29", "\0": r"\00"}.get(c, c) for c in value)
+
+
 def _clixml_errors(err: str) -> str:
     """Erreurs PowerShell sérialisées (CLIXML, sortie d'erreur redirigée) -> texte lisible."""
     if "#< CLIXML" not in err:
@@ -604,6 +652,7 @@ class SimulatedSystem(System):
         self.acl: list[tuple[str, str, str]] = []
         self.calls: list[str] = []
         self.db = {"exists": False, "schema": None}
+        self.spns: dict[str, list[str]] = {}
 
     def _step(self, name: str, factor: float = 1.0) -> None:
         self.calls.append(name)
@@ -672,6 +721,17 @@ class SimulatedSystem(System):
     def firewall_exists(self, name: str) -> bool:
         return name in self.firewall
 
+    def spn_owners(self, spn: str) -> list[str]:
+        return list(self.spns.get(spn.lower(), []))
+
+    def browser_policies(self) -> dict:
+        return {"zones": [{"pattern": "https://*.entreprise.local", "zone": "1", "scope": "ordinateur"}],
+                "allowlist": {}}
+
+    def register_spn(self, spn: str, computer: str) -> None:
+        self._step("register_spn", 1)
+        self.spns[spn.lower()] = [computer.upper() + "$"]
+
     # -- actions ----------------------------------------------------------------------
     def install_iis_features(self, names: list[str]) -> dict:
         self._step("install_iis_features", 4)
@@ -724,6 +784,12 @@ class SimulatedSystem(System):
 
     def read_text(self, path: str) -> str | None:
         real = self._real(path)
+        if not real.is_file() and path.endswith("tests-acces.jsonl") and \
+                self.tasks.get("HeptagonesLM - Interface web", {}).get("state") == "Running":
+            # Démonstration : un utilisateur a ouvert la page /acces depuis son poste
+            return json.dumps({"at": time.strftime("%Y-%m-%dT%H:%M:%S"), "user": "jdupont",
+                               "display_name": "Jeanne Dupont", "method": "Kerberos", "client": "10.20.4.37",
+                               "workstation": "PC-ETU-037", "browser": "Edge", "prompted": False}) + "\n"
         return real.read_text(encoding="utf-8") if real.is_file() else None
 
     def copy_file(self, src: str, dst: str) -> None:

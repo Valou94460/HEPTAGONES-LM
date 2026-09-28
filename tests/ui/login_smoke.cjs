@@ -47,7 +47,19 @@ const fs = require("fs");
   const [dl] = await Promise.all([page.waitForEvent("download"), page.click("[data-export=csv]")]);
   console.log("export ->", dl.suggestedFilename());
 
-  // 5. Déconnexion -> retour à la connexion, API refusée
+  // 5. Test d'accès depuis ce poste (/acces) : utilisateur reconnu, résultat enregistré
+  await page.goto(base + "/acces");
+  await page.waitForSelector("#access-status.ok", { timeout: 10000 }).catch(() => failures.push("page /acces : accès non confirmé"));
+  console.log("test d'accès ->", (await page.textContent("#access-status")).trim());
+  check((await page.textContent("#access-details")).includes("jdupont"), "page /acces : identifiant absent");
+  await page.check('input[name="prompted"][value="no"]');
+  await page.click("#access-submit");
+  await page.waitForSelector("#access-result.ok", { timeout: 10000 }).catch(() => failures.push("page /acces : résultat non enregistré"));
+  await page.screenshot({ path: `${out}/test_acces.png` });
+  await page.goto(base + "/");
+  await page.waitForSelector("#logout:not([hidden])", { timeout: 10000 }).catch(() => {});
+
+  // 6. Déconnexion -> retour à la connexion, API refusée
   await page.click("#logout");
   await page.waitForURL(/login\.html/);
   const status = await page.evaluate(async () => (await fetch("api/meta")).status);

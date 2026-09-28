@@ -33,6 +33,7 @@ def main() -> None:
         "servers": [{"name": s.name, "port_at_host": s.port_at_host} for s in raw.servers],
         "web": {"auth": {"mode": "ldap", "ldap_servers": ["ldaps://fake"], "base_dn": "DC=fake",
                          "upn_suffix": "fake.local"}},
+        "logging": {"file": f"{tmp}/logs/heptagoneslm.log"},     # tests d'accès (/acces) hors du dépôt
     })
     httpd = make_server(cfg, port=port, auth=Auth(cfg.web.auth, authenticator=FakeDirectory()))
     print(f"prêt sur le port {httpd.server_address[1]}", flush=True)

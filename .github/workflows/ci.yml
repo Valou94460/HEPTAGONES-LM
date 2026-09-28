@@ -269,6 +269,18 @@ jobs:
           # En-tête forgé par le client : ignoré (remplacé par l'utilisateur authentifié)
           $me = Get-Me @("-H", "X-Remote-User: administrateur")
           if ($me.user -ne "ci_lecteur") { throw "en-tête X-Remote-User du client accepté" }
+          # Test d'accès depuis un poste (/acces) : méthode transmise par le module, résultat enregistré
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o acces.html -w "%{http_code}" https://heptagoneslm.ci.local/acces
+          if ($code -ne "200") { throw "page /acces : $code" }
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o test.json -w "%{http_code}" https://heptagoneslm.ci.local/api/access-test
+          Write-Host "[$code] $(Get-Content test.json -Raw)"
+          $t = Get-Content test.json -Raw | ConvertFrom-Json
+          if ($code -ne "200" -or $t.method -ne "NTLM" -or $t.user -ne "ci_lecteur") { throw "test d'accès : méthode ou utilisateur non transmis" }
+          Set-Content body.json '{"prompted": false}' -Encoding ascii
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -H "Content-Type: application/json" -H "X-HeptagonesLM: 1" `
+            --data-binary "@body.json" -o rec.json -w "%{http_code}" https://heptagoneslm.ci.local/api/access-test
+          Write-Host "[$code] $(Get-Content rec.json -Raw)"
+          if ($code -ne "200") { throw "enregistrement du test d'accès : $code" }
           # Authentifié mais hors du groupe autorisé : refus par IIS
           $code = curl.exe -sk --ntlm -u "svc_heptagoneslm:$env:SVC_PWD" -o NUL -w "%{http_code}" $url
           Write-Host "Hors du groupe : $code"
@@ -290,8 +302,12 @@ jobs:
 
       - name: Relance de l'installation (idempotence)
         run: |
-          .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json
-          if ($LASTEXITCODE -ne 0) { throw "Réinstallation : code $LASTEXITCODE" }
+          $lines = & .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json 2>&1
+          $code = $LASTEXITCODE
+          $lines | ForEach-Object { Write-Host $_ }
+          if ($code -ne 0) { throw "Réinstallation : code $code" }
+          # La vérification finale reprend le test d'accès enregistré depuis le « poste » ci_lecteur
+          if (-not ($lines -match "ci_lecteur.*NTLM.*sans saisie")) { throw "test d'accès absent de la vérification finale" }
           # HeptagonesLM relancé après la mise à jour de l'exécutable, SSO toujours opérationnel
           $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://heptagoneslm.ci.local/api/me
           Write-Host "[$code] $(Get-Content me.json -Raw)"

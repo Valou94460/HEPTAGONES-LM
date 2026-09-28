@@ -30,7 +30,7 @@ from urllib.parse import parse_qs, quote, urlparse, urlsplit
 from heptagoneslm import __version__
 from heptagoneslm.config import AppConfig, ConfigError
 from heptagoneslm.storage.db import Database
-from heptagoneslm.web import api
+from heptagoneslm.web import access, api
 from heptagoneslm.web.auth import COOKIE_NAME, Auth, AuthError, UserInfo
 
 log = logging.getLogger(__name__)
@@ -43,7 +43,8 @@ CONTENT_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; c
                  ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml"}
 STATIC_FILES = {"/": "index.html", "/index.html": "index.html", "/app.js": "app.js",
                 "/charts.js": "charts.js", "/style.css": "style.css", "/favicon.svg": "favicon.svg",
-                "/login.html": "login.html", "/login.js": "login.js", "/theme.js": "theme.js"}
+                "/login.html": "login.html", "/login.js": "login.js", "/theme.js": "theme.js",
+                "/acces": "acces.html", "/acces.js": "acces.js"}
 # Accessibles sans être connecté (page de connexion et ses ressources).
 PUBLIC_PATHS = {"/login.html", "/login.js", "/style.css", "/favicon.svg", "/theme.js"}
 MAX_BODY = 8192
@@ -168,9 +169,37 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
         if not self.auth.enabled:
             return UserInfo(username="local")
         if self.auth.mode == "header":
-            return self.auth.user_from_header(self.headers, self.client_ip)
+            user = self.auth.user_from_header(self.headers, self.client_ip)
+            if user:
+                access.remember_method(user.username, self.headers.get(access.METHOD_HEADER))
+            return user
         session = self.auth.sessions.get(self._token())
         return session.user if session else None
+
+    def _access_info(self, user: UserInfo) -> dict:
+        """Ce que HeptagonesLM voit de l'utilisateur (page de test d'accès /acces)."""
+        trusted = self.auth.mode == "header" and self.client_ip in self.auth.cfg.trusted_proxies
+        if self.auth.mode == "header":
+            method = access.last_method(user.username) or "Windows (méthode non déterminée)"
+        elif self.auth.mode == "ldap":
+            method = "Identifiants Windows (formulaire)"
+        else:
+            method = "Aucune (poste local)"
+        client = access.client_address(self.headers, self.client_ip, trusted)
+        display_name, department = user.display_name, user.department
+        if not display_name:                 # authentification IIS : nom complet du référentiel (import-users)
+            try:
+                with self._db() as db:
+                    rows = db.query_dicts("SELECT display_name, department FROM app_user WHERE LOWER(username) = ?",
+                                          (user.username.lower(),))
+                if rows:
+                    display_name, department = rows[0]["display_name"], department or rows[0]["department"]
+            except Exception:            # base indisponible : le test d'accès reste possible
+                log.warning("Référentiel utilisateurs indisponible pour le test d'accès", exc_info=True)
+        return {"user": user.username, "display_name": display_name, "department": department,
+                "auth": self.auth.mode, "method": method, "client": client,
+                "workstation": access.workstation_of(client),
+                "browser": access.browser_of(self.headers.get("User-Agent") or "")}
 
     def _cookie(self, value: str, max_age: int) -> str:
         secure = "; Secure" if self.tls else ""
@@ -233,6 +262,22 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                     "Set-Cookie": self._cookie(session.token, int(self.auth.cfg.session_hours * 3600)),
                     "Cache-Control": "no-store",
                 })
+            if path == "/api/access-test":
+                # En-tête personnalisé : interdit l'envoi depuis un autre site (pré-requête CORS refusée)
+                if self.headers.get("X-HeptagonesLM") != "1":
+                    return self._json({"error": "Requête refusée"}, HTTPStatus.FORBIDDEN)
+                user = self.current_user()
+                if user is None:
+                    return self._deny(path)
+                body = self._read_json()
+                info = self._access_info(user)
+                entry = access.make_entry(info["user"], info["display_name"], info["method"], info["client"],
+                                          info["workstation"], info["browser"], body.get("prompted"))
+                access.record(access.results_path(self.config.log_file), entry)
+                audit.info("Test d'accès : %s depuis %s (%s, %s, mot de passe demandé : %s)", entry["user"],
+                           entry["workstation"] or entry["client"], entry["browser"], entry["method"],
+                           {True: "oui", False: "non"}.get(entry["prompted"], "?"))
+                return self._json({"ok": True, "entry": entry})
             if path == "/api/logout":
                 token = self._token()
                 session = self.auth.sessions.get(token)
@@ -267,6 +312,8 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             if url.path == "/api/me":
                 return self._json({"auth": self.auth.mode, "user": user.username,
                                    "display_name": user.display_name, "department": user.department})
+            if url.path == "/api/access-test":
+                return self._json(self._access_info(user))
             query = parse_qs(url.query, keep_blank_values=True)
             if url.path == "/api/meta":
                 with self._db() as db:
