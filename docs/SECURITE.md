@@ -1,6 +1,6 @@
 # Sécurité de HeptagonesLM
 
-Ce document résume l'audit de sécurité de la version 0.1.0, les corrections
+Ce document résume l'audit de sécurité de la version 26.1.0, les corrections
 appliquées et les recommandations de déploiement. Signaler une vulnérabilité :
 ouvrir une issue **sans détail exploitable** et demander un contact privé.
 

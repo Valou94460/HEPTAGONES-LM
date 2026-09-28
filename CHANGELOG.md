@@ -1,9 +1,13 @@
 # Journal des modifications
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/) ;
-numérotation [SemVer](https://semver.org/lang/fr/).
+numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex. 26.1.0, 26.1.1, 26.2.0).
 
 ## [Non publié]
+
+## [26.1.0] — 2026-09-28
+
+Première version publiée (développée sous le nom de travail FreeLM).
 
 ### Ajouté
 - **Assistant d'installation** `HeptagonesLM-Setup.exe` / `heptagoneslm setup` : interface pas à pas dans le
@@ -75,10 +79,6 @@ numérotation [SemVer](https://semver.org/lang/fr/).
 - **Réinstallation / mise à jour** avec l'assistant : les tâches et processus HeptagonesLM en cours sont
   arrêtés avant le remplacement de `HeptagonesLM.exe` (fichier verrouillé), puis relancés.
 
-## [0.1.0] — 2026-09-27
-
-Première version.
-
 ### Collecte
 - Sondage `lmutil lmstat -a` : jetons émis / utilisés, checkouts en cours, files d'attente,
   utilisateurs avec espaces, changement d'année.
@@ -108,5 +108,5 @@ Première version.
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/FREE-LM/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Valou94460/FREE-LM/releases/tag/v0.1.0
+[Non publié]: https://github.com/Valou94460/FREE-LM/compare/v26.1.0...HEAD
+[26.1.0]: https://github.com/Valou94460/FREE-LM/releases/tag/v26.1.0

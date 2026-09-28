@@ -1,4 +1,4 @@
-# Publication d'une version : `git tag v0.2.0 && git push origin v0.2.0`
+# Publication d'une version : `git tag v26.2.0 && git push origin v26.2.0`
 #
 # Sécurité de la chaîne de publication :
 # - le job « build » (tests, installation des dépendances, PyInstaller) n'a qu'un

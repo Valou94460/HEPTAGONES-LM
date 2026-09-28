@@ -53,5 +53,5 @@ heptagoneslm parse-log license.log
 ## Publier une version
 
 1. Mettre à jour `heptagoneslm/__init__.py`, `pyproject.toml` et le CHANGELOG.
-2. `git tag v0.2.0 && git push origin v0.2.0`
+2. `git tag v26.2.0 && git push origin v26.2.0` (numérotation `AA.N.C` : année, version de l'année, correctif)
 3. Le workflow *Release* construit `HeptagonesLM.exe` et publie la release GitHub.
