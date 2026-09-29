@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "heptagoneslm"
-version = "26.2.0"
+version = "26.3.0"
 description = "Suivi et reporting open source de la consommation de licences FlexLM/FlexNet"
 readme = "README.md"
 requires-python = ">=3.10"

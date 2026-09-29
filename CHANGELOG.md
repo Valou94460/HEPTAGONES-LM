@@ -5,6 +5,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.3.0] — 2026-09-29
+
+Publie aussi le contenu de 26.2.0 (non publiée séparément).
+
 ### Ajouté
 - **Tickets ITSM automatiques** (`alerts.itsm`) : ServiceNow (incident, API Table), Jira (Cloud et
   Data Center, API REST v2), GLPI (API REST) et webhook générique (JSON, Microsoft Teams, Slack).
@@ -174,7 +178,8 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.2.0...HEAD
-[26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.2.0
+[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.0...HEAD
+[26.3.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
+[26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
 [26.1.1]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.0...v26.1.1
 [26.1.0]: https://github.com/Valou94460/HEPTAGONES-LM/releases/tag/v26.1.0

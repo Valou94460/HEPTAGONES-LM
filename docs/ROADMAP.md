@@ -8,7 +8,7 @@ Base : comparatif fonctionnel OpenLM / HeptagonesLM du 29/09/2026, chaque ligne 
 vérifiée dans le code de la version 26.2.0. Les dates sont indicatives, à confirmer
 selon les priorités des premiers clients.
 
-## 1. Où en est-on (état réel, version 26.3.0 en recette)
+## 1. Où en est-on (état réel, version 26.3.0)
 
 | Fonction | OpenLM | HeptagonesLM aujourd'hui | Lot |
 |---|:---:|---|:---:|
@@ -51,11 +51,11 @@ selon les priorités des premiers clients.
 
 ## 2. Lots de livraison
 
-### 26.2.0 — Alertes et RLM (prête, en revue : PR #7)
+### 26.2.0 — Alertes et RLM (publiée avec 26.3.0)
 - Alertes immédiates par e-mail (collecte, refus, saturation, échéances).
 - Collecteur RLM (Foundry, Maxon, Chaos…).
 
-### 26.3.0 — ITSM et gouvernance (développée — en recette)
+### 26.3.0 — ITSM et gouvernance (prête : PR #7, en attente de fusion et de publication)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
