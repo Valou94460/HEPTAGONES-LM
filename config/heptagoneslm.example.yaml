@@ -65,6 +65,13 @@ products:
   - { pattern: "ansys",             product: "Ansys Mechanical Enterprise", publisher: Ansys }
   - { pattern: "a_spaceclaim_*",    product: "Ansys SpaceClaim",        publisher: Ansys }
 
+# Sites des postes (multi-sites) : motif fnmatch sur le nom du poste, la première règle gagne.
+# Filtre et répartition « Site » dans l'interface. Après modification : `heptagoneslm apply-products`.
+# sites:
+#   - { pattern: "par-*", site: "Paris" }
+#   - { pattern: "lyo-*", site: "Lyon" }
+#   - { pattern: "*",     site: "Autres sites" }
+
 reporting:
   output_dir: "C:/HeptagonesLM/reports"
   top_n_chart: 10          # éléments affichés dans les graphiques

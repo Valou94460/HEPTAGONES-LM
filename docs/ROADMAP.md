@@ -8,7 +8,7 @@ Base : comparatif fonctionnel OpenLM / HeptagonesLM du 29/09/2026, chaque ligne 
 vérifiée dans le code de la version 26.2.0. Les dates sont indicatives, à confirmer
 selon les priorités des premiers clients.
 
-## 1. Où en est-on (état réel, version 26.2.0)
+## 1. Où en est-on (état réel, version 26.3.0 en recette)
 
 | Fonction | OpenLM | HeptagonesLM aujourd'hui | Lot |
 |---|:---:|---|:---:|
@@ -17,7 +17,7 @@ selon les priorités des premiers clients.
 | Refus (denials) | Oui | ✅ FlexLM (log debug) · ❌ RLM (report log non lu) | 26.5 |
 | Détection de saturation | Oui | ✅ Contention, heures saturées, alerte « plus aucun jeton » | — |
 | Licences sous-utilisées | Oui | ✅ Alerte « sous-utilisé », efficacité des jetons, recommandation | — |
-| Licences **inutilisées** (aucun usage sur la période) | Oui | 🟡 Visibles dans la synthèse, pas de vue dédiée | 26.3 |
+| Licences **inutilisées** (aucun usage sur la période) | Oui | ✅ Vue dédiée avec coût annuel (26.3) | — |
 | Alertes | Oui | ✅ Tableau de bord + e-mail immédiat (collecte, refus, saturation, échéances) | — |
 | Reporting, tableaux de bord, exports | Oui | ✅ 13 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
 | Heatmaps | Oui | ✅ Profil horaire (jour × heure) | — |
@@ -27,17 +27,17 @@ selon les priorités des premiers clients.
 | **Idle session monitoring** (inactivité réelle sur le poste) | Oui | 🟡 Seulement les fermetures « INACTIVE » du démon FlexLM | 27.1 |
 | **License harvesting** automatique | Oui | ❌ (nécessite un agent sur les postes) | 27.1 |
 | **Allocation** de licences (quotas par groupe) | Oui | ❌ | 27.1 |
-| **Named user** / réservations | Oui | ❌ (réservations lmstat ignorées) | 26.3 |
+| **Named user** / réservations | Oui | ✅ Vue Réservations, taux d'usage du bénéficiaire (26.3) | — |
 | Token monitoring | Oui | ✅ FlexLM et RLM | — |
-| **Licences empruntées** (borrow) | Oui | ❌ (non distinguées dans lmstat) | 26.3 |
+| **Licences empruntées** (borrow) | Oui | ✅ Signalées (sessions, En direct) (26.3) | — |
 | **Dongles** (clés USB de licence) | Oui | ❌ | 26.5 |
 | Gestionnaires de licences | 70+ | 🟡 FlexLM + RLM · ❌ DSLS, Sentinel RMS/HASP, LM-X, LUM… | 26.5 |
 | Autodesk, Ansys, MATLAB (FlexLM) | Oui | ✅ | — |
-| **ServiceNow, Jira, GLPI, tickets ITSM automatiques** | Oui / selon intégration | ❌ **Pas d'intégration dans le logiciel** (un e-mail d'alerte peut être relevé par un outil ITSM) | 26.3 |
-| **Rôles fins par service**, administration en ligne | Oui | ❌ Un seul groupe AD, tout le monde voit tout | 26.3 |
+| **ServiceNow, Jira, GLPI, tickets ITSM automatiques** | Oui / selon intégration | ✅ Connecteurs natifs + webhook Teams / Slack (26.3) | — |
+| **Rôles fins par service** | Oui | ✅ Administrateur, lecteur, responsable de service (26.3) · administration en ligne : ❌ | 27.2 |
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
-| **Multi-sites** | Oui | 🟡 Champ « site » en base, non alimenté ni filtrable | 26.3 |
+| **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
 | Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 66 pages, plan de test, guide d'installation | — |
@@ -55,7 +55,7 @@ selon les priorités des premiers clients.
 - Alertes immédiates par e-mail (collecte, refus, saturation, échéances).
 - Collecteur RLM (Foundry, Maxon, Chaos…).
 
-### 26.3.0 — ITSM et gouvernance (cible : fin octobre 2026, ~10 j)
+### 26.3.0 — ITSM et gouvernance (développée — en recette)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|

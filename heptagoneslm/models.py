@@ -36,6 +36,7 @@ class Checkout:
     handle: str | None = None
     start_time: datetime | None = None
     count: int = 1
+    borrowed: bool = False         # licence empruntée (utilisation hors ligne, « linger » FlexLM)
 
     def session_key(self) -> tuple:
         """Clé d'identification stable d'un checkout entre deux sondages.
@@ -45,6 +46,15 @@ class Checkout:
         """
         discriminator = self.handle or (self.start_time.isoformat() if self.start_time else "")
         return (self.feature, self.user.lower(), self.host.lower(), discriminator)
+
+
+@dataclass
+class Reservation:
+    """Jetons réservés à un bénéficiaire (fichier d'options FlexLM : RESERVE)."""
+
+    kind: str          # USER | HOST | GROUP | HOST_GROUP | DISPLAY | INTERNET | PROJECT
+    name: str
+    count: int = 1
 
 
 @dataclass
@@ -60,6 +70,7 @@ class FeatureStatus:
     checkouts: list[Checkout] = field(default_factory=list)
     queued: int = 0
     expires: date | None = None   # date d'expiration ; None = permanente ou inconnue
+    reservations: list[Reservation] = field(default_factory=list)
 
 
 @dataclass

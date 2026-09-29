@@ -318,9 +318,12 @@ def live_state(db: Database, p) -> dict:
         list(features),
     )
     updated = max((r["snapshot_time"] for r in latest), default=None)
+    from heptagoneslm.storage.repository import Repository
+
+    borrowed_col = "s.borrowed" if Repository(db).has_column("license_session", "borrowed") else "0"
     sessions = db.query_dicts(
-        "SELECT s.feature_id, u.username, u.display_name, u.department, w.hostname, s.checkout_time, "
-        "s.license_count FROM license_session s JOIN app_user u ON u.id = s.user_id "
+        "SELECT s.feature_id, u.username, u.display_name, u.department, w.hostname, w.site, s.checkout_time, "
+        f"s.license_count, {borrowed_col} AS borrowed FROM license_session s JOIN app_user u ON u.id = s.user_id "
         "JOIN workstation w ON w.id = s.workstation_id "
         # Sessions issues des logs : last_seen n'avance pas entre OUT et IN, elles restent valides.
         f"WHERE s.checkin_time IS NULL AND (s.source = 'log' OR s.last_seen >= ?) AND s.feature_id IN ({marks}) "
@@ -330,6 +333,8 @@ def live_state(db: Database, p) -> dict:
     visible = _api().visible_usernames(db, p)
     if visible is not None:        # filtres utilisateur / service, périmètre d'un responsable de service
         sessions = [s for s in sessions if s["username"] in visible]
+    if p.sites:
+        sessions = [s for s in sessions if (s["site"] or _api().NOT_SET) in set(p.sites)]
     by_feature: dict[int, list] = defaultdict(list)
     for s in sessions:
         by_feature[s["feature_id"]].append(s)
@@ -343,8 +348,9 @@ def live_state(db: Database, p) -> dict:
             "utilization": (row["in_use"] / row["issued"]) if row["issued"] else None,
             "queued": row["queued"], "updated_at": row["snapshot_time"],
             "users": [{"user": u["display_name"] or u["username"], "username": u["username"],
-                       "department": u["department"], "host": u["hostname"], "since": u["checkout_time"],
-                       "licenses": u["license_count"]} for u in users],
+                       "department": u["department"], "host": u["hostname"], "site": u["site"],
+                       "since": u["checkout_time"], "licenses": u["license_count"],
+                       "borrowed": bool(u["borrowed"])} for u in users],
         })
     products.sort(key=lambda r: (-(r["utilization"] or 0), r["product"]))
     return {"updated_at": updated, "products": products, "sessions": sessions}
@@ -356,7 +362,7 @@ def report_live(db: Database, p) -> dict:
     rows = []
     for r in state["products"]:
         rows.append({k: r[k] for k in ("product", "server", "issued", "in_use", "free", "utilization", "queued")}
-                    | {"who": ", ".join(f"{u['user']} ({u['host']})" for u in r["users"]),
+                    | {"who": ", ".join(f"{u['user']} ({u['host']}{', emprunt' if u['borrowed'] else ''})" for u in r["users"]),
                        "updated_at": r["updated_at"]})
     C = api._col
     columns = [
@@ -370,6 +376,7 @@ def report_live(db: Database, p) -> dict:
         {"label": "Jetons utilisés", "value": in_use, "type": "int"},
         {"label": "Jetons disponibles", "value": issued - in_use, "type": "int"},
         {"label": "Utilisateurs connectés", "value": len({s["username"] for s in state["sessions"]}), "type": "int"},
+        {"label": "Jetons empruntés (hors ligne)", "value": sum(s["license_count"] or 1 for s in state["sessions"] if s["borrowed"]), "type": "int"},
         {"label": "Produits saturés", "value": sum(1 for r in rows if r["issued"] and r["free"] is not None and r["free"] <= 0), "type": "int"},
     ]
     result = api._result("live", "En direct", "État au dernier sondage", columns, rows, None, kpis)
@@ -590,3 +597,122 @@ def report_dashboard(db: Database, p) -> dict:
                               for r in live["products"][:6]]},
         "columns": [], "rows": [], "chart": None, "notes": [],
     }
+
+
+# ---------------------------------------------------------------------------
+# Réservations (named user) et licences inutilisées
+# ---------------------------------------------------------------------------
+
+RESERVATION_LOW_USE = 0.2      # moins de 20 % des heures ouvrées : réservation peu utilisée
+KIND_LABEL = {"USER": "Utilisateur", "HOST": "Poste", "GROUP": "Groupe d'utilisateurs", "HOST_GROUP": "Groupe de postes",
+              "DISPLAY": "Écran", "INTERNET": "Adresse IP", "PROJECT": "Projet"}
+
+
+def report_reservations(db: Database, p) -> dict:
+    """Jetons réservés (fichier d'options RESERVE) et usage réel par le bénéficiaire."""
+    api = _api()
+    from heptagoneslm.storage.repository import Repository
+
+    if not Repository(db).has_table("feature_reservation"):
+        return api._result("reservations", "Réservations (utilisateurs nommés)", p.describe(), [], [], None, [],
+                           ["Base à mettre à jour : exécuter « HeptagonesLM.exe init-db » (schéma v6)."])
+    features = {f["id"]: f for f in load_features(db, p.start, p.end, p.servers or None, p.products or None)}
+    rows_db = db.query_dicts("SELECT feature_id, kind, name, reserved, updated_at FROM feature_reservation "
+                             "ORDER BY feature_id, kind, name")
+    data = build_report_data(db, p.start, p.end, servers=p.servers or None,
+                             business_hours=p.business_hours, products=p.products or None)
+    by_label = {s.feature_id: s for s in data.summaries}
+    sessions = api._filter_sessions(data.sessions, p)
+    visible = api.visible_usernames(db, p)
+    biz = business_hours_count(p.start, p.end, p.business_hours)
+    rows = []
+    for r in rows_db:
+        f = features.get(r["feature_id"])
+        if f is None:
+            continue
+        name = r["name"]
+        if visible is not None and (r["kind"] != "USER" or name.lower() not in visible):
+            continue           # périmètre limité : seules les réservations nominatives visibles
+        s = by_label.get(r["feature_id"])
+        hours, rate, advice = None, None, "Usage non mesurable par bénéficiaire (groupe)"
+        if r["kind"] in ("USER", "HOST") and s is not None:
+            key = "username" if r["kind"] == "USER" else "hostname"
+            hours = round(sum(x["hours_in_period"] for x in sessions
+                              if x["feature"] == s.feature and x["server"] == s.server
+                              and (x[key] or "").lower() == name.lower()), 1)
+            rate = hours / (r["reserved"] * biz) if biz else None
+            if rate is not None and rate < RESERVATION_LOW_USE:
+                advice = "Peu utilisée : envisager de libérer la réservation"
+            else:
+                advice = "Réservation utilisée"
+        rows.append({"product": f["label"], "server": f["server"], "feature": f["feature"],
+                     "kind": KIND_LABEL.get(r["kind"], r["kind"]), "beneficiary": name,
+                     "reserved": r["reserved"], "hours": hours, "rate": rate, "advice": advice,
+                     "updated_at": r["updated_at"]})
+    rows.sort(key=lambda x: (x["rate"] if x["rate"] is not None else 9, x["product"]))
+    C = api._col
+    columns = [C("product", "Produit"), C("server", "Serveur"), C("kind", "Type"), C("beneficiary", "Bénéficiaire"),
+               C("reserved", "Jetons réservés", "int"), C("hours", "Heures d'usage (période)", "hours"),
+               C("rate", "Taux d'usage (heures ouvrées)", "pct"), C("advice", "Recommandation"),
+               C("updated_at", "Constatée le", "datetime")]
+    kpis = [
+        {"label": "Réservations", "value": len(rows), "type": "int"},
+        {"label": "Jetons réservés", "value": sum(r["reserved"] for r in rows), "type": "int"},
+        {"label": "Peu utilisées", "value": sum(1 for r in rows if r["advice"].startswith("Peu")), "type": "int"},
+    ]
+    notes = [] if rows else ["Aucune réservation : elles proviennent des lignes RESERVE du fichier d'options "
+                             "FlexLM, visibles dans lmstat."]
+    notes.append(f"Taux d'usage : heures d'utilisation par le bénéficiaire rapportées aux heures ouvrées de la "
+                 f"période × jetons réservés ; en dessous de {RESERVATION_LOW_USE:.0%}, la réservation immobilise "
+                 "des jetons pour rien.")
+    return api._result("reservations", "Réservations (utilisateurs nommés)", p.describe(), columns, rows, None,
+                       kpis, notes)
+
+
+def report_unused(db: Database, p) -> dict:
+    """Licences jamais utilisées sur la période : candidates à la résiliation."""
+    api = _api()
+    data = build_report_data(db, p.start, p.end, servers=p.servers or None,
+                             business_hours=p.business_hours, products=p.products or None)
+    ids = [s.feature_id for s in data.summaries]
+    last_use, expiry = {}, {}
+    if ids:
+        marks = ", ".join("?" for _ in ids)
+        for fid, last in db.query(f"SELECT feature_id, MAX(COALESCE(checkin_time, last_seen)) FROM license_session "
+                                  f"WHERE feature_id IN ({marks}) GROUP BY feature_id", ids):
+            last_use[fid] = last
+        from heptagoneslm.storage.repository import Repository
+
+        if Repository(db).has_column("feature", "expires_on"):
+            expiry = dict(db.query(f"SELECT id, expires_on FROM feature WHERE id IN ({marks})", ids))
+    rows = []
+    for s in data.summaries:
+        if not s.issued or s.peak_in_use or s.usage_hours:
+            continue
+        unit = p.costs.get(s.product)
+        rows.append({"product": s.label, "server": s.server, "feature": s.feature, "issued": s.issued,
+                     "last_used": last_use.get(s.feature_id), "expires_on": expiry.get(s.feature_id),
+                     "unit_cost": unit, "annual_cost": unit * s.issued if unit is not None else None})
+    rows.sort(key=lambda r: (-(r["annual_cost"] or 0), r["product"]))
+    money = "money"
+    C = api._col
+    columns = [C("product", "Produit"), C("server", "Serveur"), C("feature", "Feature"),
+               C("issued", "Jetons émis", "int"), C("last_used", "Dernière utilisation", "datetime"),
+               C("expires_on", "Échéance", "date"), C("unit_cost", "Coût annuel / jeton", money),
+               C("annual_cost", "Coût annuel", money)]
+    has_costs = any(r["unit_cost"] is not None for r in rows)
+    kpis = [
+        {"label": "Licences inutilisées", "value": len(rows), "type": "int"},
+        {"label": "Jetons inutilisés", "value": sum(r["issued"] for r in rows), "type": "int"},
+        {"label": "Coût annuel inutilisé", "value": sum(r["annual_cost"] or 0 for r in rows) if has_costs else None,
+         "type": money},
+    ]
+    items = [{"label": r["product"], "value": r["annual_cost"]} for r in rows if r["annual_cost"]][:api.MAX_BAR_ITEMS]
+    chart = {"kind": "bar", "format": money, "title": "Coût annuel des licences inutilisées", "items": items} if items else None
+    notes = ["Licences émises par le serveur mais jamais utilisées sur la période (pic à 0) : à vérifier avec "
+             "les métiers avant de les résilier au prochain renouvellement."]
+    if rows and not has_costs:
+        notes.append("Renseignez annual_cost dans la section products: pour chiffrer les économies.")
+    result = api._result("unused", "Licences inutilisées", p.describe(), columns, rows, chart, kpis, notes)
+    result["currency"] = p.currency
+    return result

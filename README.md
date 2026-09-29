@@ -43,7 +43,8 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
-| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service. |
+| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
+| **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
 | **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
@@ -366,6 +367,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Alertes immédiates par e-mail (collecte, refus, saturation, échéances) | ✅ | ✅ |
 | Tickets ITSM automatiques (ServiceNow, Jira, GLPI, webhook Teams / Slack) | ✅ | ✅ |
 | Rôles par service (groupes AD) | ✅ | ✅ |
+| Licences empruntées, réservations (named user), multi-sites, licences inutilisées | ✅ | ✅ |
 | Administration en ligne (configuration depuis l'interface) | ❌ | ✅ |
 | Libération de licences inactives (agent sur les postes) | ❌ | ✅ |
 | Licences SaaS / cloud, offre hébergée | ❌ | ✅ |

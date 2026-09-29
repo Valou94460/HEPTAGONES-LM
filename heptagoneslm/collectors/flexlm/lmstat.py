@@ -29,7 +29,7 @@ import subprocess
 from datetime import date, datetime, timedelta
 
 from heptagoneslm.collectors.base import CollectorError, StatusCollector, register
-from heptagoneslm.models import Checkout, FeatureStatus, ServerStatus
+from heptagoneslm.models import Checkout, FeatureStatus, Reservation, ServerStatus
 
 log = logging.getLogger(__name__)
 
@@ -84,6 +84,10 @@ _QUEUED_RE = re.compile(
     r"^\s+(?P<ident>\S.*?)\s+\((?P<version>v[^)]*)\)\s+\([^)]*\)\s+queued for (?P<count>\d+) licenses?"
 )
 _COUNT_RE = re.compile(r",\s*(?P<count>\d+)\s+licenses?")
+_LINGER_RE = re.compile(r"\(linger:", re.IGNORECASE)          # licence empruntée (BORROW)
+_RESERVATION_RE = re.compile(
+    r"^\s+(?P<count>\d+)\s+RESERVATIONs?\s+for\s+(?P<kind>USER|HOST_GROUP|HOST|GROUP|DISPLAY|INTERNET|PROJECT)"
+    r"\s+(?P<name>\S+)", re.IGNORECASE)
 
 
 def _split_ident(ident: str) -> tuple[str, str, str | None]:
@@ -197,6 +201,11 @@ def parse_lmstat(text: str, port_at_host: str = "", queried_at: datetime | None 
                     current.expires = expires
             continue
 
+        rv = _RESERVATION_RE.match(line)
+        if rv:
+            current.reservations.append(Reservation(rv["kind"].upper(), rv["name"], int(rv["count"])))
+            continue
+
         co = _CHECKOUT_RE.match(line)
         if co:
             user, host, display = _split_ident(co["ident"])
@@ -211,6 +220,7 @@ def parse_lmstat(text: str, port_at_host: str = "", queried_at: datetime | None 
                     handle=co["handle"],
                     start_time=_infer_start(queried_at, co),
                     count=int(count_m["count"]) if count_m else 1,
+                    borrowed=bool(_LINGER_RE.search(co["rest"] or "")),
                 )
             )
             continue

@@ -55,6 +55,14 @@ class ProductRule:
 
 
 @dataclass
+class SiteRule:
+    """Site d'un poste d'après son nom (motif fnmatch, insensible à la casse)."""
+
+    pattern: str
+    site: str
+
+
+@dataclass
 class ReportingConfig:
     output_dir: str = "reports"
     top_n_chart: int = 10          # nombre de features/utilisateurs dans les graphiques
@@ -225,6 +233,7 @@ class AppConfig:
     database: DatabaseConfig
     servers: list[ServerConfig]
     products: list[ProductRule] = field(default_factory=list)
+    sites: list[SiteRule] = field(default_factory=list)
     reporting: ReportingConfig = field(default_factory=ReportingConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
     lmutil_path: str = "lmutil"
@@ -248,6 +257,13 @@ class AppConfig:
             if rule.annual_cost is not None:
                 costs.setdefault(rule.product, rule.annual_cost)
         return costs
+
+    def resolve_site(self, hostname: str) -> str | None:
+        """Site d'un poste : première règle ``sites`` dont le motif correspond au nom."""
+        for rule in self.sites:
+            if fnmatch.fnmatchcase((hostname or "").lower(), rule.pattern.lower()):
+                return rule.site
+        return None
 
     def resolve_product(self, feature: str, vendor: str | None = None) -> ProductRule | None:
         """Retourne la première règle produit correspondant à la feature."""
@@ -337,6 +353,12 @@ def parse_config(raw: dict) -> AppConfig:
         for p in raw.get("products") or []
     ]
 
+    sites = []
+    for i, r in enumerate(raw.get("sites") or []):
+        if not isinstance(r, dict) or not r.get("pattern") or not r.get("site"):
+            raise ConfigError(f"sites[{i}] : pattern et site sont obligatoires")
+        sites.append(SiteRule(str(r["pattern"]), str(r["site"])))
+
     rep = raw.get("reporting") or {}
     bh = rep.get("business_hours", [8, 19])
     reporting = ReportingConfig(
@@ -368,6 +390,7 @@ def parse_config(raw: dict) -> AppConfig:
         database=DatabaseConfig(connection_string=conn),
         servers=servers,
         products=products,
+        sites=sites,
         reporting=reporting,
         retention=retention,
         lmutil_path=_expand(raw.get("lmutil_path", "lmutil")),

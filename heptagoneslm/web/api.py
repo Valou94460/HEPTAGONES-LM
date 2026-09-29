@@ -39,6 +39,7 @@ DIMENSIONS = {
     "product": "Produit",
     "server": "Serveur",
     "publisher": "Éditeur",
+    "site": "Site",
 }
 MAX_CHART_SERIES = 8   # au-delà, les séries restent dans le tableau (règle de lisibilité)
 MAX_BAR_ITEMS = 15
@@ -57,6 +58,7 @@ class ReportParams:
     products: list[str] = field(default_factory=list)
     users: list[str] = field(default_factory=list)
     departments: list[str] = field(default_factory=list)
+    sites: list[str] = field(default_factory=list)
     granularity: str = "day"
     metric: str = "peak"
     dimension: str = "user"
@@ -69,7 +71,7 @@ class ReportParams:
     def describe(self) -> str:
         parts = [f"Période du {self.start:%d/%m/%Y} au {(self.end - timedelta(seconds=1)):%d/%m/%Y}"]
         for label, values in (("serveurs", self.servers), ("produits", self.products),
-                              ("utilisateurs", self.users), ("services", self.departments)):
+                              ("utilisateurs", self.users), ("services", self.departments), ("sites", self.sites)):
             if values:
                 parts.append(f"{label} : {', '.join(values)}")
         return " — ".join(parts)
@@ -131,6 +133,7 @@ def parse_params(query: dict[str, list[str]], today: date | None = None,
         products=many("product"),
         users=[u.lower() for u in many("user")],
         departments=many("department"),
+        sites=many("site"),
         granularity=granularity,
         metric=metric,
         dimension=dimension,
@@ -156,6 +159,7 @@ def meta(db: Database) -> dict:
             entry["servers"].append(p["server"])
     users = db.query_dicts("SELECT username, display_name, department FROM app_user ORDER BY username")
     departments = sorted({u["department"] for u in users if u["department"]})
+    sites = sorted({r[0] for r in db.query("SELECT DISTINCT site FROM workstation WHERE site IS NOT NULL")})
     first = db.scalar("SELECT MIN(hour_start) FROM usage_hourly")
     first_session = db.scalar("SELECT MIN(checkout_time) FROM license_session")
     last = db.scalar("SELECT MAX(hour_start) FROM usage_hourly")
@@ -170,6 +174,7 @@ def meta(db: Database) -> dict:
             for u in users
         ],
         "departments": departments,
+        "sites": sites,
         "data_start": _iso(min(starts)) if starts else None,
         "data_end": _iso(max(ends)) if ends else None,
         "collections": collections_status(db),
@@ -253,6 +258,9 @@ def _filter_sessions(sessions: list[dict], p: ReportParams) -> list[dict]:
     if p.departments:
         wanted = set(p.departments)
         out = [s for s in out if (s["department"] or NOT_SET) in wanted]
+    if p.sites:
+        wanted = set(p.sites)
+        out = [s for s in out if (s.get("site") or NOT_SET) in wanted]
     return out
 
 
@@ -269,8 +277,8 @@ def visible_usernames(db: Database, p: ReportParams) -> set[str] | None:
 
 
 def _user_filter_note(p: ReportParams) -> list[str]:
-    if p.users or p.departments:
-        return ["Les filtres utilisateur/service ne s'appliquent pas aux taux d'occupation, "
+    if p.users or p.departments or p.sites:
+        return ["Les filtres utilisateur/service/site ne s'appliquent pas aux taux d'occupation, "
                 "qui sont des compteurs globaux du serveur de licences."]
     return []
 
@@ -393,7 +401,7 @@ def report_timeseries(db: Database, p: ReportParams) -> dict:
 
 def _dimension_value(s: dict, dimension: str) -> str:
     key = {"user": "username", "host": "hostname", "department": "department",
-           "product": "product", "server": "server", "publisher": "publisher"}[dimension]
+           "product": "product", "server": "server", "publisher": "publisher", "site": "site"}[dimension]
     return s.get(key) or NOT_SET
 
 
@@ -538,11 +546,12 @@ def report_denials(db: Database, p: ReportParams) -> dict:
 
 def report_sessions(db: Database, p: ReportParams) -> dict:
     data = _data(db, p)
-    rows = _filter_sessions(data.sessions, p)
+    rows = [dict(r, borrowed="Oui" if r.get("borrowed") else "") for r in _filter_sessions(data.sessions, p)]
     columns = [
         _col("server", "Serveur"), _col("publisher", "Éditeur"), _col("product", "Produit"),
         _col("feature", "Feature"), _col("username", "Utilisateur"), _col("display_name", "Nom"),
-        _col("department", "Service"), _col("hostname", "Poste"), _col("checkout_time", "Début", "datetime"),
+        _col("department", "Service"), _col("hostname", "Poste"), _col("site", "Site"),
+        _col("borrowed", "Emprunt"), _col("checkout_time", "Début", "datetime"),
         _col("checkin_time", "Fin", "datetime"), _col("licenses", "Jetons", "int"),
         _col("hours_in_period", "Heures (période)", "hours"), _col("source", "Source"),
         _col("close_reason", "Motif de fin"),
@@ -593,6 +602,8 @@ REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
     "denials": ("Refus", report_denials),
     "efficiency": ("Efficacité", _insight("report_efficiency")),
     "optimization": ("Optimisation & coûts", _insight("report_optimization")),
+    "unused": ("Licences inutilisées", _insight("report_unused")),
+    "reservations": ("Réservations", _insight("report_reservations")),
     "sessions": ("Sessions", report_sessions),
     "collections": ("Collectes", report_collections),
 }

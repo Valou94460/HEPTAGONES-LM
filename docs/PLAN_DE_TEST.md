@@ -342,6 +342,16 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | ROLE-05 [E3] | Sans rôle | Compte autorisé par IIS mais sans rôle (`default: none`) | Interface refusée (403 « pas de rôle ») ; page `/acces` accessible | ☐ |
 | ROLE-06 🔴 [E3] | Groupes via IIS | Mode `header` : `/api/me` | `groups` > 0 ; un en-tête `X-Remote-Groups` ajouté à la main est ignoré | ☐ |
 
+### 5.10 sexies Emprunts, réservations, sites, licences inutilisées (OPT)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| OPT-01 [E3] | Licence empruntée | Emprunter une licence (`lmborrow`) puis collecter | Session marquée « Emprunt » (Sessions) et « emprunt » (En direct) ; indicateur « Jetons empruntés » | ☐ |
+| OPT-02 🔴 [E3] | Réservations | Serveur dont le fichier d'options contient des `RESERVE` | Vue Réservations : bénéficiaire, jetons, taux d'usage ; conforme aux lignes `RESERVATION` de lmstat | ☐ |
+| OPT-03 [E3] | Réservation retirée | Supprimer une ligne `RESERVE`, relire les options (`lmreread`), collecter | Réservation disparue de la vue | ☐ |
+| OPT-04 🔴 [E3] | Sites | Règles `sites` ; `apply-products` | Filtre « Sites » proposé ; Répartition par site ; sessions filtrées sur un site | ☐ |
+| OPT-05 🔴 | Licences inutilisées | Période où une feature émise n'a jamais été utilisée | Présente dans « Licences inutilisées » avec son coût annuel ; absente dès la première utilisation | ☐ |
+
 ### 5.10 ter Serveurs RLM (RLM)
 
 | ID | Cas | Procédure | Résultat attendu | OK |

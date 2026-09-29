@@ -1,0 +1,31 @@
+lmutil - Copyright (c) 1989-2023 Flexera. All Rights Reserved.
+Flexible License Manager status on Mon 9/23/2024 10:12
+
+License server status: 27000@licsrv-mlm
+    License file(s) on licsrv-mlm: C:\MATLAB\etc\license.dat:
+
+  licsrv-mlm: license server UP (MASTER) v11.19.1
+
+Vendor daemon status (on licsrv-mlm):
+
+       MLM: UP v11.19.1
+
+Feature usage info:
+
+Users of MATLAB:  (Total of 5 licenses issued;  Total of 3 licenses in use)
+
+  "MATLAB" v44, vendor: MLM, expiry: 31-mar-2027
+  floating license
+
+    1 RESERVATION for USER cdurand (licsrv-mlm/27000)
+    2 RESERVATIONs for GROUP simulation (licsrv-mlm/27000)
+    jdoe PC123 PC123 (v44) (licsrv-mlm/27000 301), start Mon 9/23 8:15
+    lmartin LAPTOP-07 LAPTOP-07 (v44) (licsrv-mlm/27000 402), start Fri 9/20 17:02 (linger: 1209600 / 1188000)
+    cdurand PC456 PC456 (v44) (licsrv-mlm/27000 503), start Mon 9/23 9:00
+
+Users of Simulink:  (Total of 2 licenses issued;  Total of 0 licenses in use)
+
+  "Simulink" v44, vendor: MLM, expiry: 31-mar-2027
+  floating license
+
+    1 RESERVATION for HOST CAO-WS01 (licsrv-mlm/27000)

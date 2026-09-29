@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 5
+-- Version du schéma : 6
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -68,7 +68,8 @@ CREATE TABLE dbo.license_session (
     checkin_time DATETIME2(0) NULL,
     last_seen DATETIME2(0) NOT NULL,
     source NVARCHAR(20) NOT NULL,
-    close_reason NVARCHAR(30) NULL
+    close_reason NVARCHAR(30) NULL,
+    borrowed BIT NOT NULL DEFAULT 0
 )
 GO
 
@@ -158,6 +159,17 @@ CREATE TABLE dbo.alert_state (
 )
 GO
 
+IF OBJECT_ID(N'dbo.feature_reservation', N'U') IS NULL
+CREATE TABLE dbo.feature_reservation (
+    feature_id INT NOT NULL REFERENCES feature(id),
+    kind NVARCHAR(20) NOT NULL,
+    name NVARCHAR(255) NOT NULL,
+    reserved INT NOT NULL,
+    updated_at DATETIME2(0) NOT NULL,
+    PRIMARY KEY (feature_id, kind, name)
+)
+GO
+
 IF OBJECT_ID(N'dbo.itsm_ticket', N'U') IS NULL
 CREATE TABLE dbo.itsm_ticket (
     id BIGINT IDENTITY(1,1) PRIMARY KEY,
@@ -176,6 +188,10 @@ GO
 
 IF COL_LENGTH(N'dbo.feature', N'expires_on') IS NULL
 ALTER TABLE dbo.feature ADD expires_on DATE NULL
+GO
+
+IF COL_LENGTH(N'dbo.license_session', N'borrowed') IS NULL
+ALTER TABLE dbo.license_session ADD borrowed BIT NOT NULL DEFAULT 0
 GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_session_feature_time')

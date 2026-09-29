@@ -212,9 +212,12 @@ def build_report_data(
     data.hour_profile = {k: profile_avg[k] / profile_issued[k] for k in profile_issued if profile_issued[k]}
 
     # -- sessions ---------------------------------------------------------
+    from heptagoneslm.storage.repository import Repository
+
+    borrowed_col = "s.borrowed" if Repository(db).has_column("license_session", "borrowed") else "0"
     sessions = db.query_dicts(
-        "SELECT s.feature_id, u.username, u.display_name, u.department, w.hostname, s.checkout_time, "
-        "s.checkin_time, s.last_seen, s.license_count, s.source, s.close_reason "
+        "SELECT s.feature_id, u.username, u.display_name, u.department, w.hostname, w.site, s.checkout_time, "
+        f"s.checkin_time, s.last_seen, s.license_count, s.source, s.close_reason, {borrowed_col} AS borrowed "
         "FROM license_session s JOIN feature f ON f.id = s.feature_id "
         "JOIN license_server srv ON srv.id = f.server_id "
         "JOIN app_user u ON u.id = s.user_id JOIN workstation w ON w.id = s.workstation_id "
@@ -247,6 +250,8 @@ def build_report_data(
                 "display_name": row["display_name"],
                 "department": row["department"],
                 "hostname": row["hostname"],
+                "site": row["site"],
+                "borrowed": bool(row["borrowed"]),
                 "checkout_time": row["checkout_time"],
                 "checkin_time": row["checkin_time"],
                 "licenses": row["license_count"],

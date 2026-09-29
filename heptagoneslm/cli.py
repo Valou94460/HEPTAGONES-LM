@@ -324,12 +324,20 @@ def cmd_web(args) -> int:
     if args.demo:
         from heptagoneslm.simulation.demo import run_demo
 
+        from heptagoneslm import __version__
+        from heptagoneslm.storage.schema import SCHEMA_VERSION
+
         home = demo_home()
         db = home / "heptagoneslm_demo.db"
-        fresh = db.exists() and date.fromtimestamp(db.stat().st_mtime) == date.today()
+        marker = home / "demo.version"
+        stamp = f"{__version__} schéma {SCHEMA_VERSION}"
+        # Régénérée chaque jour, et après une mise à jour (nouvelles tables, nouvelles données simulées)
+        fresh = (db.exists() and date.fromtimestamp(db.stat().st_mtime) == date.today()
+                 and marker.exists() and marker.read_text(encoding="utf-8").strip() == stamp)
         if not fresh:
             print(f"Préparation des données de démonstration ({args.demo_days} jours simulés)…")
             run_demo(home, days=args.demo_days, make_report=False)
+            marker.write_text(stamp, encoding="utf-8")
         cfg = load_config(home / "heptagoneslm.demo.yaml")
         print("Mode démonstration : données simulées (Autodesk, Ansys, MATLAB).")
     else:

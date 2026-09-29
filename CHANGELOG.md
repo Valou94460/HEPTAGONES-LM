@@ -17,12 +17,26 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
   certains serveurs ou produits), par groupe AD ou par compte ; contrôle par le serveur, refus 403
   tracés. Le module IIS transmet les groupes Windows (`X-Remote-Groups`).
 
+- **Licences empruntées** (FlexLM, « linger ») : signalées dans les sessions et la vue En direct
+  (indicateur « Jetons empruntés »).
+- **Réservations / utilisateurs nommés** : lignes `RESERVATION` de lmstat mémorisées (table
+  `feature_reservation`) ; vue « Réservations » avec le taux d'usage réel du bénéficiaire et une
+  recommandation (réservation peu utilisée).
+- **Multi-sites** : section `sites` (site des postes d'après leur nom), filtre et répartition par site,
+  réappliqués à l'historique par `apply-products`.
+- **Licences inutilisées** : vue dédiée (jamais utilisées sur la période, dernière utilisation,
+  échéance, coût annuel).
+- Démonstration enrichie : licence inutilisée, réservations, emprunts, trois sites.
+
 ### Corrigé
 - Le filtre « Services » s'applique désormais aussi aux refus et aux utilisateurs de la vue En direct.
+- La démonstration (`web --demo`) est régénérée après une mise à jour de l'application.
+- Schéma v6 (colonne `license_session.borrowed`, table `feature_reservation`) ; les colonnes ajoutées
+  prennent le type propre à SQL Server ou SQLite.
 
 ### Modifié
 - Les alertes ont leur propre section `alerts` (destinataires e-mail, connecteurs ITSM, règles) ;
-  la forme `email.alerts` reste acceptée. Schéma de base v5 (table `itsm_ticket`).
+  la forme `email.alerts` reste acceptée. Schéma de base v6 (tables `itsm_ticket`, `feature_reservation`).
 
 ## [26.2.0] — 2026-09-29
 

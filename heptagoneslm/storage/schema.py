@@ -14,6 +14,7 @@ Vue d'ensemble ::
     report_delivery   (envois de rapports par e-mail)
     alert_state       (alertes e-mail envoyées : anti-répétition, curseur des refus)
     itsm_ticket       (tickets ouverts dans ServiceNow, Jira, GLPI… pour chaque alerte)
+    feature_reservation (jetons réservés par le fichier d'options : utilisateur, poste, groupe…)
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -101,7 +102,8 @@ TABLES: dict[str, str] = {
         checkin_time {DT} NULL,
         last_seen {DT} NOT NULL,
         source NVARCHAR(20) NOT NULL,
-        close_reason NVARCHAR(30) NULL
+        close_reason NVARCHAR(30) NULL,
+        borrowed {BOOL} NOT NULL DEFAULT 0
     """,
     "license_event": """
         id {BIGID},
@@ -167,6 +169,14 @@ TABLES: dict[str, str] = {
         last_sent {DT} NULL,
         last_event_id BIGINT NULL,
         title NVARCHAR(500) NULL
+    """,
+    "feature_reservation": """
+        feature_id INT NOT NULL REFERENCES feature(id),
+        kind NVARCHAR(20) NOT NULL,
+        name NVARCHAR(255) NOT NULL,
+        reserved INT NOT NULL,
+        updated_at {DT} NOT NULL,
+        PRIMARY KEY (feature_id, kind, name)
     """,
     "itsm_ticket": """
         id {BIGID},
@@ -238,6 +248,7 @@ VIEWS: dict[str, str] = {
 # Appliquées par init-db sur les bases existantes (migration idempotente).
 ADDED_COLUMNS: list[tuple[str, str, str]] = [
     ("feature", "expires_on", "DATE NULL"),          # v3 : échéance des licences
+    ("license_session", "borrowed", "{BOOL} NOT NULL DEFAULT 0"),   # v6 : licences empruntées
 ]
 
 
@@ -261,7 +272,7 @@ def ddl_statements(dialect: str) -> list[str]:
         if dialect == "mssql":
             stmts.append(
                 f"IF COL_LENGTH(N'dbo.{table}', N'{column}') IS NULL\n"
-                f"ALTER TABLE dbo.{table} ADD {column} {coltype}"
+                f"ALTER TABLE dbo.{table} ADD {column} {_fmt(coltype, dialect)}"
             )
         # SQLite : pas d'ALTER conditionnel en SQL pur, voir create_schema().
     for name, target in INDEXES.items():
@@ -301,7 +312,7 @@ def create_schema(db: Database) -> None:
             for table, column, coltype in ADDED_COLUMNS:
                 existing = {row[1] for row in db.query(f"PRAGMA table_info({table})")}
                 if column not in existing:
-                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {coltype}")
+                    db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {_fmt(coltype, db.dialect)}")
         if not db.scalar("SELECT COUNT(*) FROM schema_info"):
             db.execute("INSERT INTO schema_info (version) VALUES (?)", [SCHEMA_VERSION])
         else:  # évolution : les nouvelles tables sont créées ci-dessus (ordres idempotents)

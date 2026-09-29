@@ -397,3 +397,6 @@ td.empty-cell { color: var(--muted); }
 .access-result { padding: 10px 12px; border-radius: 10px; font-size: 13.5px; }
 .access-result.ok { background: rgba(12, 163, 12, .10); }
 .access-result.error { background: rgba(214, 60, 42, .10); }
+
+/* Étiquette courte (ex. licence empruntée) */
+.tag { display: inline-block; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 16px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
