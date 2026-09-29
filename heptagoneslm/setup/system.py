@@ -95,7 +95,7 @@ class System:
     def disk_free_gb(self, path: str) -> float: raise NotImplementedError
     def odbc_drivers(self) -> list[str]: raise NotImplementedError
     def find_lmutil(self) -> list[str]: raise NotImplementedError
-    def find_tools(self, hosts: list[str]) -> list[dict]: raise NotImplementedError
+    def find_tools(self, hosts: list[str]) -> dict: raise NotImplementedError
     def iis_state(self) -> dict: raise NotImplementedError
     def certificates(self) -> list[dict]: raise NotImplementedError
     def domain_info(self) -> dict: raise NotImplementedError
@@ -278,7 +278,7 @@ $fqdn = try { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName } catch
             found.append(which)
         return list(dict.fromkeys(found))
 
-    def find_tools(self, hosts: list[str]) -> list[dict]:
+    def find_tools(self, hosts: list[str]) -> dict:
         return toolscan.normalize(self.ps_json(toolscan.script(hosts), timeout=300))
 
     def iis_state(self) -> dict:
@@ -697,13 +697,14 @@ class SimulatedSystem(System):
     def find_lmutil(self) -> list[str]:
         return [r"C:\Program Files\Autodesk\Network License Manager\lmutil.exe"]
 
-    def find_tools(self, hosts: list[str]) -> list[dict]:
+    def find_tools(self, hosts: list[str]) -> dict:
         self._step("find_tools", 3)
         rows = [{"tool": "lmutil", "path": p, "host": "SRV-HEPTAGONESLM", "local": True, "how": "dossier connu"}
                 for p in self.find_lmutil()]
         for h in hosts:
             if "inconnu" in h.lower():
-                continue                                   # serveur injoignable : rien trouvé
+                rows.append({"host": h, "problem": "nom introuvable (DNS)"})
+                continue
             if "rlm" in h.lower() or "foundry" in h.lower():
                 rows.append({"tool": "rlmutil", "host": h, "local": False, "how": "processus rlm.exe",
                              "path": f"\\\\{h}\\C$\\Program Files\\Foundry\\LicensingTools8.1\\bin\\RLM\\rlmutil.exe"})

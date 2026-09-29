@@ -224,8 +224,9 @@ class SetupHandler(BaseHTTPRequestHandler):
                 return self._json(self._test(a, body))
             if path == "/api/tools/find":
                 hosts = toolscan.hosts_of(a.servers)
-                app.tools_found = app.system.find_tools(hosts)
-                return self._json({"hosts": hosts, "found": app.tools_found})
+                result = app.system.find_tools(hosts)
+                app.tools_found = result["found"]
+                return self._json({"hosts": hosts, **result})
             if path == "/api/tools/use":
                 return self._json(self._use_tool(a, str(body.get("path", ""))))
             if path == "/api/preview":

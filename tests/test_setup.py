@@ -378,8 +378,11 @@ class ToolPathTest(unittest.TestCase):
             {"tool": "lmutil", "path": r"C:\Autodesk\lmutil.exe", "host": "SRV", "local": True, "how": "dossier connu"},
             {"tool": "lmutil", "path": r"\\srv1\C$\Flexlm\LMUTIL.exe", "host": "srv1", "local": False, "how": "service x"},
             {"tool": "autre", "path": "x"}])
-        self.assertEqual([r["path"] for r in rows], [r"C:\Autodesk\lmutil.exe", r"\\srv1\C$\Flexlm\lmutil.exe"])
-        self.assertEqual(toolscan.normalize({"tool": "rlmutil", "path": "p", "local": True})[0]["tool"], "rlmutil")
+        self.assertEqual([r["path"] for r in rows["found"]], [r"C:\Autodesk\lmutil.exe", r"\\srv1\C$\Flexlm\lmutil.exe"])
+        self.assertEqual(toolscan.normalize({"tool": "rlmutil", "path": "p", "local": True})["found"][0]["tool"], "rlmutil")
+        self.assertEqual(toolscan.normalize([{"host": "x", "problem": "nom introuvable (DNS)"}]),
+                         {"found": [], "problems": [{"host": "x", "problem": "nom introuvable (DNS)"}]})
+        self.assertIn("GetHostAddresses", script)
 
 
 @unittest.skipUnless(__import__("os").name == "nt", "recherche réelle : Windows uniquement")
@@ -395,11 +398,12 @@ class WindowsToolScanTest(unittest.TestCase):
         tool = os.path.join(folder, "lmutil.exe")
         shutil.copy(__import__("sys").executable, tool)
         try:
-            found = WindowsSystem().find_tools(["localhost"])        # localhost : ce serveur, pas de doublon
-            mine = [r for r in found if r["path"].lower() == tool.lower()]
+            result = WindowsSystem().find_tools(["localhost", "serveur-inexistant.invalid"])
+            mine = [r for r in result["found"] if r["path"].lower() == tool.lower()]   # localhost : pas de doublon
             self.assertEqual(len(mine), 1, found)
             self.assertTrue(mine[0]["local"])
             self.assertEqual(mine[0]["tool"], "lmutil")
+            self.assertEqual(result["problems"], [{"host": "serveur-inexistant.invalid", "problem": "nom introuvable (DNS)"}])
         finally:
             os.remove(tool)
             if created:
@@ -431,6 +435,7 @@ class ToolScanServerTest(unittest.TestCase):
         self.assertEqual(status, 200)
         found = json.loads(body)
         self.assertEqual(found["hosts"], ["licsrv-adsk", "licsrv-rlm", "inconnu"])
+        self.assertEqual(found["problems"], [{"host": "inconnu", "problem": "nom introuvable (DNS)"}])
         self.assertTrue(found["found"][0]["local"])                         # ce serveur d'abord
         remote = next(r for r in found["found"] if r["tool"] == "rlmutil")
         self.assertEqual((remote["host"], remote["local"]), ("licsrv-rlm", False))

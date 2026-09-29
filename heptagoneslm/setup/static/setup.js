@@ -376,7 +376,8 @@
     if (t.error) return `<div class="result">${dot("error")}<div><b>${esc(t.error)}</b></div></div>`;
     const wanted = [...types].map(x => x === "rlm" ? "rlmutil" : "lmutil");
     const rows = (t.found || []).filter(r => wanted.includes(r.tool));
-    const note = t.used ? `<div class="result">${dot("ok")}<div><b>${esc(t.used)}</b></div></div>` : "";
+    const note = (t.used ? `<div class="result">${dot("ok")}<div><b>${esc(t.used)}</b></div></div>` : "")
+      + ((t.problems || []).length ? `<div class="result">${dot("warning")}<div><b>Serveurs non examinés</b><ul>${t.problems.map(p => `<li>${esc(p.host)} : ${esc(p.problem)}</li>`).join("")}</ul></div></div>` : "");
     if (!rows.length) return `${note}<div class="result">${dot("warning")}<div><b>Aucun outil trouvé</b><ul>
       <li>Serveurs examinés : ce serveur${t.hosts.length ? ", " + esc(t.hosts.join(", ")) : " (aucun serveur de licences déclaré)"}.</li>
       <li>Pour un serveur distant, le compte qui lance l'assistant doit être administrateur de ce serveur (partage C$ et WMI).</li>

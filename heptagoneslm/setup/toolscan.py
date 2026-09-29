@@ -97,6 +97,14 @@ function Probe-Dir($h, $local, $dir, $how) {{
 foreach ($h in @({host_list})) {{
   $local = ($h -eq '') -or ($me -contains $h.ToLower()) -or ($me -contains $h.Split('.')[0].ToLower())
   if ($h -eq '') {{ $h = $env:COMPUTERNAME }} elseif ($local) {{ continue }}
+  if (-not $local) {{
+    try {{ [void][System.Net.Dns]::GetHostAddresses($h) }}
+    catch {{ [void]$out.Add([pscustomobject]@{{ host = $h; problem = 'nom introuvable (DNS)' }}); continue }}
+    if (-not (Test-Path -LiteralPath ('\\\\' + $h + '\\C$'))) {{
+      [void]$out.Add([pscustomobject]@{{ host = $h; problem = 'partage C$ inaccessible (droits d''administrateur de ce serveur nécessaires)' }})
+      continue
+    }}
+  }}
   $cim = @{{ OperationTimeoutSec = 20; ErrorAction = 'Stop' }}
   if (-not $local) {{ $cim.ComputerName = $h }}
   try {{
@@ -120,16 +128,20 @@ ConvertTo-Json -InputObject @($out) -Compress
 """
 
 
-def normalize(rows) -> list[dict]:
-    """Résultats du script, dédoublonnés, triés : ce serveur d'abord, puis les plus fiables."""
+def normalize(rows) -> dict:
+    """Résultats du script : outils dédoublonnés et triés (ce serveur d'abord, puis les plus fiables),
+    et serveurs non examinés avec la raison."""
     rank = {"processus": 0, "service": 1, "dossier connu": 2, "recherche": 3}
-    out, seen = [], set()
+    found, problems, seen = [], [], set()
     for r in rows if isinstance(rows, list) else ([rows] if rows else []):
+        if r.get("problem"):
+            problems.append({"host": str(r.get("host") or ""), "problem": str(r["problem"])})
+            continue
         tool, path = str(r.get("tool") or ""), str(r.get("path") or "")
         if tool not in TOOLS or not path or path.lower() in seen:
             continue
         seen.add(path.lower())
-        out.append({"tool": tool, "path": path, "host": str(r.get("host") or ""), "local": bool(r.get("local")),
-                    "how": str(r.get("how") or "")})
-    out.sort(key=lambda r: (not r["local"], rank.get(r["how"].split(" ")[0], 9)))
-    return out
+        found.append({"tool": tool, "path": path, "host": str(r.get("host") or ""), "local": bool(r.get("local")),
+                      "how": str(r.get("how") or "")})
+    found.sort(key=lambda r: (not r["local"], rank.get(r["how"].split(" ")[0], 9)))
+    return {"found": found, "problems": problems}
