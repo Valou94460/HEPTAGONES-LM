@@ -147,6 +147,7 @@ class WebConfig:
     max_connections: int = 64              # requêtes traitées simultanément
     auth: AuthConfig = field(default_factory=AuthConfig)
     roles: RolesConfig | None = None
+    demo: bool = False                     # données simulées : bandeau « Démonstration » dans l'interface
 
 
 @dataclass
@@ -456,6 +457,7 @@ def _parse_web(w: dict) -> WebConfig:
         max_connections=max(1, int(w.get("max_connections", 64))),
         auth=auth,
         roles=_parse_roles(w.get("roles")),
+        demo=bool(w.get("demo", False)),
     )
     if bool(web.tls_cert) != bool(web.tls_key):
         raise ConfigError("web.tls_cert et web.tls_key doivent être renseignés ensemble")

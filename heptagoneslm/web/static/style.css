@@ -400,3 +400,10 @@ td.empty-cell { color: var(--muted); }
 
 /* Étiquette courte (ex. licence empruntée) */
 .tag { display: inline-block; padding: 0 6px; border-radius: 8px; font-size: 11px; font-weight: 600; line-height: 16px; background: var(--accent-soft); color: var(--accent); vertical-align: 1px; }
+
+/* Mode démonstration : données simulées */
+.demo-banner { background: #FFF4CE; color: #5C4400; border: 1px solid #F2D675; border-radius: 10px;
+  padding: 9px 14px; margin: 12px 24px 0; font-size: 13.5px; line-height: 1.45; }
+.demo-banner code { background: rgba(0, 0, 0, .06); padding: 1px 5px; border-radius: 4px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .demo-banner { background: #3D3000; color: #FFE7A0; border-color: #6B5500; } }
+:root[data-theme="dark"] .demo-banner { background: #3D3000; color: #FFE7A0; border-color: #6B5500; }

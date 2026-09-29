@@ -112,6 +112,7 @@ def demo_config_dict(output_dir: Path, connection_string: str, lmutil: Path, sce
         "sites": [{"pattern": "pc-[1-3]*", "site": "Paris"}, {"pattern": "pc-[4-6]*", "site": "Lyon"},
                   {"pattern": "pc-*", "site": "Toulouse"}],
         "reporting": {"output_dir": str(output_dir / "reports"), "top_n_chart": 10, "business_hours": [8, 19]},
+        "web": {"demo": True},            # bandeau « Démonstration » dans l'interface
         "retention": {"snapshots_days": 90, "events_days": 730},
     }
 

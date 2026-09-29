@@ -37,6 +37,13 @@ Publie aussi le contenu de 26.2.0 (non publiée séparément).
   un autre serveur est copié dans `<installation>\bin`.
 
 ### Corrigé
+- **Démonstration signalée** : bandeau permanent « Démonstration — données fictives » et titre
+  d'onglet « [Démonstration] » dès que l'interface tourne sur des données simulées (`web --demo`,
+  option `web.demo`). Auparavant, rien ne distinguait la démonstration de vraies données.
+- **HeptagonesLM.exe par double-clic** : n'ouvre plus la démonstration sans le dire. Il ouvre
+  l'installation trouvée, y compris dans `C:\HeptagonesLM`, ou simplement le navigateur si l'interface
+  est déjà servie ; sans installation, il propose d'installer (assistant, élévation) ou de voir la
+  démonstration.
 - Assistant d'installation : le chemin de lmutil / rlmutil accepte le dossier de l'outil et un chemin
   entre guillemets (« Copier en tant que chemin d'accès ») ; un dossier donné au test `lmstat`
   provoquait une erreur interne.

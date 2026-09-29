@@ -252,6 +252,7 @@
     }
     if (!meta.reports[state.type]) state.type = "dashboard";
     $("version").textContent = meta.version || "";
+    if (meta.demo) $("demo-banner").hidden = false;
     fetchJSON("api/me").then(me => {
       if (me.auth === "none") return;
       const name = me.display_name || me.user;
@@ -395,7 +396,7 @@
     });
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
     $("page-title").textContent = (meta && meta.reports[state.type]) || "";
-    document.title = `${$("page-title").textContent} — HeptagonesLM`;
+    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${$("page-title").textContent} — HeptagonesLM`;
     document.querySelectorAll("[data-opt]").forEach(b => b.setAttribute("aria-pressed", String(state[b.dataset.opt] === b.dataset.value)));
     const dim = $("dimension");
     if (dim) dim.value = state.dimension;

@@ -169,6 +169,7 @@ class DemoReportsTest(unittest.TestCase):
     def test_sites(self):
         meta = self.get("/api/meta")
         self.assertEqual(meta["sites"], ["Lyon", "Paris", "Toulouse"])
+        self.assertTrue(meta["demo"])                      # bandeau « Démonstration » dans l'interface
         by_site = self.get("/api/report", type="breakdown", dimension="site")
         labels = {row.get("key") or row.get("label") for row in by_site["rows"]}
         self.assertTrue({"Paris", "Lyon", "Toulouse"} <= labels, labels)

@@ -335,7 +335,7 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             if url.path == "/api/meta":
                 with self._db() as db:
                     return self._json({**roles.filter_meta(api.meta(db), access), "version": __version__,
-                                       "access": access.as_dict(),
+                                       "demo": self.config.web.demo, "access": access.as_dict(),
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
             if url.path == "/api/report":
                 params = roles.restrict(api.params_from_config(query, self.config), access)
