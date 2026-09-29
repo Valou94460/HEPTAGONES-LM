@@ -1,4 +1,8 @@
-# Poste de test : installation réelle filmée sur votre propre PC
+# Poste de test automatisé (facultatif) : installation filmée par un runner GitHub
+
+> **Pour installer à la main avec `HeptagonesLM-Setup.exe`, sans PowerShell, voir
+> [TEST_MANUEL_SETUP.md](TEST_MANUEL_SETUP.md).** Ce guide-ci automatise le même parcours pour le
+> rejouer à chaque version.
 
 Ce guide transforme un PC de l'entreprise en **runner GitHub auto-hébergé**. Depuis GitHub, un clic
 lance sur ce PC une installation **réelle** de HeptagonesLM par l'assistant graphique, pilotée par un
