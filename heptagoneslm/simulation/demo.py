@@ -121,7 +121,7 @@ def _reset_demo_data(db: Database, server_ids: list[int]) -> None:
     marks = ", ".join("?" for _ in server_ids)
     features = f"SELECT id FROM feature WHERE server_id IN ({marks})"
     with db.transaction():
-        for table in ("license_session", "usage_snapshot", "usage_hourly"):
+        for table in ("license_session", "usage_snapshot", "usage_hourly", "feature_reservation"):
             db.execute(f"DELETE FROM {table} WHERE feature_id IN ({features})", server_ids)
         for table in ("license_event", "collection_run", "collector_state", "feature"):
             db.execute(f"DELETE FROM {table} WHERE server_id IN ({marks})", server_ids)

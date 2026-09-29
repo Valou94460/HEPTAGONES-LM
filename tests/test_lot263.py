@@ -114,6 +114,21 @@ class NotMigratedTest(unittest.TestCase):
         self.assertIn("init-db", r["notes"][0])
 
 
+class DemoRelaunchTest(unittest.TestCase):
+    def test_demo_relaunch_on_same_database(self):
+        """La relance remplace les données (réservations comprises) sans violer les clés étrangères."""
+        with tempfile.TemporaryDirectory() as tmp:
+            end, url = MONDAY + timedelta(days=2), f"sqlite:///{Path(tmp) / 'partagee.db'}"   # base conservée, comme SQL Server
+            run_demo(tmp, days=2, end=end, make_report=False, connection_string=url)
+            run_demo(tmp, days=2, end=end, make_report=False, connection_string=url)
+            db = Database(url)
+            try:
+                self.assertEqual(db.scalar("PRAGMA foreign_key_check"), None)
+                self.assertEqual(db.scalar("SELECT COUNT(*) FROM feature_reservation"), 2)
+            finally:
+                db.close()
+
+
 class DemoReportsTest(unittest.TestCase):
     """Nouvelles vues sur la démonstration, via le serveur HTTP réel."""
 
