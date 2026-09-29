@@ -5,6 +5,8 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.1.1] — 2026-09-29
+
 ### Ajouté
 - **Contrôles d'authentification unique** dans l'assistant d'installation (avant l'installation
   et à la vérification finale), avec la commande à exécuter :
@@ -121,5 +123,6 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/FREE-LM/compare/v26.1.0...HEAD
+[Non publié]: https://github.com/Valou94460/FREE-LM/compare/v26.1.1...HEAD
+[26.1.1]: https://github.com/Valou94460/FREE-LM/compare/v26.1.0...v26.1.1
 [26.1.0]: https://github.com/Valou94460/FREE-LM/releases/tag/v26.1.0
