@@ -2,7 +2,8 @@
  * Installation RÉELLE par l'assistant graphique, enregistrée en vidéo (CI Windows Server).
  *   HeptagonesLM-Setup.exe setup --no-open --port 8792 --token <jeton>     (sans --simulate)
  *   node tests/ui/setup_real.cjs http://127.0.0.1:8792 <jeton> <dossier>
- * Variables : SVC_ACCOUNT, SVC_PWD, CERT_THUMB, ACCESS_GROUP, PUBLIC_HOST.
+ * Variables : SVC_ACCOUNT, SVC_PWD, CERT_THUMB, ACCESS_GROUP, PUBLIC_HOST ;
+ *   facultatives : LICENSE_SERVERS (« NOM=port@serveur;… »), EXPECT_LMUTIL (chemin attendu de lmutil.exe).
  * Le navigateur remplit l'assistant comme un administrateur : corrections des prérequis (rôles IIS,
  * modules), compte de service, SQLite, recherche de lmutil, IIS, installation, vérification finale.
  * Produit : vidéo (.webm), une capture par étape et le déroulé horodaté (deroule.txt).
@@ -104,23 +105,36 @@ const path = require("path");
       const rows = await page.$$("[data-del]");
       await rows[rows.length - 1].click();
     }
-    await page.fill('[data-srv="0"][data-key="name"]', "AUTODESK");
-    await page.fill('[data-srv="0"][data-key="port_at_host"]', "27000@licsrv-adsk");
-    await page.click("#add-srv");
-    await page.fill('[data-srv="1"][data-key="name"]', "ANSYS");
-    await page.fill('[data-srv="1"][data-key="port_at_host"]', "1055@licsrv-ansys");
+    // LICENSE_SERVERS : « NOM=port@serveur;NOM2=port@serveur2 » (serveurs de test par défaut)
+    const servers = (process.env.LICENSE_SERVERS || "AUTODESK=27000@licsrv-adsk;ANSYS=1055@licsrv-ansys")
+      .split(";").map(x => x.trim()).filter(Boolean).map(x => x.split("=").map(y => y.trim()));
+    for (const [i, [name, addr]] of servers.entries()) {
+      if (i > 0) await page.click("#add-srv");
+      await page.fill(`[data-srv="${i}"][data-key="name"]`, name);
+      await page.fill(`[data-srv="${i}"][data-key="port_at_host"]`, addr);
+    }
     await page.fill('[data-bind="lmutil_path"]', "");
-    await page.dispatchEvent('[data-bind="lmutil_path"]', "input");
     await page.click("#find-tools");
-    log("Recherche de lmutil.exe (ce serveur, licsrv-adsk, licsrv-ansys)…");
+    log(`Recherche de lmutil.exe (ce serveur, ${servers.map(s => s[1].split("@").pop()).join(", ")})…`);
     await page.waitForFunction(() => !document.querySelector("#tools-found .spinner"), null, { timeout: 10 * 60000 });
-    const found = (await page.textContent("#tools-found")).trim().replace(/\s+/g, " ");
-    log("  ->", found.slice(0, 400));
+    log("  ->", (await page.textContent("#tools-found")).trim().replace(/\s+/g, " ").slice(0, 600));
+    // Aucun outil sur ce serveur : copie depuis le premier serveur de licences où il a été trouvé
+    if (!(await page.inputValue('[data-bind="lmutil_path"]'))) {
+      const copy = await page.$('#tools-found [data-use*="lmutil"]');
+      if (copy) {
+        log("  copie depuis le serveur de licences :", await copy.getAttribute("data-use"));
+        await copy.click();
+        await page.waitForFunction(() => document.querySelector('[data-bind="lmutil_path"]').value, null, { timeout: 5 * 60000 })
+          .catch(() => {});
+      }
+    }
     const lmutil = await page.inputValue('[data-bind="lmutil_path"]');
     log("  lmutil retenu :", lmutil || "(aucun)");
-    check(lmutil.toLowerCase() === "c:\\flexlm\\lmutil.exe", `lmutil.exe de C:\\Flexlm non retenu par la recherche (${lmutil})`);
+    const expected = process.env.EXPECT_LMUTIL;
+    check(expected ? lmutil.toLowerCase() === expected.toLowerCase() : !!lmutil,
+          `lmutil.exe non retenu par la recherche (${lmutil || "aucun"}${expected ? `, attendu ${expected}` : ""})`);
     await shot("recherche_lmutil");
-    await test("lm0"); await test("lm1");
+    for (let i = 0; i < servers.length; i++) await test(`lm${i}`);
     await shot("serveurs_licences");
 
     // 6. Interface web : IIS, certificat HTTPS, groupe AD autorisé

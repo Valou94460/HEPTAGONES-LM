@@ -292,6 +292,7 @@ jobs:
       SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # comptes locaux jetables, propres à la CI
       PUBLIC_HOST: heptagoneslm.ci.local
       TOUR_USER: ci_lecteur
+      EXPECT_LMUTIL: 'C:\Flexlm\lmutil.exe'
     steps:
       - uses: actions/checkout@v4
 
