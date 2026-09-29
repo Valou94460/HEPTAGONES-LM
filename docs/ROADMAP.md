@@ -5,7 +5,7 @@ logicielles), en gardant nos atouts : logiciel libre, installé chez le client, 
 accompagnement (TMA, support, SLA, dossiers d'exploitation).
 
 Base : comparatif fonctionnel OpenLM / HeptagonesLM du 29/09/2026, chaque ligne étant
-vérifiée dans le code de la version 26.2.0. Les dates sont indicatives, à confirmer
+vérifiée dans le code de la version 26.3.0. Les dates sont indicatives, à confirmer
 selon les priorités des premiers clients.
 
 ## 1. Où en est-on (état réel, version 26.3.0)
@@ -40,14 +40,12 @@ selon les priorités des premiers clients.
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
-| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 66 pages, plan de test, guide d'installation | — |
+| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 69 pages, plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
-> **À corriger dans le comparatif avant diffusion** : les lignes ServiceNow, Jira, GLPI et
-> « création automatique de tickets ITSM » indiquent « Oui » pour HeptagonesLM. Le logiciel
-> n'a pas encore ces intégrations : écrire « Lot 26.3 (T4 2026) » ou « Via e-mail d'alerte,
-> connecteur natif en 26.3 ». Les lignes « À confirmer » peuvent passer à « Oui » pour les
-> licences sous-utilisées, les heatmaps et le chargeback par service (voir tableau).
+> Le comparatif corrigé (version 26.3.0) reprend ce tableau : les intégrations ITSM, les rôles
+> par service, les emprunts, les réservations, les sites et les licences inutilisées y passent à
+> « Oui » ; les manques restants renvoient au lot prévu.
 
 ## 2. Lots de livraison
 
