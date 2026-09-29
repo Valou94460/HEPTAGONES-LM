@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import socket
+import time
 from datetime import datetime, timedelta
 
 import yaml
@@ -125,7 +126,15 @@ def verify(system: System, a: Answers) -> dict:
         else:
             add("iis_site", "IIS", f"Site « {a.iis_site} »", "ok" if site.get("state") == "Started" else "error",
                 f"{site.get('state')} · " + ", ".join(site.get("bindings") or []))
-            probe = system.http_status(f"https://127.0.0.1:{a.iis_port}/", sni_host=a.public_host)
+            # Premier appel après la création du site : IIS démarre le pool et compile le module
+            # (App_Code) ; quelques nouvelles tentatives avant de conclure.
+            probe, reason = None, None
+            for attempt in range(4):
+                probe = system.http_status(f"https://127.0.0.1:{a.iis_port}/", sni_host=a.public_host, timeout=20)
+                reason = getattr(system, "last_http_error", None)
+                if probe or system.simulated:
+                    break
+                time.sleep(5)
             if probe in (200, 401):
                 add("iis_chain", "IIS", "HTTPS et authentification Windows", "ok",
                     "IIS demande l'authentification Windows puis relaie vers HeptagonesLM" if probe == 401 else "Page servie")
@@ -134,7 +143,8 @@ def verify(system: System, a: Answers) -> dict:
                     "502 : IIS ne joint pas HeptagonesLM (proxy ARR, port interne)")
             else:
                 add("iis_chain", "IIS", "HTTPS et authentification Windows", "error",
-                    f"Réponse inattendue : {probe or 'aucune'} (liaison HTTPS, certificat, web.config)")
+                    f"Réponse inattendue : {probe or 'aucune'}" + (f" — {reason}" if reason else "")
+                    + " (liaison HTTPS, certificat, web.config)")
     if a.open_firewall and a.web_mode != "local":
         try:
             ok = system.firewall_exists(firewall_rule_name(a))

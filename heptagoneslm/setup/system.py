@@ -136,7 +136,11 @@ class System:
                 return False
 
     def http_status(self, url: str, sni_host: str | None = None, timeout: float = 8) -> int | None:
-        """Code HTTP d'une adresse (certificat non vérifié : sonde locale uniquement)."""
+        """Code HTTP d'une adresse (certificat non vérifié : sonde locale uniquement).
+
+        En cas d'échec, ``self.last_http_error`` décrit la cause (connexion refusée, TLS…).
+        """
+        self.last_http_error = None
         m = re.match(r"^(https?)://([^/:]+)(?::(\d+))?(/.*)?$", url)
         if not m:
             return None
@@ -152,8 +156,11 @@ class System:
                 sock.sendall(f"GET {path} HTTP/1.1\r\nHost: {sni_host or host}\r\nConnection: close\r\n\r\n".encode())
                 head = sock.recv(64).decode("latin-1", "replace")
             m2 = re.match(r"HTTP/\d\.\d (\d{3})", head)
+            if not m2:
+                self.last_http_error = f"réponse non HTTP : {head[:40]!r}"
             return int(m2.group(1)) if m2 else None
-        except OSError:
+        except OSError as exc:
+            self.last_http_error = f"{type(exc).__name__} : {exc}"
             return None
 
     def db_probe(self, a: Answers) -> dict: raise NotImplementedError

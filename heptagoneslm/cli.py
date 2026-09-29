@@ -138,7 +138,7 @@ def cmd_check_alerts(cfg: AppConfig, args) -> int:
 
 
 def cmd_test_itsm(cfg: AppConfig, args) -> int:
-    from heptagoneslm.itsm import ItsmError, test_connector
+    from heptagoneslm.itsm import ItsmError, check_connector
 
     connectors = cfg.alerts.itsm if cfg.alerts else []
     if args.connector:
@@ -149,7 +149,7 @@ def cmd_test_itsm(cfg: AppConfig, args) -> int:
     failed = 0
     for c in connectors:
         try:
-            steps = test_connector(c, cfg, resolve=not args.keep_open)
+            steps = check_connector(c, cfg, resolve=not args.keep_open)
             print(f"{c.name:<16} OK     " + " ; ".join(steps))
         except ItsmError as exc:
             failed += 1

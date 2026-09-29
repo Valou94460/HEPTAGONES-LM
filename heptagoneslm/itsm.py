@@ -414,7 +414,7 @@ def _touch(db: Database, ticket_row_id: int, now: datetime) -> None:
         db.execute("UPDATE itsm_ticket SET updated_at = ? WHERE id = ?", [now, ticket_row_id])
 
 
-def test_connector(cfg: ItsmConfig, config: AppConfig, resolve: bool = True) -> list[str]:
+def check_connector(cfg: ItsmConfig, config: AppConfig, resolve: bool = True) -> list[str]:
     """Ouvre un ticket de test, le commente puis le résout (vérification d'installation)."""
     from heptagoneslm.alerts import Alert
 

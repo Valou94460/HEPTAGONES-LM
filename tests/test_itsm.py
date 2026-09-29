@@ -15,7 +15,7 @@ import yaml
 
 from heptagoneslm.alerts import check_and_notify
 from heptagoneslm.config import ConfigError, parse_config
-from heptagoneslm.itsm import test_connector
+from heptagoneslm.itsm import check_connector
 from heptagoneslm.models import EventType, LicenseEvent
 from heptagoneslm.service import CollectionService
 from heptagoneslm.storage.repository import Repository
@@ -203,7 +203,7 @@ class JiraTest(ItsmTestCase):
 
     def test_cloud_basic_auth_and_test_command(self):
         cfg = self.config([{"type": "jira", "username": "svc@entreprise.fr", "token": "api-token", "project": "LIC"}])
-        steps = test_connector(cfg.alerts.itsm[0], cfg)
+        steps = check_connector(cfg.alerts.itsm[0], cfg)
         self.assertEqual(steps[0], f"ouverture : LIC-1 ({self.base}/browse/LIC-1)")
         self.assertEqual(steps[1:], ["commentaire : OK", "résolution : OK"])
         auth = self.calls("POST", "/rest/api/2/issue")[0][2]["Authorization"]
@@ -212,7 +212,7 @@ class JiraTest(ItsmTestCase):
     def test_missing_transition_is_reported(self):
         cfg = self.config([{"type": "jira", "token": "t", "project": "LIC", "resolve_transitions": ["Clôturer"]}])
         with self.assertRaisesRegex(Exception, "In Progress, Done"):
-            test_connector(cfg.alerts.itsm[0], cfg)
+            check_connector(cfg.alerts.itsm[0], cfg)
 
 
 class GlpiTest(ItsmTestCase):
@@ -239,7 +239,7 @@ class GlpiTest(ItsmTestCase):
     def test_wrong_token(self):
         cfg = self.config([{"type": "glpi", "url": f"{self.base}/glpi/apirest.php", "app_token": "mauvais", "user_token": "usr"}])
         with self.assertRaisesRegex(Exception, "HTTP 401"):
-            test_connector(cfg.alerts.itsm[0], cfg)
+            check_connector(cfg.alerts.itsm[0], cfg)
 
 
 class WebhookAndResilienceTest(ItsmTestCase):
