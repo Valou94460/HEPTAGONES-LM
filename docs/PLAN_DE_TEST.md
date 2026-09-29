@@ -331,6 +331,17 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | ITSM-07 | Gravité minimale | `min_severity: serious` (défaut) | Saturation et échéances à plus de 7 jours : pas de ticket ; pannes, refus, échéances proches : ticket | ☐ |
 | ITSM-08 [E3] | Teams / Slack | Connecteur `webhook` au format `teams` ou `slack` | Message reçu dans le canal à l'ouverture et à la résolution | ☐ |
 
+### 5.10 quinquies Rôles (ROLE)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ROLE-01 🔴 [E3] | Responsable de service | Compte membre du groupe d'un rôle `departments` ; ouvrir l'interface | Bandeau « Vue limitée — Responsable de service : … » ; filtres limités à ses services ; sessions, répartition, refus, En direct : uniquement ses utilisateurs | ☐ |
+| ROLE-02 🔴 [E3] | Hors périmètre | Modifier l'URL : `department=<autre service>` | Refus 403 « hors de votre périmètre », ligne dans le journal d'audit | ☐ |
+| ROLE-03 🔴 [E3] | Exports | Export CSV / Excel d'une vue ; classeur complet | Exports limités au périmètre ; classeur complet refusé | ☐ |
+| ROLE-04 [E3] | Lecteur / administrateur | Compte du groupe `readers` / `admins` | Vue globale | ☐ |
+| ROLE-05 [E3] | Sans rôle | Compte autorisé par IIS mais sans rôle (`default: none`) | Interface refusée (403 « pas de rôle ») ; page `/acces` accessible | ☐ |
+| ROLE-06 🔴 [E3] | Groupes via IIS | Mode `header` : `/api/me` | `groups` > 0 ; un en-tête `X-Remote-Groups` ajouté à la main est ignoré | ☐ |
+
 ### 5.10 ter Serveurs RLM (RLM)
 
 | ID | Cas | Procédure | Résultat attendu | OK |

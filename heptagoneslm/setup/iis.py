@@ -48,11 +48,13 @@ MODULE_NAME = "HeptagonesLMUserHeader"
 
 # Module ASP.NET compilé par IIS au premier appel (dossier App_Code du site).
 METHOD_HEADER = "X-Remote-Auth-Method"
+GROUPS_HEADER = "X-Remote-Groups"
 
 # Module ASP.NET compilé par IIS au premier appel (dossier App_Code du site). C# 5 (compilateur .NET 4.x).
 USER_MODULE_CS = f"""// Généré par l'assistant d'installation HeptagonesLM.
 // Transmet l'utilisateur authentifié par IIS (Windows) à HeptagonesLM dans l'en-tête {HEADER_NAME},
-// et la méthode d'authentification (Kerberos ou NTLM) dans l'en-tête {METHOD_HEADER}.
+// la méthode d'authentification (Kerberos ou NTLM) dans l'en-tête {METHOD_HEADER}
+// et ses groupes Windows (rôles de l'interface) dans l'en-tête {GROUPS_HEADER}.
 // Les règles URL Rewrite s'exécutent avant l'authentification : ce module intervient après.
 using System;
 using System.Security.Principal;
@@ -63,6 +65,7 @@ public class {MODULE_NAME} : IHttpModule
 {{
     const string Header = "{HEADER_NAME}";
     const string MethodHeader = "{METHOD_HEADER}";
+    const string GroupsHeader = "{GROUPS_HEADER}";
     static readonly byte[] KerberosOid = {{ 0x06, 0x09, 0x2A, 0x86, 0x48, 0x86, 0xF7, 0x12, 0x01, 0x02, 0x02 }};
 
     public void Init(HttpApplication app)
@@ -73,17 +76,21 @@ public class {MODULE_NAME} : IHttpModule
             HttpRequest req = ((HttpApplication)s).Context.Request;
             req.Headers.Remove(Header);
             req.Headers.Remove(MethodHeader);
+            req.Headers.Remove(GroupsHeader);
         }};
         app.PostAuthenticateRequest += (s, e) =>
         {{
             HttpContext ctx = ((HttpApplication)s).Context;
             ctx.Request.Headers.Remove(Header);
             ctx.Request.Headers.Remove(MethodHeader);
+            ctx.Request.Headers.Remove(GroupsHeader);
             if (ctx.User != null && ctx.User.Identity != null && ctx.User.Identity.IsAuthenticated)
             {{
                 ctx.Request.Headers.Set(Header, ctx.User.Identity.Name);
                 string method = Method(ctx);
                 if (method != null) ctx.Request.Headers.Set(MethodHeader, method);
+                string groups = Groups(ctx);
+                if (!string.IsNullOrEmpty(groups)) ctx.Request.Headers.Set(GroupsHeader, groups);
             }}
         }};
     }}
@@ -117,6 +124,29 @@ public class {MODULE_NAME} : IHttpModule
         }}
         catch (Exception) {{ }}
         return null;
+    }}
+
+    // Groupes du jeton Windows (groupes imbriqués compris), noms encodés URL séparés par « ; ».
+    static string Groups(HttpContext ctx)
+    {{
+        WindowsIdentity id = ctx.User.Identity as WindowsIdentity;
+        if (id == null || id.Groups == null) return null;
+        StringBuilder sb = new StringBuilder();
+        try
+        {{
+            IdentityReferenceCollection names = id.Groups.Translate(typeof(NTAccount), false);
+            foreach (IdentityReference g in names)
+            {{
+                string n = g.Value;
+                if (!(g is NTAccount) || n.IndexOf('\\\\') < 0 || n.StartsWith("BUILTIN\\\\") || n.StartsWith("NT AUTHORITY\\\\")) continue;
+                string enc = Uri.EscapeDataString(n);
+                if (sb.Length + enc.Length + 1 > 12000) break;
+                if (sb.Length > 0) sb.Append(';');
+                sb.Append(enc);
+            }}
+        }}
+        catch (Exception) {{ return null; }}
+        return sb.ToString();
     }}
 
     static bool Contains(byte[] data, byte[] pattern)

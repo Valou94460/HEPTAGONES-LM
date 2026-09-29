@@ -180,6 +180,43 @@ nom à HeptagonesLM, qui n'écoute que sur la boucle locale.
   nom reconnu, méthode (Kerberos / NTLM) et saisie ou non d'un mot de passe, résultat repris
   par la vérification de l'assistant (voir [INSTALLATION.md § 8](INSTALLATION.md)).
 
+## 2 bis. Rôles : qui voit quoi
+
+Sans section `web.roles`, tout utilisateur autorisé (groupe d'accès) voit tout. Avec elle :
+
+| Rôle | Attribution | Vue |
+|---|---|---|
+| Administrateur | `admins` | Globale (fonctions d'administration à venir) |
+| Lecteur | `readers` | Globale |
+| Responsable de service | `departments` | Uniquement les utilisateurs de ses services — sessions, répartition, refus, utilisateurs connectés, exports ; en option, certains serveurs ou produits |
+| Aucun rôle | — | Refusé (`default: none`), ou lecteur (`default: reader`) |
+
+```yaml
+web:
+  roles:
+    admins: ["ENTREPRISE\\GG_HeptagonesLM_Admins"]
+    readers: ["ENTREPRISE\\GG_HeptagonesLM_Lecteurs", "direction.achats"]   # groupes ou comptes
+    departments:
+      - group: "ENTREPRISE\\GG_Resp_Simulation"
+        departments: ["Simulation & calcul"]            # valeurs de la colonne « Service » (import-users)
+      - user: chef.methodes
+        departments: ["Méthodes industrialisation"]
+        servers: [AUTODESK]                              # optionnel : limite aussi les serveurs (ou products)
+    default: none
+```
+
+* **Groupes** : noms `DOMAINE\groupe`, simples ou DN, sans tenir compte de la casse. En mode `ldap`,
+  groupes lus dans l'annuaire (groupes imbriqués compris) ; en mode `header`, le module IIS
+  `HeptagonesLMUserHeader` transmet les groupes Windows de l'utilisateur (en-tête
+  `X-Remote-Groups`, toute valeur envoyée par le navigateur est supprimée).
+* **Contrôle par le serveur** : le périmètre est imposé à chaque requête (rapports et exports) ; une
+  demande hors périmètre est refusée (403) et tracée dans le journal d'audit. Le classeur complet est
+  réservé aux profils à vue globale.
+* **Compteurs de produit** (jetons émis / utilisés, saturation, profil horaire) : globaux pour tous,
+  ils ne désignent personne.
+* Les services sont ceux importés par `import-users` (export AD / RH) : un utilisateur sans service
+  n'est visible que des profils à vue globale.
+
 ## 3. Certificat HTTPS
 
 Demander un certificat serveur à l'AC d'entreprise pour le nom utilisé par les

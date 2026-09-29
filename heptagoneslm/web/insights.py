@@ -327,6 +327,9 @@ def live_state(db: Database, p) -> dict:
         "ORDER BY s.checkout_time",
         [(updated or datetime.now()) - timedelta(hours=2), *features],
     ) if latest else []
+    visible = _api().visible_usernames(db, p)
+    if visible is not None:        # filtres utilisateur / service, périmètre d'un responsable de service
+        sessions = [s for s in sessions if s["username"] in visible]
     by_feature: dict[int, list] = defaultdict(list)
     for s in sessions:
         by_feature[s["feature_id"]].append(s)

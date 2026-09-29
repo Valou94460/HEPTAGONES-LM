@@ -93,12 +93,34 @@ class AuthConfig:
     allowed_groups: list[str] = field(default_factory=list)   # vide = tout utilisateur authentifié
     # --- header ---
     header_name: str = "X-Remote-User"
+    groups_header: str = "X-Remote-Groups"  # groupes Windows transmis par le module IIS (rôles)
     trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1", "::1"])
     allowed_users: list[str] = field(default_factory=list)
     # --- commun ---
     session_hours: float = 8.0
     max_failures: int = 5                  # échecs avant blocage temporaire
     lockout_minutes: int = 15
+
+
+@dataclass
+class ScopedRole:
+    """Responsable de service : ne voit que les données de ses services (et, en option, serveurs / produits)."""
+
+    departments: list[str]
+    group: str | None = None       # groupe AD (« DOMAINE\\groupe », nom simple ou DN)
+    user: str | None = None        # ou compte individuel
+    servers: list[str] = field(default_factory=list)
+    products: list[str] = field(default_factory=list)
+
+
+@dataclass
+class RolesConfig:
+    """Rôles de l'interface web (absent : tout utilisateur autorisé voit tout)."""
+
+    admins: list[str] = field(default_factory=list)     # groupes ou comptes : vue globale + administration
+    readers: list[str] = field(default_factory=list)    # groupes ou comptes : vue globale
+    scoped: list[ScopedRole] = field(default_factory=list)
+    default: str = "none"          # utilisateur sans rôle : none (refusé) | reader (vue globale)
 
 
 @dataclass
@@ -116,6 +138,7 @@ class WebConfig:
     request_timeout_s: int = 30            # délai max d'une requête (connexions lentes)
     max_connections: int = 64              # requêtes traitées simultanément
     auth: AuthConfig = field(default_factory=AuthConfig)
+    roles: RolesConfig | None = None
 
 
 @dataclass
@@ -380,6 +403,7 @@ def _parse_web(w: dict) -> WebConfig:
         user_filter=a.get("user_filter", "(sAMAccountName={username})"),
         allowed_groups=_as_list(a.get("allowed_groups")),
         header_name=a.get("header_name", "X-Remote-User"),
+        groups_header=a.get("groups_header", "X-Remote-Groups"),
         trusted_proxies=_as_list(a.get("trusted_proxies")) or ["127.0.0.1", "::1"],
         allowed_users=[u.lower() for u in _as_list(a.get("allowed_users"))],
         session_hours=float(a.get("session_hours", 8)),
@@ -408,10 +432,38 @@ def _parse_web(w: dict) -> WebConfig:
         request_timeout_s=max(1, int(w.get("request_timeout_s", 30))),
         max_connections=max(1, int(w.get("max_connections", 64))),
         auth=auth,
+        roles=_parse_roles(w.get("roles")),
     )
     if bool(web.tls_cert) != bool(web.tls_key):
         raise ConfigError("web.tls_cert et web.tls_key doivent être renseignés ensemble")
     return web
+
+
+def _parse_roles(r) -> RolesConfig | None:
+    if not r:
+        return None
+    if not isinstance(r, dict):
+        raise ConfigError("web.roles doit être une section (admins, readers, departments)")
+    scoped = []
+    for i, d in enumerate(r.get("departments") or []):
+        where = f"web.roles.departments[{i}]"
+        if not isinstance(d, dict):
+            raise ConfigError(f"{where} doit être une section (group ou user, departments)")
+        role = ScopedRole(departments=_as_list(d.get("departments") or d.get("department")),
+                          group=d.get("group"), user=(str(d["user"]).lower() if d.get("user") else None),
+                          servers=_as_list(d.get("servers")), products=_as_list(d.get("products")))
+        if bool(role.group) == bool(role.user):
+            raise ConfigError(f"{where} : renseigner group OU user")
+        if not role.departments:
+            raise ConfigError(f"{where} : au moins un service (departments)")
+        scoped.append(role)
+    cfg = RolesConfig(admins=_as_list(r.get("admins")), readers=_as_list(r.get("readers")), scoped=scoped,
+                      default=str(r.get("default", "none")).lower())
+    if cfg.default not in ("none", "reader"):
+        raise ConfigError("web.roles.default doit valoir none ou reader")
+    if not (cfg.admins or cfg.readers or cfg.scoped):
+        raise ConfigError("web.roles : déclarer au moins un rôle (admins, readers ou departments)")
+    return cfg
 
 
 def _parse_email(e: dict) -> EmailConfig:

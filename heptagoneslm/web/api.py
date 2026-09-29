@@ -64,6 +64,7 @@ class ReportParams:
     costs: dict[str, float] = field(default_factory=dict)   # coût annuel d'un jeton par produit
     currency: str = "€"
     target_coverage: float = 0.95
+    scoped: bool = False               # périmètre imposé par le rôle (responsable de service)
 
     def describe(self) -> str:
         parts = [f"Période du {self.start:%d/%m/%Y} au {(self.end - timedelta(seconds=1)):%d/%m/%Y}"]
@@ -253,6 +254,18 @@ def _filter_sessions(sessions: list[dict], p: ReportParams) -> list[dict]:
         wanted = set(p.departments)
         out = [s for s in out if (s["department"] or NOT_SET) in wanted]
     return out
+
+
+def visible_usernames(db: Database, p: ReportParams) -> set[str] | None:
+    """Utilisateurs visibles avec les filtres utilisateur / service (None : tous)."""
+    if not p.users and not p.departments:
+        return None
+    rows = db.query_dicts("SELECT username, department FROM app_user")
+    wanted_deps = set(p.departments)
+    wanted_users = set(p.users)
+    return {r["username"] for r in rows
+            if (not wanted_users or r["username"] in wanted_users)
+            and (not wanted_deps or (r["department"] or NOT_SET) in wanted_deps)}
 
 
 def _user_filter_note(p: ReportParams) -> list[str]:
@@ -506,8 +519,9 @@ def report_contention(db: Database, p: ReportParams) -> dict:
 def report_denials(db: Database, p: ReportParams) -> dict:
     data = _data(db, p)
     rows = data.denials
-    if p.users:
-        rows = [d for d in rows if (d["username"] or "") in set(p.users)]
+    visible = visible_usernames(db, p)
+    if visible is not None:
+        rows = [d for d in rows if (d["username"] or "") in visible]
     columns = [
         _col("event_time", "Horodatage", "datetime"), _col("server", "Serveur"), _col("product", "Produit"),
         _col("feature", "Feature"), _col("username", "Utilisateur"), _col("hostname", "Poste"),
@@ -735,6 +749,9 @@ EXPORT_TYPES = {
 def export(db: Database, report_type: str, p: ReportParams, fmt: str) -> tuple[bytes, str, str]:
     """Retourne (contenu, nom de fichier, type MIME)."""
     if report_type == "full":
+        if p.scoped:
+            raise PermissionError("Le classeur complet est réservé aux profils à vue globale : "
+                                  "exporter les vues une par une.")
         return export_full_workbook(db, p), _filename("complet", p, "xlsx"), EXPORT_TYPES["xlsx"]
     if fmt not in EXPORT_TYPES:
         raise ParamError(f"Format d'export inconnu : {fmt}")

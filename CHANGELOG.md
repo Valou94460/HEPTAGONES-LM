@@ -12,6 +12,13 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
   disparaît ; sans doublon (table `itsm_ticket`), avec rattrapage si l'outil était injoignable ;
   filtres par type et gravité minimale (`min_severity`, « serious » par défaut).
 - Commande `test-itsm` : ouvre, commente et résout un ticket de test dans chaque outil configuré.
+- **Rôles** (`web.roles`) : administrateur, lecteur, responsable de service (ne voit que les
+  utilisateurs de ses services — sessions, répartition, refus, En direct, exports — et en option
+  certains serveurs ou produits), par groupe AD ou par compte ; contrôle par le serveur, refus 403
+  tracés. Le module IIS transmet les groupes Windows (`X-Remote-Groups`).
+
+### Corrigé
+- Le filtre « Services » s'applique désormais aussi aux refus et aux utilisateurs de la vue En direct.
 
 ### Modifié
 - Les alertes ont leur propre section `alerts` (destinataires e-mail, connecteurs ITSM, règles) ;

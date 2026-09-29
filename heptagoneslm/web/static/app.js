@@ -255,7 +255,8 @@
       const name = me.display_name || me.user;
       $("user-badge").hidden = false;
       $("user-name").textContent = name;
-      $("user-name").title = me.department ? `${me.user} — ${me.department}` : me.user;
+      $("user-name").title = (me.department ? `${me.user} — ${me.department}` : me.user) +
+        (me.access ? `\n${me.access.label}` : "");
       const av = $("user-avatar");
       av.textContent = initials(name); av.style.background = avatarColor(me.user);
       if (me.auth === "ldap") {
@@ -268,6 +269,12 @@
       }
     }).catch(() => null);
     $("coverage").textContent = meta.data_start ? `Données du ${fmt(meta.data_start, "date")} au ${fmt(meta.data_end, "date")}` : "Aucune donnée collectée";
+    // Rôle limité à des services : bandeau et classeur complet masqué (refusé par le serveur)
+    if (meta.access && !meta.access.global) {
+      $("coverage").textContent += ` · Vue limitée — ${meta.access.label}`;
+      const full = document.querySelector('[data-export="full"]');
+      if (full) full.hidden = true;
+    }
     renderNav();
     renderHealth();
 

@@ -97,6 +97,17 @@ web:
     # header_name: X-Remote-User
     # trusted_proxies: ["127.0.0.1"]
     # allowed_users: []                         # vide = tout utilisateur authentifié par IIS
+  # Rôles (docs/AUTHENTIFICATION.md § 2 bis) : sans cette section, tout utilisateur autorisé voit tout
+  # roles:
+  #   admins: ["ENTREPRISE\\GG_HeptagonesLM_Admins"]
+  #   readers: ["ENTREPRISE\\GG_HeptagonesLM_Lecteurs"]
+  #   departments:                              # responsables de service : leurs services uniquement
+  #     - group: "ENTREPRISE\\GG_Resp_Simulation"
+  #       departments: ["Simulation & calcul"]
+  #     - user: chef.methodes
+  #       departments: ["Méthodes industrialisation"]
+  #       servers: [AUTODESK]                   # optionnel (ou products)
+  #   default: none                             # sans rôle : none (refusé) | reader
 
 # ---------------------------------------------------------------------------
 # Envoi du rapport par e-mail (heptagoneslm send-report, tâche « Envoi des rapports »)

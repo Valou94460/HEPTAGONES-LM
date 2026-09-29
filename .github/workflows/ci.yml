@@ -269,6 +269,12 @@ jobs:
           # En-tête forgé par le client : ignoré (remplacé par l'utilisateur authentifié)
           $me = Get-Me @("-H", "X-Remote-User: administrateur")
           if ($me.user -ne "ci_lecteur") { throw "en-tête X-Remote-User du client accepté" }
+          # Groupes Windows transmis par le module (rôles) ; groupes forgés par le client ignorés
+          $base = (Get-Me @()).groups
+          if ($base -lt 1) { throw "groupes Windows non transmis (X-Remote-Groups)" }
+          $forged = (1..40 | ForEach-Object { "G$_" }) -join ";"
+          $me = Get-Me @("-H", "X-Remote-Groups: $forged")
+          if ($me.groups -ne $base) { throw "en-tête X-Remote-Groups du client accepté ($($me.groups) au lieu de $base)" }
           # Test d'accès depuis un poste (/acces) : méthode transmise par le module, résultat enregistré
           $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o acces.html -w "%{http_code}" https://heptagoneslm.ci.local/acces
           if ($code -ne "200") { throw "page /acces : $code" }

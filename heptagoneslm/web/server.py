@@ -31,6 +31,7 @@ from heptagoneslm import __version__
 from heptagoneslm.config import AppConfig, ConfigError
 from heptagoneslm.storage.db import Database
 from heptagoneslm.web import access, api
+from heptagoneslm.web import roles
 from heptagoneslm.web.auth import COOKIE_NAME, Auth, AuthError, UserInfo
 
 log = logging.getLogger(__name__)
@@ -47,6 +48,8 @@ STATIC_FILES = {"/": "index.html", "/index.html": "index.html", "/app.js": "app.
                 "/acces": "acces.html", "/acces.js": "acces.js"}
 # Accessibles sans être connecté (page de connexion et ses ressources).
 PUBLIC_PATHS = {"/login.html", "/login.js", "/style.css", "/favicon.svg", "/theme.js"}
+# Accessibles à tout utilisateur authentifié, même sans rôle (test d'accès depuis un poste).
+NO_ROLE_PATHS = {"/acces", "/acces.js", "/api/access-test", "/api/me"}
 MAX_BODY = 8192
 
 
@@ -205,6 +208,11 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
         secure = "; Secure" if self.tls else ""
         return f"{COOKIE_NAME}={value}; Path=/; HttpOnly; SameSite=Strict; Max-Age={max_age}{secure}"
 
+    def _forbidden(self, path: str, message: str) -> None:
+        if path.startswith("/api/"):
+            return self._json({"error": message}, HTTPStatus.FORBIDDEN)
+        return self._send(HTTPStatus.FORBIDDEN, message.encode("utf-8"), "text/plain; charset=utf-8")
+
     def _deny(self, path: str) -> None:
         if path.startswith("/api/"):
             return self._json({"error": "Authentification requise", "login": self.auth.mode == "ldap"},
@@ -307,24 +315,34 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             user = self.current_user()
             if user is None:
                 return self._deny(url.path)
+            try:
+                access = roles.resolve(user, self.config.web.roles, self.auth.mode)
+            except roles.Forbidden as exc:
+                if url.path not in NO_ROLE_PATHS:
+                    audit.warning("Accès refusé (aucun rôle) : %s depuis %s", user.username, self.client_ip)
+                    return self._forbidden(url.path, str(exc))
+                access = None
             if url.path in STATIC_FILES:
                 return self._static(STATIC_FILES[url.path])
             if url.path == "/api/me":
                 return self._json({"auth": self.auth.mode, "user": user.username,
-                                   "display_name": user.display_name, "department": user.department})
+                                   "display_name": user.display_name, "department": user.department,
+                                   "groups": len(user.groups or []),
+                                   "access": access.as_dict() if access else None})
             if url.path == "/api/access-test":
                 return self._json(self._access_info(user))
             query = parse_qs(url.query, keep_blank_values=True)
             if url.path == "/api/meta":
                 with self._db() as db:
-                    return self._json({**api.meta(db), "version": __version__,
+                    return self._json({**roles.filter_meta(api.meta(db), access), "version": __version__,
+                                       "access": access.as_dict(),
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
             if url.path == "/api/report":
-                params = api.params_from_config(query, self.config)
+                params = roles.restrict(api.params_from_config(query, self.config), access)
                 with self._db() as db:
                     return self._json(api.run_report(db, (query.get("type") or ["summary"])[0], params))
             if url.path == "/api/export":
-                params = api.params_from_config(query, self.config)
+                params = roles.restrict(api.params_from_config(query, self.config), access)
                 fmt = (query.get("format") or ["xlsx"])[0]
                 rtype = (query.get("type") or ["summary"])[0]
                 with self._db() as db:
@@ -338,6 +356,9 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)
         except api.ParamError as exc:
             self._json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+        except PermissionError as exc:       # roles.Forbidden : demande hors du périmètre du rôle
+            audit.warning("Accès refusé : %s depuis %s — %s", getattr(user, "username", "?"), self.client_ip, exc)
+            self._json({"error": str(exc)}, HTTPStatus.FORBIDDEN)
         except ImportError as exc:
             self._json({"error": f"Module manquant : {exc.name} (pip install {exc.name})"},
                        HTTPStatus.INTERNAL_SERVER_ERROR)

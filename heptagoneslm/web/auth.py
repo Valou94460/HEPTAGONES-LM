@@ -35,6 +35,7 @@ import ssl
 import threading
 import time
 from dataclasses import dataclass, field
+from urllib.parse import unquote
 
 from heptagoneslm.config import AuthConfig
 
@@ -342,4 +343,7 @@ class Auth:
         username = raw.split("\\", 1)[-1].split("@", 1)[0].lower()
         if self.cfg.allowed_users and username not in self.cfg.allowed_users:
             return None
-        return UserInfo(username=username)
+        # Groupes Windows (noms encodés URL, séparés par « ; ») ajoutés par le module IIS : rôles.
+        raw_groups = headers.get(self.cfg.groups_header) or ""
+        groups = [unquote(g).strip() for g in raw_groups.split(";") if g.strip()][:500]
+        return UserInfo(username=username, groups=groups)

@@ -49,6 +49,7 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
 | **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
+| **Rôles** | Administrateur, lecteur, responsable de service (ne voit que ses services, exports compris), attribués par groupe AD ou par compte, contrôlés par le serveur. |
 | **Alertes et tickets** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Par e-mail et / ou ticket automatique ServiceNow, Jira, GLPI, Teams / Slack (ouvert, complété, résolu). |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
@@ -364,7 +365,8 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Rapports périodiques par e-mail | ✅ | ✅ |
 | Alertes immédiates par e-mail (collecte, refus, saturation, échéances) | ✅ | ✅ |
 | Tickets ITSM automatiques (ServiceNow, Jira, GLPI, webhook Teams / Slack) | ✅ | ✅ |
-| Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
+| Rôles par service (groupes AD) | ✅ | ✅ |
+| Administration en ligne (configuration depuis l'interface) | ❌ | ✅ |
 | Libération de licences inactives (agent sur les postes) | ❌ | ✅ |
 | Licences SaaS / cloud, offre hébergée | ❌ | ✅ |
 | Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
