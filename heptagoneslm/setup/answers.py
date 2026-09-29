@@ -346,12 +346,12 @@ class Answers:
                      "sender": self.sender,
                      "subscriptions": [{"name": "Direction", "recipients": list(self.recipients),
                                         "period": "last-month"}]}
-            if self.email_alerts:
-                email["alerts"] = {"recipients": list(self.recipients)}
             if self.smtp_user:
                 email["username"] = self.smtp_user
                 email["password"] = f"${{{SMTP_PASSWORD_VAR}}}"
             cfg["email"] = email
+            if self.email_alerts:
+                cfg["alerts"] = {"recipients": list(self.recipients)}
         return cfg
 
     def yaml_text(self, generated_at: str = "") -> str:

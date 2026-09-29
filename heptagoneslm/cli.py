@@ -96,7 +96,7 @@ def cmd_collect(cfg: AppConfig, args) -> int:
             print("Une collecte est déjà en cours : exécution ignorée")
             return 0
         results = CollectionService(cfg, db).collect_all(only=args.server)
-        if cfg.email.alerts:
+        if cfg.alerts:
             _notify_alerts(cfg, db)
     failed = [r for r in results if r.status != "OK"]
     for r in results:
@@ -117,20 +117,44 @@ def _notify_alerts(cfg: AppConfig, db) -> None:
         return
     if result.status in ("SENT", "ERROR"):
         print(f"Alertes : {result.status} {result.detail}")
+        for t in result.tickets:
+            print(f"  ticket : {t}")
 
 
 def cmd_check_alerts(cfg: AppConfig, args) -> int:
     from heptagoneslm.alerts import check_and_notify
 
-    if not cfg.email.alerts:
-        print("Aucune alerte configurée (section email.alerts) : rien à évaluer.")
+    if not cfg.alerts:
+        print("Aucune alerte configurée (section alerts) : rien à évaluer.")
         return 0
     with _open_db(cfg) as db:
         result = check_and_notify(cfg, db, dry_run_dir=args.dry_run)
     print(f"Alertes : {result.status} {result.detail}")
     for a in result.alerts:
         print(f"  [{a.severity}] {a.title} — {a.detail}")
+    for t in result.tickets:
+        print(f"  ticket : {t}")
     return 2 if result.status == "ERROR" else 0
+
+
+def cmd_test_itsm(cfg: AppConfig, args) -> int:
+    from heptagoneslm.itsm import ItsmError, test_connector
+
+    connectors = cfg.alerts.itsm if cfg.alerts else []
+    if args.connector:
+        connectors = [c for c in connectors if c.name.lower() == args.connector.lower()]
+    if not connectors:
+        print("Aucun connecteur ITSM correspondant (section alerts.itsm).")
+        return 1
+    failed = 0
+    for c in connectors:
+        try:
+            steps = test_connector(c, cfg, resolve=not args.keep_open)
+            print(f"{c.name:<16} OK     " + " ; ".join(steps))
+        except ItsmError as exc:
+            failed += 1
+            print(f"{c.name:<16} ERREUR {exc}")
+    return 2 if failed else 0
 
 
 def cmd_report(cfg: AppConfig, args) -> int:
@@ -389,6 +413,10 @@ def build_parser() -> argparse.ArgumentParser:
     ca = sub.add_parser("check-alerts", help="évalue les alertes et les envoie par e-mail (aussi fait après chaque collecte)")
     ca.add_argument("--dry-run", metavar="DOSSIER", help="écrire le message en .eml sans l'envoyer ni mémoriser l'envoi")
 
+    ti = sub.add_parser("test-itsm", help="ouvre, commente et résout un ticket de test dans chaque outil ITSM configuré")
+    ti.add_argument("--connector", help="limiter à ce connecteur (nom)")
+    ti.add_argument("--keep-open", action="store_true", help="laisser le ticket de test ouvert")
+
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
@@ -428,6 +456,7 @@ WITH_CONFIG = {
     "import-users": cmd_import_users,
     "send-report": cmd_send_report,
     "check-alerts": cmd_check_alerts,
+    "test-itsm": cmd_test_itsm,
     "purge": cmd_purge,
     "apply-products": cmd_apply_products,
 }

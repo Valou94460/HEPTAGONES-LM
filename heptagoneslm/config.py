@@ -132,13 +132,49 @@ class Subscription:
 
 
 ALERT_TYPES = ("collection", "denial", "saturation", "expiry")
+SEVERITIES = ("info", "warning", "serious", "critical")      # ordre croissant de gravité
+ITSM_TYPES = ("servicenow", "jira", "glpi", "webhook")
+WEBHOOK_FORMATS = ("json", "teams", "slack")
+
+
+@dataclass
+class ItsmConfig:
+    """Connecteur ITSM : chaque alerte ouvre un ticket, le complète puis le résout."""
+
+    name: str
+    type: str                                  # servicenow | jira | glpi | webhook
+    url: str
+    username: str | None = None
+    password: str | None = None                # ServiceNow / Jira Cloud : mot de passe ou jeton d'API
+    token: str | None = None                   # Jira : jeton d'API (Cloud, avec username) ou PAT (Data Center)
+    app_token: str | None = None               # GLPI : jeton d'application
+    user_token: str | None = None              # GLPI : jeton d'API de l'utilisateur technique
+    project: str | None = None                 # Jira : clé du projet
+    issue_type: str = "Incident"               # Jira : type de ticket
+    assignment_group: str | None = None        # ServiceNow : groupe d'affectation (nom ou sys_id)
+    caller: str | None = None                  # ServiceNow : appelant (nom d'utilisateur ou sys_id)
+    category: str | None = None                # ServiceNow : catégorie
+    entity_id: int | None = None               # GLPI : entité
+    category_id: int | None = None             # GLPI : catégorie ITIL
+    resolve_transitions: list[str] = field(default_factory=lambda: ["Done", "Terminé", "Resolve Issue", "Résoudre",
+                                                                       "Resolved", "Résolu", "Close Issue", "Fermer"])
+    fields: dict = field(default_factory=dict)  # champs supplémentaires transmis à la création
+    format: str = "json"                       # webhook : json | teams | slack
+    headers: dict = field(default_factory=dict)  # webhook : en-têtes HTTP (ex. authentification)
+    types: list[str] = field(default_factory=lambda: list(ALERT_TYPES))
+    min_severity: str = "serious"              # gravité minimale pour ouvrir un ticket (refus, pannes, échéances proches)
+    timeout_s: int = 20
+    verify_tls: bool = True
+    ca_file: str | None = None                 # autorité de certification interne
+    allow_http: bool = False                   # autoriser http:// (déconseillé : secrets en clair)
 
 
 @dataclass
 class AlertConfig:
-    """Alertes immédiates par e-mail, évaluées après chaque collecte."""
+    """Alertes immédiates, évaluées après chaque collecte : e-mail et / ou tickets ITSM."""
 
-    recipients: list[str]
+    recipients: list[str] = field(default_factory=list)       # destinataires e-mail (vide : pas d'e-mail)
+    itsm: list[ItsmConfig] = field(default_factory=list)
     types: list[str] = field(default_factory=lambda: list(ALERT_TYPES))
     servers: list[str] = field(default_factory=list)     # vide = tous
     products: list[str] = field(default_factory=list)    # vide = tous
@@ -158,7 +194,7 @@ class EmailConfig:
     timeout_s: int = 30
     max_attachment_mb: float = 15.0
     subscriptions: list[Subscription] = field(default_factory=list)
-    alerts: AlertConfig | None = None
+    alerts: AlertConfig | None = None      # même objet que AppConfig.alerts (compatibilité)
 
 
 @dataclass
@@ -174,6 +210,7 @@ class AppConfig:
     log_level: str = "INFO"
     web: WebConfig = field(default_factory=WebConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
+    alerts: AlertConfig | None = None
 
     def server(self, name: str) -> ServerConfig:
         for srv in self.servers:
@@ -292,10 +329,19 @@ def parse_config(raw: dict) -> AppConfig:
         events_days=int(ret.get("events_days", 730)),
     )
     logging_cfg = raw.get("logging") or {}
+    email_cfg = _parse_email(raw.get("email") or {})
+    # Section de premier niveau « alerts » ; « email.alerts » accepté (première forme, 26.2 en préparation).
+    if raw.get("alerts") and (raw.get("email") or {}).get("alerts"):
+        raise ConfigError("alerts : section déclarée deux fois (alerts et email.alerts) — n'en garder qu'une")
+    alerts = _parse_alerts(raw.get("alerts")) or _parse_alerts((raw.get("email") or {}).get("alerts"), "email.alerts")
+    if alerts and alerts.recipients and not email_cfg.smtp_host:
+        raise ConfigError("email.smtp_host est obligatoire pour envoyer les alertes par e-mail")
+    email_cfg.alerts = alerts
 
     return AppConfig(
         web=_parse_web(raw.get("web") or {}),
-        email=_parse_email(raw.get("email") or {}),
+        email=email_cfg,
+        alerts=alerts,
         database=DatabaseConfig(connection_string=conn),
         servers=servers,
         products=products,
@@ -402,7 +448,6 @@ def _parse_email(e: dict) -> EmailConfig:
         timeout_s=int(e.get("timeout_s", 30)),
         max_attachment_mb=float(e.get("max_attachment_mb", 15)),
         subscriptions=subs,
-        alerts=_parse_alerts(e.get("alerts")),
     )
     if cfg.security not in ("starttls", "ssl", "none"):
         raise ConfigError("email.security doit valoir starttls, ssl ou none")
@@ -411,27 +456,82 @@ def _parse_email(e: dict) -> EmailConfig:
                           "utiliser security: starttls ou ssl")
     if subs and not cfg.smtp_host:
         raise ConfigError("email.smtp_host est obligatoire pour envoyer des rapports")
-    if cfg.alerts and not cfg.smtp_host:
-        raise ConfigError("email.smtp_host est obligatoire pour envoyer des alertes")
     return cfg
 
 
-def _parse_alerts(a) -> AlertConfig | None:
+def _types(value, where: str) -> list[str]:
+    types = [t.lower() for t in _as_list(value)] or list(ALERT_TYPES)
+    unknown = [t for t in types if t not in ALERT_TYPES]
+    if unknown:
+        raise ConfigError(f"{where}.types : {', '.join(unknown)} inconnu(s) "
+                          f"(valeurs possibles : {', '.join(ALERT_TYPES)})")
+    return types
+
+
+def _parse_itsm(i: int, c) -> ItsmConfig:
+    where = f"alerts.itsm[{i}]"
+    if not isinstance(c, dict):
+        raise ConfigError(f"{where} doit être une section (type, url...)")
+    kind = str(c.get("type", "")).lower()
+    if kind not in ITSM_TYPES:
+        raise ConfigError(f"{where}.type : valeurs possibles {', '.join(ITSM_TYPES)}")
+    url = _expand(c.get("url")) or ""
+    if not url.lower().startswith(("https://", "http://")):
+        raise ConfigError(f"{where}.url : adresse https:// attendue")
+    try:
+        cfg = ItsmConfig(
+            name=str(c.get("name") or kind), type=kind, url=url.rstrip("/"),
+            username=_expand(c.get("username")), password=_expand(c.get("password")),
+            token=_expand(c.get("token")), app_token=_expand(c.get("app_token")),
+            user_token=_expand(c.get("user_token")),
+            project=c.get("project"), issue_type=str(c.get("issue_type", "Incident")),
+            assignment_group=c.get("assignment_group"), caller=c.get("caller"), category=c.get("category"),
+            entity_id=int(c["entity_id"]) if c.get("entity_id") not in (None, "") else None,
+            category_id=int(c["category_id"]) if c.get("category_id") not in (None, "") else None,
+            fields=dict(c.get("fields") or {}), format=str(c.get("format", "json")).lower(),
+            headers={str(k): _expand(str(v)) for k, v in (c.get("headers") or {}).items()},
+            types=_types(c.get("types"), where), min_severity=str(c.get("min_severity", "serious")).lower(),
+            timeout_s=int(c.get("timeout_s", 20)), verify_tls=bool(c.get("verify_tls", True)),
+            ca_file=_expand(c.get("ca_file")), allow_http=bool(c.get("allow_http", False)),
+        )
+    except (TypeError, ValueError, AttributeError):
+        raise ConfigError(f"{where} : valeur invalide (entity_id, category_id, timeout_s, fields, headers)") from None
+    if c.get("resolve_transitions"):
+        cfg.resolve_transitions = _as_list(c.get("resolve_transitions"))
+    if cfg.url.lower().startswith("http://") and not cfg.allow_http:
+        raise ConfigError(f"{where}.url : http:// refusé (identifiants en clair) — utiliser https:// "
+                          "ou allow_http: true en test")
+    if cfg.min_severity not in SEVERITIES:
+        raise ConfigError(f"{where}.min_severity : valeurs possibles {', '.join(SEVERITIES)}")
+    need = {"servicenow": ("username", "password"), "jira": ("project",), "glpi": ("app_token", "user_token"),
+            "webhook": ()}[kind]
+    missing = [n for n in need if not getattr(cfg, n)]
+    if kind == "jira" and not cfg.token and not cfg.password:
+        missing.append("token")
+    if missing:
+        raise ConfigError(f"{where} ({kind}) : {', '.join(missing)} obligatoire(s)")
+    if kind == "webhook" and cfg.format not in WEBHOOK_FORMATS:
+        raise ConfigError(f"{where}.format : valeurs possibles {', '.join(WEBHOOK_FORMATS)}")
+    return cfg
+
+
+def _parse_alerts(a, where: str = "alerts") -> AlertConfig | None:
     if not a:
         return None
     if not isinstance(a, dict):
-        raise ConfigError("email.alerts doit être une section (recipients, types...)")
+        raise ConfigError(f"{where} doit être une section (recipients, itsm, types...)")
     recipients = _as_list(a.get("recipients"))
-    if not recipients:
-        raise ConfigError("email.alerts.recipients : au moins un destinataire")
-    types = [t.lower() for t in _as_list(a.get("types"))] or list(ALERT_TYPES)
-    unknown = [t for t in types if t not in ALERT_TYPES]
-    if unknown:
-        raise ConfigError(f"email.alerts.types : {', '.join(unknown)} inconnu(s) "
-                          f"(valeurs possibles : {', '.join(ALERT_TYPES)})")
+    connectors = [_parse_itsm(i, c) for i, c in enumerate(a.get("itsm") or [])]
+    names = [c.name.lower() for c in connectors]
+    if len(set(names)) != len(names):
+        raise ConfigError(f"{where}.itsm : noms de connecteurs en double (renseigner name)")
+    if not recipients and not connectors:
+        raise ConfigError(f"{where} : au moins un destinataire (recipients) ou un connecteur (itsm)")
+    types = _types(a.get("types"), where)
     try:
         cfg = AlertConfig(
             recipients=recipients,
+            itsm=connectors,
             types=types,
             servers=_as_list(a.get("servers")),
             products=_as_list(a.get("products")),
@@ -440,7 +540,7 @@ def _parse_alerts(a) -> AlertConfig | None:
             min_denials=int(a.get("min_denials", 1)),
         )
     except (TypeError, ValueError):
-        raise ConfigError("email.alerts : expiry_days, repeat_hours et min_denials doivent être des nombres") from None
+        raise ConfigError(f"{where} : expiry_days, repeat_hours et min_denials doivent être des nombres") from None
     if cfg.expiry_days < 0 or cfg.repeat_hours <= 0 or cfg.min_denials < 1:
-        raise ConfigError("email.alerts : expiry_days >= 0, repeat_hours > 0 et min_denials >= 1")
+        raise ConfigError(f"{where} : expiry_days >= 0, repeat_hours > 0 et min_denials >= 1")
     return cfg

@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 4
+-- Version du schéma : 5
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -158,6 +158,22 @@ CREATE TABLE dbo.alert_state (
 )
 GO
 
+IF OBJECT_ID(N'dbo.itsm_ticket', N'U') IS NULL
+CREATE TABLE dbo.itsm_ticket (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    connector NVARCHAR(100) NOT NULL,
+    alert_key NVARCHAR(300) NOT NULL,
+    ticket_id NVARCHAR(100) NULL,
+    ticket_ref NVARCHAR(100) NULL,
+    url NVARCHAR(500) NULL,
+    title NVARCHAR(500) NULL,
+    status NVARCHAR(10) NOT NULL,
+    opened_at DATETIME2(0) NOT NULL,
+    updated_at DATETIME2(0) NOT NULL,
+    resolved_at DATETIME2(0) NULL
+)
+GO
+
 IF COL_LENGTH(N'dbo.feature', N'expires_on') IS NULL
 ALTER TABLE dbo.feature ADD expires_on DATE NULL
 GO
@@ -196,6 +212,10 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_delivery_sub_period')
 CREATE INDEX ix_delivery_sub_period ON dbo.report_delivery (subscription, period_start)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_itsm_open')
+CREATE INDEX ix_itsm_open ON dbo.itsm_ticket (status, connector, alert_key)
 GO
 
 CREATE OR ALTER VIEW dbo.v_session_detail AS

@@ -1,4 +1,4 @@
-"""Alertes immédiates par e-mail (section ``email.alerts`` de la configuration).
+"""Alertes immédiates par e-mail et tickets ITSM (section ``alerts`` de la configuration).
 
 Évaluées après chaque collecte (``heptagoneslm collect``) ou à la demande
 (``heptagoneslm check-alerts``), elles préviennent sans attendre le rapport
@@ -65,6 +65,8 @@ class AlertResult:
     alerts: list[Alert] = field(default_factory=list)
     detail: str = ""
     path: Path | None = None
+    tickets: list[str] = field(default_factory=list)       # actions ITSM (ouverture, rappel, résolution)
+    errors: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -124,7 +126,7 @@ def _product_ok(cfg: AlertConfig, product: str) -> bool:
 
 
 def _collection_alerts(config: AppConfig, db: Database, now: datetime) -> list[Alert]:
-    cfg = config.email.alerts
+    cfg = config.alerts
     enabled = {s.name.lower() for s in config.servers if s.enabled}
     rows = db.query_dicts(
         "SELECT srv.name AS server, r.collector, r.status, r.message, r.started_at "
@@ -150,7 +152,7 @@ def _collection_alerts(config: AppConfig, db: Database, now: datetime) -> list[A
 
 
 def _denial_alerts(config: AppConfig, db: Database, now: datetime, states: dict[str, dict]) -> list[Alert]:
-    cfg = config.email.alerts
+    cfg = config.alerts
     repeat = timedelta(hours=cfg.repeat_hours)
     since = now - max(repeat, DENIAL_FIRST_LOOKBACK) - timedelta(hours=1)
     rows = db.query_dicts(
@@ -191,7 +193,7 @@ def _denial_alerts(config: AppConfig, db: Database, now: datetime, states: dict[
 
 
 def _saturation_alerts(config: AppConfig, db: Database, now: datetime) -> list[Alert]:
-    cfg = config.email.alerts
+    cfg = config.alerts
     rows = db.query_dicts(
         "SELECT srv.name AS server, f.name AS feature, COALESCE(f.product, f.name) AS product, "
         "s.issued, s.in_use, s.queued, s.snapshot_time FROM usage_snapshot s "
@@ -216,7 +218,7 @@ def _saturation_alerts(config: AppConfig, db: Database, now: datetime) -> list[A
 def _expiry_alerts(config: AppConfig, db: Database, today: date) -> list[Alert]:
     from heptagoneslm.storage.repository import Repository
 
-    cfg = config.email.alerts
+    cfg = config.alerts
     if not Repository(db).has_column("feature", "expires_on"):
         return []
     rows = db.query_dicts(
@@ -244,7 +246,14 @@ def _expiry_alerts(config: AppConfig, db: Database, today: date) -> list[Alert]:
 def evaluate(config: AppConfig, db: Database, now: datetime | None = None,
              states: dict[str, dict] | None = None) -> tuple[list[Alert], list[Alert], set[str]]:
     """Retourne (alertes à envoyer, retours à la normale, clés actuellement présentes)."""
-    cfg = config.email.alerts
+    to_send, resolved, keys, _ = evaluate_all(config, db, now, states)
+    return to_send, resolved, keys
+
+
+def evaluate_all(config: AppConfig, db: Database, now: datetime | None = None,
+                 states: dict[str, dict] | None = None) -> tuple[list[Alert], list[Alert], set[str], list[Alert]]:
+    """Comme ``evaluate``, plus la liste des alertes présentes (hors refus), utile aux tickets ITSM."""
+    cfg = config.alerts
     now = now or datetime.now().replace(microsecond=0)
     states = load_states(db) if states is None else states
     current: list[Alert] = []
@@ -273,7 +282,7 @@ def evaluate(config: AppConfig, db: Database, now: datetime | None = None,
                                   .replace("Collecte arrêtée", "Collecte relancée"),
                                   "La dernière collecte s'est déroulée normalement."))
     to_send.sort(key=lambda a: (SEVERITY_ORDER[a.severity], a.title))
-    return to_send, resolved, keys
+    return to_send, resolved, keys, current
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +317,7 @@ def render_html(alerts: list[Alert], now: datetime, link: str | None, repeat_hou
 <table style="border-collapse:collapse;width:100%">{rows}</table>
 <p style="margin:18px 0 0;color:#52514e;font-size:13px">{footer}</p>
 <p style="margin:18px 0 0;color:#898781;font-size:11px">Message automatique HeptagonesLM {e(__version__)} — une alerte
-toujours présente est rappelée au plus toutes les {repeat_hours:g} h (paramètre email.alerts.repeat_hours).</p>
+toujours présente est rappelée au plus toutes les {repeat_hours:g} h (paramètre alerts.repeat_hours).</p>
 </div></body></html>"""
 
 
@@ -326,7 +335,7 @@ def build_message(config: AppConfig, alerts: list[Alert], now: datetime) -> Emai
     msg = EmailMessage()
     msg["Subject"] = _subject(alerts)
     msg["From"] = config.email.sender
-    msg["To"] = ", ".join(config.email.alerts.recipients)
+    msg["To"] = ", ".join(config.alerts.recipients)
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="heptagoneslm")
     msg["X-Mailer"] = f"HeptagonesLM {__version__}"
@@ -334,7 +343,7 @@ def build_message(config: AppConfig, alerts: list[Alert], now: datetime) -> Emai
         msg["X-Priority"] = "1"
         msg["Importance"] = "High"
     msg.set_content(render_text(alerts, now, link))
-    msg.add_alternative(render_html(alerts, now, link, config.email.alerts.repeat_hours), subtype="html")
+    msg.add_alternative(render_html(alerts, now, link, config.alerts.repeat_hours), subtype="html")
     return msg
 
 
@@ -345,49 +354,77 @@ def build_message(config: AppConfig, alerts: list[Alert], now: datetime) -> Emai
 
 def check_and_notify(config: AppConfig, db: Database, now: datetime | None = None,
                      dry_run_dir: str | Path | None = None, sender=None) -> AlertResult:
-    """Évalue les alertes, envoie le message et met à jour l'état (sauf en --dry-run)."""
-    if not config.email.alerts:
-        return AlertResult("DISABLED", detail="section email.alerts absente")
+    """Évalue les alertes, envoie l'e-mail, synchronise les tickets ITSM et met à jour l'état.
+
+    ``--dry-run`` : écrit l'e-mail en .eml, sans rien envoyer, sans ticket ni mise à jour de l'état.
+    L'état n'est mis à jour que si l'e-mail est parti (ou si aucun destinataire n'est configuré) :
+    une alerte n'est jamais perdue. Les tickets ITSM se rattrapent d'eux-mêmes à l'évaluation suivante.
+    """
+    rules = config.alerts
+    if not rules:
+        return AlertResult("DISABLED", detail="section alerts absente")
     if sender is None:
         from heptagoneslm.mailer import send_message as sender
     now = now or datetime.now().replace(microsecond=0)
     states = load_states(db)
-    to_send, resolved, keys = evaluate(config, db, now, states)
+    to_send, resolved, keys, current = evaluate_all(config, db, now, states)
     message_alerts = to_send + resolved
 
-    if message_alerts and dry_run_dir:
+    if dry_run_dir:
+        if not message_alerts:
+            return AlertResult("NONE", [], "aucune nouvelle alerte")
         out = Path(dry_run_dir)
         out.mkdir(parents=True, exist_ok=True)
         path = out / f"alertes_{now:%Y%m%d_%H%M%S}.eml"
         path.write_bytes(bytes(build_message(config, message_alerts, now)))
         return AlertResult("DRY-RUN", message_alerts, str(path), path)
-    if dry_run_dir:
-        return AlertResult("NONE", [], "aucune nouvelle alerte")
 
-    if message_alerts:
-        recipients = config.email.alerts.recipients
+    result = AlertResult("NONE", message_alerts)
+    if rules.itsm:
+        from heptagoneslm import itsm
+
+        synced = itsm.sync(config, db, now, current, to_send, resolved)
+        result.tickets, result.errors = synced.events, list(synced.errors)
+
+    email_ok = True
+    if message_alerts and rules.recipients:
         try:
             sender(build_message(config, message_alerts, now), config.email)
         except Exception as exc:
             log.error("Envoi des alertes impossible : %s", exc)
-            _journal(db, now, recipients, "ERROR", str(exc))
-            return AlertResult("ERROR", message_alerts, str(exc))
-        _journal(db, now, recipients, "SENT", "; ".join(a.title for a in message_alerts))
-        log.info("%d alerte(s) envoyée(s) à %s", len(message_alerts), ", ".join(recipients))
+            _journal(db, now, rules.recipients, "ERROR", str(exc))
+            result.errors.insert(0, f"e-mail : {exc}")
+            email_ok = False
+        else:
+            _journal(db, now, rules.recipients, "SENT", "; ".join(a.title for a in message_alerts))
+            log.info("%d alerte(s) envoyée(s) à %s", len(message_alerts), ", ".join(rules.recipients))
 
-    with db.transaction():
-        for a in to_send:
-            _save_state(db, states, a.key, now, active=True, sent=True, cursor=a.cursor, title=a.title)
-        for a in resolved:
-            _save_state(db, states, a.key, now, active=False)
-        # Conditions disparues sans message (saturation terminée, licence renouvelée) : réarmées.
-        for key, st in list(states.items()):
-            if st["active"] and key not in keys and not key.startswith(("denial:", "collection:")):
-                _save_state(db, states, key, now, active=False)
-    if not message_alerts:
-        return AlertResult("NONE", [], "aucune nouvelle alerte")
-    return AlertResult("SENT", message_alerts, f"{len(message_alerts)} alerte(s) → "
-                       + ", ".join(config.email.alerts.recipients))
+    if email_ok:
+        with db.transaction():
+            for a in to_send:
+                _save_state(db, states, a.key, now, active=True, sent=True, cursor=a.cursor, title=a.title)
+            for a in resolved:
+                _save_state(db, states, a.key, now, active=False)
+            # Conditions disparues sans message (saturation terminée, licence renouvelée) : réarmées.
+            for key, st in list(states.items()):
+                if st["active"] and key not in keys and not key.startswith(("denial:", "collection:")):
+                    _save_state(db, states, key, now, active=False)
+
+    parts = []
+    if message_alerts and rules.recipients and email_ok:
+        parts.append(f"{len(message_alerts)} alerte(s) → " + ", ".join(rules.recipients))
+    elif message_alerts and not rules.recipients:
+        parts.append(f"{len(message_alerts)} alerte(s)")
+    if result.tickets:
+        parts.append(f"{len(result.tickets)} action(s) ITSM")
+    if result.errors:
+        parts.append("erreurs : " + " ; ".join(result.errors))
+    result.detail = " — ".join(parts) or "aucune nouvelle alerte"
+    if result.errors:
+        result.status = "ERROR"
+    elif message_alerts or result.tickets:
+        result.status = "SENT"
+    return result
 
 
 def _journal(db: Database, now: datetime, recipients: list[str], status: str, message: str | None) -> None:

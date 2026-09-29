@@ -49,7 +49,7 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
 | **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
-| **Alertes par e-mail** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Sans répétition inutile, rappel au plus une fois par jour. |
+| **Alertes et tickets** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Par e-mail et / ou ticket automatique ServiceNow, Jira, GLPI, Teams / Slack (ouvert, complété, résolu). |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
 | **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
@@ -271,14 +271,18 @@ La tâche planifiée « Envoi des rapports » (`send-report --skip-sent`, quotid
 n'envoie chaque abonnement qu'une fois par période et rattrape un 1er du mois manqué ;
 les envois sont tracés en base (`report_delivery`).
 
-### Alertes immédiates
+### Alertes immédiates et tickets ITSM
 
 ```yaml
-email:
-  alerts:
-    recipients: [exploitation@entreprise.local]
-    # types: [collection, denial, saturation, expiry]   # défaut : toutes
-    # repeat_hours: 24                                  # rappel d'une alerte toujours présente
+alerts:
+  recipients: [exploitation@entreprise.local]         # e-mail (optionnel)
+  # types: [collection, denial, saturation, expiry]   # défaut : toutes
+  # repeat_hours: 24                                  # rappel d'une alerte toujours présente
+  itsm:                                               # tickets automatiques (optionnel)
+    - type: servicenow                                # servicenow | jira | glpi | webhook
+      url: https://entreprise.service-now.com
+      username: svc_heptagoneslm
+      password: ${HEPTAGONESLM_ITSM_PASSWORD}
 ```
 
 Évaluées après chaque collecte (toutes les 5 minutes), elles partent en un seul message :
@@ -293,6 +297,15 @@ email:
 Une alerte toujours présente n'est rappelée qu'après `repeat_hours` ; un SMTP indisponible ne
 fait perdre aucune alerte (renvoyée à la collecte suivante). Aperçu sans envoi :
 `HeptagonesLM.exe -c heptagoneslm.yaml check-alerts --dry-run apercu`.
+
+**Tickets ITSM** : ServiceNow (incident), Jira (Cloud ou Data Center), GLPI et webhook
+(JSON, Microsoft Teams, Slack). Chaque alerte ouvre un ticket, le complète à chaque rappel et
+le résout quand la condition disparaît (collecte rétablie, jetons disponibles, licence
+renouvelée ; pour les refus, après `repeat_hours` sans nouveau refus) — sans doublon, avec
+rattrapage si l'outil était injoignable. Par défaut, seules les alertes graves
+(`min_severity: serious` : pannes, refus, échéances à moins de 7 jours) ouvrent un ticket.
+Vérification à l'installation : `HeptagonesLM.exe -c heptagoneslm.yaml test-itsm` (ticket de
+test ouvert, commenté puis résolu). Exemples complets : `config/heptagoneslm.example.yaml`.
 
 <img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">
 
@@ -350,9 +363,10 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Connexion comptes Windows / AD, restriction par groupe | ✅ | ✅ |
 | Rapports périodiques par e-mail | ✅ | ✅ |
 | Alertes immédiates par e-mail (collecte, refus, saturation, échéances) | ✅ | ✅ |
+| Tickets ITSM automatiques (ServiceNow, Jira, GLPI, webhook Teams / Slack) | ✅ | ✅ |
 | Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
-| Libération de licences inactives (agent sur les postes), tickets | ❌ | ✅ |
-| Licences SaaS / cloud, connecteur ServiceNow, offre hébergée | ❌ | ✅ |
+| Libération de licences inactives (agent sur les postes) | ❌ | ✅ |
+| Licences SaaS / cloud, offre hébergée | ❌ | ✅ |
 | Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
 
 Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md).

@@ -318,6 +318,19 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | ALR-06 [E3] | SMTP indisponible | `smtp_host` erroné pendant une alerte | La collecte reste `OK` ; échec tracé (`report_delivery`, abonnement « Alertes ») ; alerte envoyée dès le retour du SMTP | ☐ |
 | ALR-07 | Filtres | `types: [expiry]`, `servers: [ANSYS]` | Seules les échéances Ansys sont signalées | ☐ |
 
+### 5.10 quater Tickets ITSM (ITSM)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ITSM-01 🔴 [E3] | Test de connexion | `test-itsm` pour chaque connecteur | `OK` : ticket de test ouvert (numéro et lien), commenté puis résolu dans l'outil | ☐ |
+| ITSM-02 🔴 [E3] | Ouverture | Provoquer une collecte en échec (serveur fictif) | Un seul ticket ouvert (ServiceNow : incident, urgence 1 ; Jira : ticket du projet ; GLPI : incident), avec description et lien vers le tableau de bord | ☐ |
+| ITSM-03 [E3] | Pas de doublon | Laisser la panne pendant plusieurs collectes | Aucun nouveau ticket ; commentaire de rappel après `repeat_hours` | ☐ |
+| ITSM-04 🔴 [E3] | Résolution | Rétablir le serveur | Ticket résolu automatiquement (ServiceNow : état « Résolu » ; Jira : transition de résolution ; GLPI : solution ajoutée) | ☐ |
+| ITSM-05 [E3] | Refus | Provoquer des refus, puis plus aucun pendant 24 h | Ticket ouvert, puis résolu après 24 h sans nouveau refus | ☐ |
+| ITSM-06 [E3] | Outil indisponible | Couper l'accès à l'outil ITSM pendant une alerte, puis le rétablir | Erreur journalisée, e-mail envoyé ; ticket ouvert à la collecte suivant le rétablissement | ☐ |
+| ITSM-07 | Gravité minimale | `min_severity: serious` (défaut) | Saturation et échéances à plus de 7 jours : pas de ticket ; pannes, refus, échéances proches : ticket | ☐ |
+| ITSM-08 [E3] | Teams / Slack | Connecteur `webhook` au format `teams` ou `slack` | Message reçu dans le canal à l'ouverture et à la résolution | ☐ |
+
 ### 5.10 ter Serveurs RLM (RLM)
 
 | ID | Cas | Procédure | Résultat attendu | OK |

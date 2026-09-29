@@ -392,27 +392,41 @@ jobs:
           heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml purge
           heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml report --period last-7d -o demo-mssql/reports/HeptagonesLM_mssql_7j.xlsx
 
-      - name: Alertes e-mail sur SQL Server (évaluation, état, anti-répétition)
+      - name: Alertes et tickets ITSM sur SQL Server (évaluation, état, anti-répétition)
         run: |
           python - <<'EOF'
+          import json, threading
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
           import yaml
           from heptagoneslm.alerts import check_and_notify
           from heptagoneslm.config import parse_config
           from heptagoneslm.storage import Database
+          hooks = []
+          class Hook(BaseHTTPRequestHandler):
+              def log_message(self, *a): pass
+              def do_POST(self):
+                  hooks.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                  self.send_response(200); self.send_header("Content-Length", "0"); self.end_headers()
+          srv = ThreadingHTTPServer(("127.0.0.1", 0), Hook)
+          threading.Thread(target=srv.serve_forever, daemon=True).start()
           raw = yaml.safe_load(open("demo-mssql/heptagoneslm.demo.yaml", encoding="utf-8"))
-          raw["email"] = {"smtp_host": "localhost", "sender": "ci@entreprise.local",
-                          "alerts": {"recipients": ["ci@entreprise.local"], "expiry_days": 400}}
+          raw["email"] = {"smtp_host": "localhost", "sender": "ci@entreprise.local"}
+          raw["alerts"] = {"recipients": ["ci@entreprise.local"], "expiry_days": 400,
+                           "itsm": [{"type": "webhook", "url": f"http://127.0.0.1:{srv.server_address[1]}/hook",
+                                     "allow_http": True, "min_severity": "warning"}]}
           cfg = parse_config(raw)
           sent = []
           with Database(cfg.database.connection_string) as db:
               first = check_and_notify(cfg, db, sender=lambda msg, c: sent.append(msg))
               again = check_and_notify(cfg, db, sender=lambda msg, c: sent.append(msg))
               states = db.scalar("SELECT COUNT(*) FROM alert_state")
+              tickets = db.scalar("SELECT COUNT(*) FROM itsm_ticket WHERE status = 'OPEN'")
           print(first.status, *[f"[{a.severity}] {a.title}" for a in first.alerts], sep="\n  ")
-          print("2e évaluation :", again.status, "- états mémorisés :", states)
+          print("tickets :", *first.tickets, sep="\n  ")
+          print("2e évaluation :", again.status, "- états :", states, "- tickets ouverts :", tickets)
           assert first.status == "SENT" and len(sent) == 1, first
-          assert again.status == "NONE", [a.title for a in again.alerts]
-          assert states >= len(first.alerts)
+          assert again.status == "NONE" and not again.tickets, (again.status, again.tickets)
+          assert states >= len(first.alerts) and tickets == len(hooks) >= 1, (states, tickets, len(hooks))
           EOF
 
       - name: Verrou de collecte (deux collectes simultanées)

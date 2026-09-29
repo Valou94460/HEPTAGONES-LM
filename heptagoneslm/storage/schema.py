@@ -13,6 +13,7 @@ Vue d'ensemble ::
                      └─< collector_state  (offset des logs...)
     report_delivery   (envois de rapports par e-mail)
     alert_state       (alertes e-mail envoyées : anti-répétition, curseur des refus)
+    itsm_ticket       (tickets ouverts dans ServiceNow, Jira, GLPI… pour chaque alerte)
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -167,6 +168,19 @@ TABLES: dict[str, str] = {
         last_event_id BIGINT NULL,
         title NVARCHAR(500) NULL
     """,
+    "itsm_ticket": """
+        id {BIGID},
+        connector NVARCHAR(100) NOT NULL,
+        alert_key NVARCHAR(300) NOT NULL,
+        ticket_id NVARCHAR(100) NULL,
+        ticket_ref NVARCHAR(100) NULL,
+        url NVARCHAR(500) NULL,
+        title NVARCHAR(500) NULL,
+        status NVARCHAR(10) NOT NULL,
+        opened_at {DT} NOT NULL,
+        updated_at {DT} NOT NULL,
+        resolved_at {DT} NULL
+    """,
 }
 
 INDEXES: dict[str, str] = {
@@ -179,6 +193,7 @@ INDEXES: dict[str, str] = {
     "ix_hourly_time": "usage_hourly (hour_start)",
     "ix_run_server_time": "collection_run (server_id, started_at)",
     "ix_delivery_sub_period": "report_delivery (subscription, period_start)",
+    "ix_itsm_open": "itsm_ticket (status, connector, alert_key)",
 }
 
 VIEWS: dict[str, str] = {

@@ -5,6 +5,18 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+### Ajouté
+- **Tickets ITSM automatiques** (`alerts.itsm`) : ServiceNow (incident, API Table), Jira (Cloud et
+  Data Center, API REST v2), GLPI (API REST) et webhook générique (JSON, Microsoft Teams, Slack).
+  Chaque alerte ouvre un ticket, le complète à chaque rappel et le résout quand la condition
+  disparaît ; sans doublon (table `itsm_ticket`), avec rattrapage si l'outil était injoignable ;
+  filtres par type et gravité minimale (`min_severity`, « serious » par défaut).
+- Commande `test-itsm` : ouvre, commente et résout un ticket de test dans chaque outil configuré.
+
+### Modifié
+- Les alertes ont leur propre section `alerts` (destinataires e-mail, connecteurs ITSM, règles) ;
+  la forme `email.alerts` reste acceptée. Schéma de base v5 (table `itsm_ticket`).
+
 ## [26.2.0] — 2026-09-29
 
 ### Ajouté
