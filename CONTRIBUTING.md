@@ -7,7 +7,7 @@ gestionnaires de licences (RLM…).
 ## Environnement
 
 ```bash
-git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
+git clone https://github.com/Valou94460/HEPTAGONES-LM.git && cd HEPTAGONES-LM
 python -m venv .venv && . .venv/bin/activate      # Windows : .venv\Scripts\activate
 pip install -e ".[dev]"
 python -m pytest

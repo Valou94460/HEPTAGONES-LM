@@ -440,7 +440,7 @@ achats, DSI) sur les données réelles (E3), après au moins 2 semaines de colle
 
 ### 11.2 Suivi des anomalies
 
-Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/FREE-LM/issues/new/choose)
+Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/HEPTAGONES-LM/issues/new/choose)
 (modèle « Signaler un bug ») avec l'identifiant du cas (ex. `[COL-03]`), la gravité et
 les journaux (`heptagoneslm.log`, lancé avec `-v`). Pour un problème de parsing, joindre la
 sortie `lmstat` ou l'extrait de log **anonymisé** : il deviendra un test automatisé.

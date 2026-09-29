@@ -3,7 +3,7 @@
 # HeptagonesLM
 
 
-[![CI](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml)
+[![CI](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
 ![Plateformes](https://img.shields.io/badge/plateformes-Windows%20%7C%20Linux-lightgrey)
 ![Base](https://img.shields.io/badge/base-SQL%20Server%20%7C%20SQLite-orange)
@@ -76,9 +76,9 @@ jetons et chiffrage des économies possibles.
 
 ### Essayer en 1 minute (Windows, sans rien installer)
 
-1. Télécharger **`HeptagonesLM.exe`** depuis la page [Releases](https://github.com/Valou94460/FREE-LM/releases)
+1. Télécharger **`HeptagonesLM.exe`** depuis la page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)
    (ou, pour la dernière version de développement : onglet
-   [Actions](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-windows`).
+   [Actions](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-windows`).
 2. Double-cliquer : l'interface s'ouvre dans le navigateur sur des **données de
    démonstration** (3 serveurs simulés, ~45 utilisateurs, 90 jours).
 
@@ -88,7 +88,7 @@ jetons et chiffrage des économies possibles.
 ### Avec Python
 
 ```bash
-pip install git+https://github.com/Valou94460/FREE-LM.git
+pip install git+https://github.com/Valou94460/HEPTAGONES-LM.git
 heptagoneslm web --demo --open          # interface sur données simulées
 heptagoneslm demo --days 30             # ou : base + rapport Excel de démonstration dans ./demo
 ```
@@ -97,7 +97,7 @@ heptagoneslm demo --days 30             # ou : base + rapport Excel de démonstr
 
 ### Installation assistée (recommandée)
 
-Double-cliquer sur **`HeptagonesLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/FREE-LM/releases)) :
+Double-cliquer sur **`HeptagonesLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)) :
 un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque étape.
 
 1. **Vérification du serveur** : Windows, droits, pilote ODBC, lmutil, rôles et modules IIS —
@@ -345,7 +345,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 ## Développement et tests
 
 ```bash
-git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
+git clone https://github.com/Valou94460/HEPTAGONES-LM.git && cd HEPTAGONES-LM
 pip install -e ".[dev]"
 python -m pytest                     # ~90 tests, SQLite en mémoire, aucun serveur requis
 heptagoneslm web --demo --open             # interface sur données simulées
@@ -355,7 +355,7 @@ La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Lin
 Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
 l'interface et de la page de connexion dans un vrai navigateur (Playwright), démonstration contre un vrai
 SQL Server 2022, construction et vérification de `HeptagonesLM.exe`. Une étiquette
-`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/FREE-LM/releases)
+`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/HEPTAGONES-LM/releases)
 avec l'exécutable.
 
 ## Licence
