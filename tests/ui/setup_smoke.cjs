@@ -92,6 +92,18 @@ const fs = require("fs");
   await page.fill(`[data-srv="${rows.length - 1}"][data-key="port_at_host"]`, "27000@serveur-inconnu");
   await test(`lm${rows.length - 1}`, "error");
   await page.click(`[data-del="${rows.length - 1}"]`);
+  // Serveur RLM : type, chemin de rlmutil, test en direct (rlmstat)
+  await page.click("#add-srv");
+  const r = (await page.$$("table.servers tbody tr")).length - 1;
+  await page.selectOption(`[data-srv="${r}"][data-key="license_type"]`, "rlm");
+  await page.waitForSelector('[data-bind="rlmutil_path"]');
+  check(!(await page.$(`[data-srv="${r}"][data-key="log"]`)), "RLM : l'option log debug ne doit pas s'afficher");
+  await page.fill('[data-bind="rlmutil_path"]', "C:\\HeptagonesLM\\bin\\rlmutil.exe");
+  await page.fill(`[data-srv="${r}"][data-key="name"]`, "FOUNDRY");
+  await page.fill(`[data-srv="${r}"][data-key="port_at_host"]`, "5053@licsrv-rlm");
+  await test(`lm${r}`);
+  await shot("06b_licences_rlm");
+  await page.click(`[data-del="${r}"]`);
   await shot("06_licences");
 
   // 6. Interface web : IIS (recommandé)

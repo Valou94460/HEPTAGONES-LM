@@ -12,6 +12,7 @@ Vue d'ensemble ::
                      ├─< collection_run   (journal des collectes)
                      └─< collector_state  (offset des logs...)
     report_delivery   (envois de rapports par e-mail)
+    alert_state       (alertes e-mail envoyées : anti-répétition, curseur des refus)
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -157,6 +158,14 @@ TABLES: dict[str, str] = {
         recipients NVARCHAR(2000) NOT NULL,
         status NVARCHAR(10) NOT NULL,
         message NVARCHAR(2000) NULL
+    """,
+    "alert_state": """
+        alert_key NVARCHAR(300) NOT NULL PRIMARY KEY,
+        active {BOOL} NOT NULL DEFAULT 1,
+        first_seen {DT} NOT NULL,
+        last_sent {DT} NULL,
+        last_event_id BIGINT NULL,
+        title NVARCHAR(500) NULL
     """,
 }
 

@@ -29,11 +29,12 @@ class ServerConfig:
 
     name: str
     port_at_host: str              # ex. "27000@licsrv1" ou triade "27000@a:27000@b:27000@c"
-    license_type: str = "flexlm"   # clé du registre des collecteurs (flexlm, rlm...)
+    license_type: str = "flexlm"   # clé du registre des collecteurs : flexlm | rlm
     collectors: list[str] = field(default_factory=lambda: ["lmstat"])
-    sessions_from: str = "lmstat"  # source des sessions : "lmstat" ou "log"
+    sessions_from: str = "lmstat"  # source des sessions : "lmstat", "log" (FlexLM) ou "rlmstat" (RLM)
     log_path: str | None = None
     lmutil_path: str | None = None
+    rlmutil_path: str | None = None
     timeout_s: int = 60
     enabled: bool = True
 
@@ -130,6 +131,22 @@ class Subscription:
     subject: str | None = None
 
 
+ALERT_TYPES = ("collection", "denial", "saturation", "expiry")
+
+
+@dataclass
+class AlertConfig:
+    """Alertes immédiates par e-mail, évaluées après chaque collecte."""
+
+    recipients: list[str]
+    types: list[str] = field(default_factory=lambda: list(ALERT_TYPES))
+    servers: list[str] = field(default_factory=list)     # vide = tous
+    products: list[str] = field(default_factory=list)    # vide = tous
+    expiry_days: int = 30          # préavis avant l'échéance d'une licence
+    repeat_hours: float = 24.0     # délai avant de renvoyer une alerte toujours présente
+    min_denials: int = 1           # refus minimum pour alerter sur un produit
+
+
 @dataclass
 class EmailConfig:
     smtp_host: str | None = None
@@ -141,6 +158,7 @@ class EmailConfig:
     timeout_s: int = 30
     max_attachment_mb: float = 15.0
     subscriptions: list[Subscription] = field(default_factory=list)
+    alerts: AlertConfig | None = None
 
 
 @dataclass
@@ -151,6 +169,7 @@ class AppConfig:
     reporting: ReportingConfig = field(default_factory=ReportingConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
     lmutil_path: str = "lmutil"
+    rlmutil_path: str = "rlmutil"
     log_file: str | None = None
     log_level: str = "INFO"
     web: WebConfig = field(default_factory=WebConfig)
@@ -187,6 +206,12 @@ def _expand(value: str | None) -> str | None:
     return os.path.expandvars(value)
 
 
+#: Collecteur par défaut de chaque type de gestionnaire de licences.
+DEFAULT_COLLECTOR = {"flexlm": "lmstat", "rlm": "rlmstat"}
+#: Collecteurs utilisables par type (vérifiés au chargement de la configuration).
+KNOWN_COLLECTORS = {"flexlm": ("lmstat", "log"), "rlm": ("rlmstat",)}
+
+
 def load_config(path: str | os.PathLike) -> AppConfig:
     """Charge le fichier YAML et retourne une configuration validée."""
     path = Path(path)
@@ -207,14 +232,20 @@ def parse_config(raw: dict) -> AppConfig:
     names: set[str] = set()
     for i, s in enumerate(raw.get("servers") or []):
         try:
+            license_type = str(s.get("license_type", "flexlm")).lower()
+            if license_type not in DEFAULT_COLLECTOR:
+                raise ConfigError(f"servers[{i}] : license_type '{license_type}' inconnu "
+                                  f"(valeurs possibles : {', '.join(DEFAULT_COLLECTOR)})")
+            default = DEFAULT_COLLECTOR[license_type]
             srv = ServerConfig(
                 name=s["name"],
                 port_at_host=s["port_at_host"],
-                license_type=s.get("license_type", "flexlm"),
-                collectors=list(s.get("collectors", ["lmstat"])),
-                sessions_from=s.get("sessions_from", "lmstat"),
+                license_type=license_type,
+                collectors=list(s.get("collectors", [default])),
+                sessions_from=s.get("sessions_from", default),
                 log_path=_expand(s.get("log_path")),
                 lmutil_path=_expand(s.get("lmutil_path")),
+                rlmutil_path=_expand(s.get("rlmutil_path")),
                 timeout_s=int(s.get("timeout_s", 60)),
                 enabled=bool(s.get("enabled", True)),
             )
@@ -223,6 +254,10 @@ def parse_config(raw: dict) -> AppConfig:
         if srv.name.lower() in names:
             raise ConfigError(f"Nom de serveur en double : {srv.name}")
         names.add(srv.name.lower())
+        bad = [c for c in srv.collectors if c not in KNOWN_COLLECTORS[srv.license_type]]
+        if bad:
+            raise ConfigError(f"{srv.name} : collecteur(s) {', '.join(bad)} inconnu(s) pour {srv.license_type} "
+                              f"(possibles : {', '.join(KNOWN_COLLECTORS[srv.license_type])})")
         if srv.sessions_from not in srv.collectors:
             raise ConfigError(
                 f"{srv.name} : sessions_from='{srv.sessions_from}' mais ce collecteur n'est pas activé"
@@ -267,6 +302,7 @@ def parse_config(raw: dict) -> AppConfig:
         reporting=reporting,
         retention=retention,
         lmutil_path=_expand(raw.get("lmutil_path", "lmutil")),
+        rlmutil_path=_expand(raw.get("rlmutil_path", "rlmutil")),
         log_file=_expand(logging_cfg.get("file")),
         log_level=logging_cfg.get("level", "INFO"),
     )
@@ -366,6 +402,7 @@ def _parse_email(e: dict) -> EmailConfig:
         timeout_s=int(e.get("timeout_s", 30)),
         max_attachment_mb=float(e.get("max_attachment_mb", 15)),
         subscriptions=subs,
+        alerts=_parse_alerts(e.get("alerts")),
     )
     if cfg.security not in ("starttls", "ssl", "none"):
         raise ConfigError("email.security doit valoir starttls, ssl ou none")
@@ -374,4 +411,36 @@ def _parse_email(e: dict) -> EmailConfig:
                           "utiliser security: starttls ou ssl")
     if subs and not cfg.smtp_host:
         raise ConfigError("email.smtp_host est obligatoire pour envoyer des rapports")
+    if cfg.alerts and not cfg.smtp_host:
+        raise ConfigError("email.smtp_host est obligatoire pour envoyer des alertes")
+    return cfg
+
+
+def _parse_alerts(a) -> AlertConfig | None:
+    if not a:
+        return None
+    if not isinstance(a, dict):
+        raise ConfigError("email.alerts doit être une section (recipients, types...)")
+    recipients = _as_list(a.get("recipients"))
+    if not recipients:
+        raise ConfigError("email.alerts.recipients : au moins un destinataire")
+    types = [t.lower() for t in _as_list(a.get("types"))] or list(ALERT_TYPES)
+    unknown = [t for t in types if t not in ALERT_TYPES]
+    if unknown:
+        raise ConfigError(f"email.alerts.types : {', '.join(unknown)} inconnu(s) "
+                          f"(valeurs possibles : {', '.join(ALERT_TYPES)})")
+    try:
+        cfg = AlertConfig(
+            recipients=recipients,
+            types=types,
+            servers=_as_list(a.get("servers")),
+            products=_as_list(a.get("products")),
+            expiry_days=int(a.get("expiry_days", 30)),
+            repeat_hours=float(a.get("repeat_hours", 24)),
+            min_denials=int(a.get("min_denials", 1)),
+        )
+    except (TypeError, ValueError):
+        raise ConfigError("email.alerts : expiry_days, repeat_hours et min_denials doivent être des nombres") from None
+    if cfg.expiry_days < 0 or cfg.repeat_hours <= 0 or cfg.min_denials < 1:
+        raise ConfigError("email.alerts : expiry_days >= 0, repeat_hours > 0 et min_denials >= 1")
     return cfg

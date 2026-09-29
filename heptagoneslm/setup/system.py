@@ -749,10 +749,16 @@ class SimulatedSystem(System):
         joined = " ".join(cmd)
         if " lmstat " in f" {joined} ":
             return self._lmstat(cmd[cmd.index("-c") + 1] if "-c" in cmd else "")
+        if " rlmstat " in f" {joined} ":
+            from heptagoneslm.simulation.model import render_rlmstat
+
+            return Result(0, render_rlmstat(cmd[cmd.index("-c") + 1] if "-c" in cmd else ""))
         if "init-db" in cmd:
+            from heptagoneslm.storage.schema import SCHEMA_VERSION
+
             self.db["exists"] = True
-            self.db["schema"] = 3
-            return Result(0, "Schéma créé (version 3) ; serveurs référencés : " +
+            self.db["schema"] = SCHEMA_VERSION
+            return Result(0, f"Schéma créé (version {SCHEMA_VERSION}) ; serveurs référencés : " +
                           str(len(re.findall(r"^- name:", self.read_text(cmd[cmd.index('-c') + 1]) or "", re.M))))
         if "collect" in cmd:
             self.db["collected"] = time.time()

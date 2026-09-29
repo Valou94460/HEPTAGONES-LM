@@ -321,3 +321,29 @@ def sync_log(server: SimServer, path: Path, until: datetime, start: datetime | N
             fh.write(line + "\n")
     state.write_text(max(after, until).isoformat())
     return len(lines)
+
+
+def render_rlmstat(port_at_host: str, when: datetime | None = None) -> str:
+    """Sortie ``rlmstat -a`` d'un serveur RLM fictif (assistant d'installation en simulation)."""
+    when = when or datetime.now().replace(microsecond=0)
+    port, _, host = port_at_host.partition("@")
+    host, port = host or "licsrv-rlm", port or "5053"
+    day = f"{when:%m/%d}"
+    return (
+        "rlmutil v14.2\nCopyright (C) 2006-2021, Reprise Software, Inc. All rights reserved.\n\n"
+        f"\trlm status on {host} (port {port}), up 12d 04:10:02\n"
+        "\trlm software version v14.2 (build:2)\n\n"
+        "\t--------- ISV servers ----------\n\t   Name           Port Running Restarts\n"
+        "\tfoundry          62137     Yes        0\n\n\t------------------------\n\n"
+        f"\tfoundry license pool status on {host} (port 62137)\n\n"
+        f"\tnuke_i v{when.year}.0\n"
+        f"\t\tcount: 10, # reservations: 0, inuse: 2, exp: 31-dec-{when.year + 1}\n"
+        "\t\tobsolete: 0, min_remove: 120, total checkouts: 57\n"
+        f"\tnukex_i v{when.year}.0\n"
+        "\t\tcount: 4, # reservations: 0, inuse: 1, exp: permanent\n"
+        "\t\tobsolete: 0, min_remove: 120, total checkouts: 12\n\n\t------------------------\n\n"
+        f"\tfoundry license usage status on {host} (port 62137)\n\n"
+        f"\tnuke_i v{when.year}.0: alice.martin@PC-ALICE 1/0 at {day} 08:12  (handle: 41)\n"
+        f"\tnuke_i v{when.year}.0: bruno.bernard@PC-BRUNO 1/0 at {day} 09:40  (handle: 42)\n"
+        f"\tnukex_i v{when.year}.0: chloe.dubois@PC-CHLOE 1/0 at {day} 10:05  (handle: 43)\n"
+    )

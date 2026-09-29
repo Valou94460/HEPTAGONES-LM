@@ -14,6 +14,7 @@ from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.checks import Check
 from heptagoneslm.setup.installer import WEB_TASK, Context, _tasks, backend_url, firewall_rule_name
 from heptagoneslm.setup.system import SetupError, System
+from heptagoneslm.storage.schema import SCHEMA_VERSION
 
 NEVER_RUN = 267011        # SCHED_S_TASK_HAS_NOT_RUN
 RUNNING = 267009          # SCHED_S_TASK_RUNNING
@@ -74,7 +75,7 @@ def verify(system: System, a: Answers) -> dict:
     try:
         st = db_status(system, a)
         schema = st.get("schema")
-        add("schema", "Base de données", "Schéma de la base", "ok" if schema and schema >= 3 else "error",
+        add("schema", "Base de données", "Schéma de la base", "ok" if schema and schema >= SCHEMA_VERSION else "error",
             f"version {schema}" if schema else "schéma absent : relancer l'initialisation")
         for s in a.servers:
             info = st["servers"].get(s.name)

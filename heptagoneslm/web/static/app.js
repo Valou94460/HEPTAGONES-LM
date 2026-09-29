@@ -644,7 +644,7 @@
     const pulse = $("live-pulse");
     if (!live || !live.updated_at) {
       pulse.classList.add("off");
-      box.innerHTML = empty("Aucun sondage lmstat disponible.");
+      box.innerHTML = empty("Aucun sondage des serveurs de licences disponible.");
       return;
     }
     pulse.classList.toggle("off", minutesOld(live.updated_at) > STALE_MINUTES);
@@ -668,7 +668,7 @@
     v.innerHTML =
       `<section class="kpi-grid">${r.kpis.map(k => `<div class="kpi"><span class="label">${esc(k.label)}</span><span class="value">${fmt(k.value, k.type)}</span></div>`).join("")}</section>` +
       `<div class="live-bar"><span><span class="pulse${stale || !live.updated_at ? " off" : ""}"></span>` +
-      (live.updated_at ? `Dernier sondage ${esc(ago(live.updated_at))} (${fmt(live.updated_at, "datetime")}) · actualisation automatique chaque minute` : "Aucun sondage lmstat disponible") +
+      (live.updated_at ? `Dernier sondage ${esc(ago(live.updated_at))} (${fmt(live.updated_at, "datetime")}) · actualisation automatique chaque minute` : "Aucun sondage des serveurs de licences disponible") +
       `</span><input type="search" id="live-search" placeholder="Rechercher un produit ou un utilisateur" aria-label="Rechercher un produit ou un utilisateur"></div>` +
       `<section class="live-grid" id="live-grid"></section>`;
     const search = $("live-search");

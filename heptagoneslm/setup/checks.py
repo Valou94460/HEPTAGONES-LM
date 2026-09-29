@@ -117,6 +117,14 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
             "Introuvable : indiquer son chemin à l'étape « Serveurs de licences » "
             "(fourni avec Autodesk Network License Manager ou tout serveur FlexLM)")
 
+    if any(s.license_type == "rlm" for s in a.servers):
+        if a.rlmutil_path and system.exists(a.rlmutil_path):
+            add("rlmutil", "Licences", "rlmutil.exe (outil RLM)", "ok", a.rlmutil_path)
+        else:
+            add("rlmutil", "Licences", "rlmutil.exe (outil RLM)", "warning",
+                "Introuvable : indiquer son chemin à l'étape « Serveurs de licences » "
+                "(fourni avec le serveur de licences RLM de l'éditeur)")
+
     # -- Réseau ------------------------------------------------------------------------
     port_ok = system.port_free(a.web_port)
     add("port", "Réseau", f"Port interne {a.web_port}", "ok" if port_ok else "warning",

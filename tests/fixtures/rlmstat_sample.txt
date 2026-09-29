@@ -1,0 +1,63 @@
+rlmutil v14.2
+Copyright (C) 2006-2021, Reprise Software, Inc. All rights reserved.
+
+
+	rlm status on licsrv3 (port 5053), up 20d 03:11:42
+	rlm software version v14.2 (build:2)
+	rlm comm version: v1.2
+	Startup time: Mon 09/02 09:12:03
+	Todays Statistics (15:41:03), init time: 00:00:00
+	Recent Statistics (00:25:15), init time: 00:00:00
+
+	             Recent Stats         Todays Stats         Total Stats
+	              00:25:15             15:41:03          20d 03:11:42
+	Messages:    75 (0/sec)           2344 (0/sec)         77689 (0/sec)
+	Connections: 15 (0/sec)           467 (0/sec)          15531 (0/sec)
+
+	--------- ISV servers ----------
+	   Name           Port Running Restarts
+	foundry          62137     Yes        0
+	maxon            62140      No        3
+
+	------------------------
+
+	foundry ISV server status on licsrv3 (port 62137), up 20d 03:11:36
+	foundry software version v14.2 (build: 2)
+	foundry comm version: v1.2
+	foundry Debug log filename: C:\RLM\foundry.dlog
+	foundry Report log filename: <none>
+	Startup time: Mon 09/02 09:12:09
+
+	             Recent Stats         Todays Stats         Total Stats
+	              00:25:15             15:41:03          20d 03:11:36
+	Messages:    40 (0/sec)           1210 (0/sec)         40012 (0/sec)
+	Connections: 8 (0/sec)            233 (0/sec)          7800 (0/sec)
+	Checkouts:   2 (0/sec)            41 (0/sec)           1203 (0/sec)
+	Denials:     0 (0/sec)            3 (0/sec)            18 (0/sec)
+	Removals:    0 (0/sec)            0 (0/sec)            0 (0/sec)
+
+	------------------------
+
+	foundry license pool status on licsrv3 (port 62137)
+
+	nuke_i v2024.0
+		count: 10, # reservations: 0, inuse: 3, exp: 31-dec-2026
+		obsolete: 0, min_remove: 120, total checkouts: 57
+	nuke_i v2023.0
+		count: 2, # reservations: 0, inuse: 0, exp: 15-oct-2026
+		obsolete: 0, min_remove: 120, total checkouts: 4
+	nukex_i v2024.0
+		count: 5, # reservations: 0, inuse: 5, exp: permanent
+		obsolete: 0, min_remove: 120, total checkouts: 33
+	nuke_r v2024.0
+		UNCOUNTED, inuse: 0, exp: 31-dec-2026
+		obsolete: 0, min_remove: 120, total checkouts: 0
+
+	------------------------
+
+	foundry license usage status on licsrv3 (port 62137)
+
+	nuke_i v2024.0: jdoe@PC123 1/0 at 09/23 08:15  (handle: 41)
+	nuke_i v2024.0: asmith@PC456 2/0 at 09/23 09:02  (handle: 81)
+	nukex_i v2024.0: j.martin@CAO-PC07 1/0 at 09/22 17:48  (handle: 2c1)
+	nukex_i v2024.0: bdurand@CAO-PC08 4/0 at 09/23 07:30  (handle: 2c4)

@@ -44,9 +44,12 @@ heptagoneslm/
 ├── service.py              Orchestration : exécute les collecteurs, reconstruit les sessions, écrit en base
 ├── collectors/
 │   ├── base.py             Interfaces StatusCollector / LogCollector + registre
-│   └── flexlm/
-│       ├── lmstat.py       Exécution de lmutil lmstat + parser de la sortie
-│       └── logfile.py      Parser du log debug + lecture incrémentale (offset, rotation)
+│   ├── flexlm/
+│   │   ├── lmstat.py       Exécution de lmutil lmstat + parser de la sortie
+│   │   └── logfile.py      Parser du log debug + lecture incrémentale (offset, rotation)
+│   └── rlm/
+│       └── rlmstat.py      Exécution de rlmutil rlmstat + parser (pools, utilisateurs, échéances)
+├── alerts.py               Alertes immédiates par e-mail (après chaque collecte, anti-répétition)
 ├── storage/
 │   ├── db.py               Connexion DB-API (pyodbc / sqlite3) et différences de dialecte
 │   ├── schema.py           Schéma unique → DDL SQL Server et SQLite, vues de reporting
@@ -289,9 +292,14 @@ openpyxl ne crée pas de vrais tableaux croisés dynamiques : les croisements
 usuels sont précalculés, et les données brutes sont livrées sous forme de
 Tableaux Excel (Insertion › Tableau croisé dynamique en un clic).
 
-## 6. Ajouter un autre gestionnaire de licences (ex. RLM)
+## 6. Ajouter un autre gestionnaire de licences
 
-1. Créer `heptagoneslm/collectors/rlm/rlmstat.py` :
+RLM (Reprise License Manager) est implémenté sur ce modèle : `collectors/rlm/rlmstat.py`
+exécute `rlmutil rlmstat -a -c port@host` et convertit les pools et les utilisateurs
+en `FeatureStatus` / `Checkout`. Le reste (sessions, agrégats, rapports, alertes) est
+commun à tous les gestionnaires. Pour un nouveau gestionnaire (DSLS, LM-X…) :
+
+1. Créer `heptagoneslm/collectors/<type>/<collecteur>.py` (exemple : RLM) :
 
    ```python
    from heptagoneslm.collectors.base import StatusCollector, register
@@ -304,8 +312,10 @@ Tableaux Excel (Insertion › Tableau croisé dynamique en un clic).
            return parse_rlmstat(output)  # produit FeatureStatus / Checkout
    ```
 
-2. L'importer dans `heptagoneslm/collectors/__init__.py`.
-3. Déclarer le serveur :
+2. L'importer dans `heptagoneslm/collectors/__init__.py` et déclarer le type dans
+   `DEFAULT_COLLECTOR` / `KNOWN_COLLECTORS` (`heptagoneslm/config.py`).
+3. Déclarer le serveur (`collectors` et `sessions_from` prennent par défaut le
+   collecteur du type) :
 
    ```yaml
    - name: RLM_SRV

@@ -263,6 +263,8 @@ class SetupHandler(BaseHTTPRequestHandler):
         if kind == "database":
             return probes.test_database(s, a)
         if kind == "lmstat":
+            if body.get("license_type") == "rlm":
+                return probes.test_lmstat(s, a.rlmutil_path, str(body.get("port_at_host", "")), "rlm")
             return probes.test_lmstat(s, a.lmutil_path, str(body.get("port_at_host", "")))
         if kind == "certificate":
             return probes.test_certificate(s, a)

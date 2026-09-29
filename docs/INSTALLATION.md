@@ -31,6 +31,7 @@ installe avec une barre de progression, puis **vérifie chaque composant de bout
 | Serveurs de licences | Adresses `port@serveur`, flux réseau ouverts (port lmgrd et ports des démons) |
 | Groupe AD | Personnes autorisées à consulter HeptagonesLM (ex. `GG_HeptagonesLM_Lecteurs`) |
 | lmutil.exe | Fourni avec Autodesk Network License Manager ou tout serveur FlexLM |
+| rlmutil.exe | Serveurs RLM (Reprise : Foundry, Maxon, Chaos…) uniquement ; fourni avec le serveur de licences de l'éditeur |
 | Pilote ODBC | *ODBC Driver 18 for SQL Server* (contrôlé par l'assistant, lien de téléchargement fourni) |
 
 ## 2. Lancer l'assistant
@@ -52,9 +53,9 @@ avec Python : `heptagoneslm setup --simulate`).
 | 2 | Vérification du serveur | Système, droits, disque, domaine, pilote ODBC, lmutil, port, rôles et modules IIS, certificats | Corrections automatiques : rôles IIS, URL Rewrite, ARR |
 | 3 | Emplacement et compte | Dossier d'installation, compte de service, intervalle de collecte | Compte trouvé dans l'annuaire, mot de passe valide |
 | 4 | Base de données | SQL Server (instance, base, pilote, authentification Windows ou SQL, chiffrement, création) ou SQLite | Connexion, existence de la base, droits de création |
-| 5 | Serveurs de licences | Chemin de lmutil, serveurs (triades, log debug) | `lmstat` en direct pour chaque serveur |
+| 5 | Serveurs de licences | Chemin de lmutil (FlexLM) et de rlmutil (RLM), serveurs : type, adresse (triades), log debug | `lmstat` / `rlmstat` en direct pour chaque serveur |
 | 6 | Interface web et IIS | IIS avec connexion Windows automatique (recommandé), HTTPS intégré avec identifiants AD, ou poste local ; pare-feu | Certificat (nom, validité), groupe AD, connexion LDAP |
-| 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires (optionnel) | Envoi d'un message de test |
+| 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires, alertes immédiates (optionnel) | Envoi d'un message de test |
 | 8 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
 | 9 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
 | 10 | Vérification | Contrôle de bout en bout, adresse de l'interface, rapport d'installation téléchargeable | — |

@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 3
+-- Version du schéma : 4
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -144,6 +144,17 @@ CREATE TABLE dbo.report_delivery (
     recipients NVARCHAR(2000) NOT NULL,
     status NVARCHAR(10) NOT NULL,
     message NVARCHAR(2000) NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.alert_state', N'U') IS NULL
+CREATE TABLE dbo.alert_state (
+    alert_key NVARCHAR(300) NOT NULL PRIMARY KEY,
+    active BIT NOT NULL DEFAULT 1,
+    first_seen DATETIME2(0) NOT NULL,
+    last_sent DATETIME2(0) NULL,
+    last_event_id BIGINT NULL,
+    title NVARCHAR(500) NULL
 )
 GO
 

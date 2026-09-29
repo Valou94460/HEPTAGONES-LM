@@ -7,6 +7,7 @@ et s'appuie sur le code réel de HeptagonesLM (parser lmstat, authentification L
 from __future__ import annotations
 
 from heptagoneslm.collectors.flexlm.lmstat import parse_lmstat
+from heptagoneslm.collectors.rlm.rlmstat import parse_rlmstat
 from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.system import SetupError, System
 
@@ -63,13 +64,16 @@ def test_database(system: System, a: Answers) -> dict:
     return _res("ok", "Connexion réussie", details, exists=False)
 
 
-def test_lmstat(system: System, lmutil: str, port_at_host: str) -> dict:
+def test_lmstat(system: System, lmutil: str, port_at_host: str, license_type: str = "flexlm") -> dict:
+    """Interroge un serveur de licences en direct (lmstat pour FlexLM, rlmstat pour RLM)."""
+    rlm = license_type == "rlm"
+    tool, label = ("rlmutil", "rlmstat") if rlm else ("lmutil", "lmstat")
     if not lmutil:
-        return _res("error", "Chemin de lmutil.exe non renseigné")
-    r = system.run([lmutil, "lmstat", "-a", "-c", port_at_host], timeout=90)
+        return _res("error", f"Chemin de {tool}.exe non renseigné")
+    r = system.run([lmutil, label, "-a", "-c", port_at_host], timeout=90)
     if r.code in (124, 127):
         return _res("error", r.message)
-    status = parse_lmstat(r.out + "\n" + r.err, port_at_host)
+    status = (parse_rlmstat if rlm else parse_lmstat)(r.out + "\n" + r.err, port_at_host)
     if not status.server_up:
         return _res("error", f"Serveur {port_at_host} injoignable",
                     [line for line in status.errors[:3]] or [r.message])
@@ -78,8 +82,9 @@ def test_lmstat(system: System, lmutil: str, port_at_host: str) -> dict:
     in_use = sum(f.in_use for f in feats)
     vendors = ", ".join(f"{k} ({v})" for k, v in status.vendors.items()) or "—"
     names = ", ".join(sorted({f.name for f in feats})[:6]) + (" …" if len(feats) > 6 else "")
-    return _res("ok", f"{len(feats)} features, {in_use} / {issued} jetons utilisés",
-                [f"FlexLM {status.server_version or '?'} · démons : {vendors}", f"Features : {names}"],
+    return _res("ok", f"{len(feats)} {'licences' if rlm else 'features'}, {in_use} / {issued} jetons utilisés",
+                [f"{'RLM' if rlm else 'FlexLM'} {status.server_version or '?'} · démons : {vendors}",
+                 f"{'Licences' if rlm else 'Features'} : {names}"],
                 features=len(feats))
 
 

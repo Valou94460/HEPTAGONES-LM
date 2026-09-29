@@ -5,6 +5,24 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.2.0] — 2026-09-29
+
+### Ajouté
+- **Alertes immédiates par e-mail** (`email.alerts`), évaluées après chaque collecte ou par
+  `check-alerts` : collecte en échec (puis « rétablie ») ou arrêtée, nouveaux refus de licence,
+  plus aucun jeton disponible, licence qui expire (paliers J-30, J-7, expirée). Anti-répétition
+  (`repeat_hours`), filtres par type, serveur et produit ; aucune alerte perdue si le SMTP est
+  indisponible. Option « Alertes immédiates » dans l'assistant d'installation (étape E-mail).
+- **Collecteur RLM** (Reprise License Manager : Foundry, Maxon, Chaos…) : `rlmutil rlmstat -a`,
+  pools additionnés par licence, utilisateurs, postes et échéances. `license_type: rlm` dans la
+  configuration ; type de serveur et chemin de `rlmutil.exe` dans l'assistant, avec test en direct.
+
+### Modifié
+- Schéma de base v4 (table `alert_state`) : exécuter `init-db` après la mise à jour
+  (fait automatiquement par l'assistant).
+- Le type de gestionnaire (`license_type`) et les collecteurs d'un serveur sont vérifiés au
+  chargement de la configuration.
+
 ## [26.1.1] — 2026-09-29
 
 ### Ajouté
@@ -123,6 +141,7 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...HEAD
+[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.2.0...HEAD
+[26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.2.0
 [26.1.1]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.0...v26.1.1
 [26.1.0]: https://github.com/Valou94460/HEPTAGONES-LM/releases/tag/v26.1.0

@@ -175,7 +175,7 @@ details summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
 
 table.servers { width: 100%; border-collapse: collapse; }
 table.servers th { position: static; background: none; cursor: default; padding: 6px 8px; font-size: 12px; }
-table.servers th:nth-child(1) { width: 22%; } table.servers th:nth-child(2) { width: 30%; }
+table.servers th:nth-child(1) { width: 20%; } table.servers th:nth-child(2) { width: 112px; } table.servers th:nth-child(3) { width: 26%; }
 table.servers td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: normal; }
 table.servers input[type="text"] { width: 100%; height: 36px; }
 table.servers .result { margin-top: 6px; min-width: 0; }

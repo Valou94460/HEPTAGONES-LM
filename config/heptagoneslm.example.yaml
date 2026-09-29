@@ -15,6 +15,8 @@ database:
 
 # Chemin de lmutil.exe (fourni avec le gestionnaire de licences, ex. Autodesk NLM)
 lmutil_path: "C:/HeptagonesLM/bin/lmutil.exe"
+# Serveurs RLM (Reprise) : chemin de rlmutil.exe
+# rlmutil_path: "C:/HeptagonesLM/bin/rlmutil.exe"
 
 logging:
   file: "C:/HeptagonesLM/logs/heptagoneslm.log"
@@ -42,6 +44,11 @@ servers:
     timeout_s: 90
     # lmutil_path: "C:/MATLAB/etc/win64/lmutil.exe"   # surcharge par serveur
     # enabled: false
+
+  # Serveur RLM (Reprise License Manager) : sondage rlmutil rlmstat -a
+  # - name: FOUNDRY
+  #   license_type: rlm
+  #   port_at_host: "5053@licsrv3"   # port du serveur rlm (5053 par défaut)
 
 # Correspondance feature FlexLM -> produit lisible dans les rapports.
 # Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
@@ -109,6 +116,17 @@ web:
 #       recipients: [responsable.simulation@entreprise.local]
 #       servers: [ANSYS]
 #       attach_excel: true
+#   # Alertes immédiates, évaluées après chaque collecte (ou : heptagoneslm check-alerts)
+#   alerts:
+#     recipients: [exploitation@entreprise.local]
+#     types: [collection, denial, saturation, expiry]   # défaut : toutes
+#     # collection : collecte en échec / arrêtée (+ message « rétabli ») ; denial : nouveaux refus ;
+#     # saturation : plus aucun jeton disponible ; expiry : licence qui expire (paliers J-30, J-7, expirée)
+#     # servers: [ANSYS]           # limiter à ces serveurs (défaut : tous)
+#     # products: ["AutoCAD 2024"] # limiter à ces produits (défaut : tous)
+#     expiry_days: 30              # préavis avant l'échéance
+#     repeat_hours: 24             # rappel d'une alerte toujours présente
+#     min_denials: 1               # refus minimum pour alerter sur un produit
 
 retention:
   snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés

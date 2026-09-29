@@ -9,15 +9,16 @@
 ![Base](https://img.shields.io/badge/base-SQL%20Server%20%7C%20SQLite-orange)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-**Suivi et reporting open source de la consommation de licences FlexLM / FlexNet**
-(Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher).
-Une alternative gratuite à OpenLM pour le reporting d'usage.
+**Suivi et reporting open source de la consommation de licences FlexLM / FlexNet et RLM**
+(Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher ; Foundry, Maxon,
+Chaos… avec Reprise License Manager).
+Une alternative gratuite à OpenLM pour la mesure et l'optimisation des licences.
 
-HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
-leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
+HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`,
+`rlmutil rlmstat`) et lit leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
 quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
 tableau de bord web et en exports Excel — avec alertes, vue en direct, efficacité des
-jetons et chiffrage des économies possibles.
+jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 
 ![Tableau de bord](docs/images/tableau-de-bord.png)
 
@@ -38,7 +39,7 @@ jetons et chiffrage des économies possibles.
 
 | | |
 |---|---|
-| **Collecte** | Sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug FlexLM (refus, sessions à la seconde). Aucun agent sur les postes clients. |
+| **Collecte** | FlexLM : sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug (refus, sessions à la seconde). RLM : sondage `rlmutil rlmstat -a` (pools, jetons, utilisateurs, échéances). Aucun agent sur les postes clients. |
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
@@ -48,10 +49,11 @@ jetons et chiffrage des économies possibles.
 | **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
 | **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
+| **Alertes par e-mail** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Sans répétition inutile, rappel au plus une fois par jour. |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
 | **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
-| **Extensible** | Architecture à collecteurs : d'autres gestionnaires (RLM, LM-X…) s'ajoutent sans toucher au reste. |
+| **Extensible** | Architecture à collecteurs : d'autres gestionnaires (DSLS, LM-X…) s'ajoutent sans toucher au reste, comme RLM. |
 
 <table>
 <tr>
@@ -269,6 +271,29 @@ La tâche planifiée « Envoi des rapports » (`send-report --skip-sent`, quotid
 n'envoie chaque abonnement qu'une fois par période et rattrape un 1er du mois manqué ;
 les envois sont tracés en base (`report_delivery`).
 
+### Alertes immédiates
+
+```yaml
+email:
+  alerts:
+    recipients: [exploitation@entreprise.local]
+    # types: [collection, denial, saturation, expiry]   # défaut : toutes
+    # repeat_hours: 24                                  # rappel d'une alerte toujours présente
+```
+
+Évaluées après chaque collecte (toutes les 5 minutes), elles partent en un seul message :
+
+| Type | Déclencheur |
+|---|---|
+| `collection` | Collecte en échec sur un serveur (puis message « rétablie »), aucune collecte depuis plus d'une heure |
+| `denial` | Nouveaux refus de licence sur un produit (utilisateurs concernés) |
+| `saturation` | Plus aucun jeton disponible sur une licence au dernier sondage |
+| `expiry` | Licence qui expire dans `expiry_days` jours (30 par défaut), dans 7 jours, ou expirée |
+
+Une alerte toujours présente n'est rappelée qu'après `repeat_hours` ; un SMTP indisponible ne
+fait perdre aucune alerte (renvoyée à la collecte suivante). Aperçu sans envoi :
+`HeptagonesLM.exe -c heptagoneslm.yaml check-alerts --dry-run apercu`.
+
 <img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">
 
 ## Configuration
@@ -314,6 +339,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 |---|:---:|:---:|
 | Coût de licence | Gratuit (MIT) | Payant |
 | Collecte FlexLM (lmstat + logs), sans agent client | ✅ | ✅ |
+| Collecte RLM (Reprise) | ✅ | ✅ |
 | Historique SQL Server | ✅ | ✅ |
 | Rapports d'usage, contention, refus, par service | ✅ | ✅ |
 | Tableau de bord avec alertes (serveur, refus, expiration, saturation) | ✅ | ✅ |
@@ -323,10 +349,11 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Interface web + exports Excel / CSV | ✅ | ✅ |
 | Connexion comptes Windows / AD, restriction par groupe | ✅ | ✅ |
 | Rapports périodiques par e-mail | ✅ | ✅ |
+| Alertes immédiates par e-mail (collecte, refus, saturation, échéances) | ✅ | ✅ |
 | Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
-| Alertes poussées par e-mail / ticket, libération de licences inactives (agent poste) | ❌ | ✅ |
-| Licences SaaS / cloud, connecteur ServiceNow | ❌ | ✅ |
-| Autres gestionnaires (RLM, DSLS, Sentinel…) | Extensible, à développer | ✅ |
+| Libération de licences inactives (agent sur les postes), tickets | ❌ | ✅ |
+| Licences SaaS / cloud, connecteur ServiceNow, offre hébergée | ❌ | ✅ |
+| Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
 
 ## Documentation
 

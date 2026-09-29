@@ -84,6 +84,24 @@ class AnswersTest(unittest.TestCase):
         self.assertEqual(set(a.machine_secrets()), {"HEPTAGONESLM_DB_PASSWORD", "HEPTAGONESLM_SMTP_PASSWORD"})
         self.assertEqual(a.to_dict()["db_password"], "********")
 
+    def test_rlm_server(self):
+        rlm = {"name": "FOUNDRY", "port_at_host": "5053@licsrv3", "license_type": "rlm", "collectors": ["lmstat", "log"]}
+        a = answers(servers=[*answers().to_dict()["servers"], rlm])
+        self.assertIn("rlmutil_path", {e["field"] for e in a.validate("licenses")})
+        a = answers(servers=[rlm], lmutil_path="", rlmutil_path=r"C:\RLM\rlmutil.exe")
+        self.assertEqual(a.validate("licenses"), [])                   # lmutil inutile sans serveur FlexLM
+        cfg = parse_config(yaml.safe_load(a.yaml_text()))
+        srv = cfg.servers[0]
+        self.assertEqual((srv.license_type, srv.collectors, srv.sessions_from), ("rlm", ["rlmstat"], "rlmstat"))
+        self.assertEqual(cfg.rlmutil_path, r"C:\RLM\rlmutil.exe")
+        self.assertIn("rlmutil", {c.id for c in run_checks(SimulatedSystem(delay=0), a)})
+
+    def test_email_alerts_follow_recipients(self):
+        mail = {"email_enabled": True, "smtp_host": "smtp.x.fr", "sender": "a@x.fr", "recipients": "dsi@x.fr, achats@x.fr"}
+        cfg = parse_config(answers(**mail).config_dict())
+        self.assertEqual(cfg.email.alerts.recipients, ["dsi@x.fr", "achats@x.fr"])
+        self.assertIsNone(parse_config(answers(email_alerts=False, **mail).config_dict()).email.alerts)
+
     def test_sqlite_mode(self):
         a = answers(db_mode="sqlite", db_server="")
         self.assertEqual(a.validate("database"), [])

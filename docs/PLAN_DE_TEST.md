@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version testée** | 26.1.1 |
+| **Version testée** | 26.2.0 |
 | **Objet** | Valider HeptagonesLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
 | **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/heptagoneslm.example.yaml) |
 
@@ -129,7 +129,7 @@ sur E3 pour les cas marqués **[E3]**.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 26.1.1` | ☐ |
+| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 26.2.0` | ☐ |
 | INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `heptagoneslm --version` | Installation sans erreur, version affichée | ☐ |
 | INS-03 🔴 [E3] | Création de la base | DBA : `sqlcmd -S … -i sql\sqlserver\00_create_database.sql` (base de test) | Base et compte de service créés, rôles attribués | ☐ |
 | INS-04 🔴 [E3] | Création du schéma | `HeptagonesLM.exe -c heptagoneslm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
@@ -305,6 +305,28 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | MAIL-12 [E3] | Traçabilité | `SELECT * FROM report_delivery ORDER BY sent_at DESC` | Une ligne par envoi : abonnement, période, destinataires, statut | ☐ |
 
 ---
+
+### 5.10 bis Alertes immédiates (ALR)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ALR-01 🔴 | Aperçu | `check-alerts --dry-run apercu` avec un serveur en échec | Un `.eml` « Collecte en échec : <serveur> » ; rien n'est envoyé ni mémorisé | ☐ |
+| ALR-02 🔴 [E3] | Collecte en échec puis rétablie | Serveur fictif `27000@inexistant` ; attendre deux collectes ; puis le retirer | Un seul message « Collecte en échec » (pas de répétition à chaque collecte), puis un message « Collecte rétablie » | ☐ |
+| ALR-03 🔴 [E3] | Refus | Provoquer un refus (toutes les licences d'un produit prises) | Message « N refus de licence : <produit> » avec les utilisateurs, à la collecte suivante | ☐ |
+| ALR-04 [E3] | Saturation | Utiliser tous les jetons d'une feature | Message « Plus aucun jeton disponible » ; pas de rappel avant `repeat_hours` | ☐ |
+| ALR-05 | Échéance | Licence expirant sous 30 jours | Un message au palier J-30, un au palier J-7, un à l'expiration — pas de rappel quotidien | ☐ |
+| ALR-06 [E3] | SMTP indisponible | `smtp_host` erroné pendant une alerte | La collecte reste `OK` ; échec tracé (`report_delivery`, abonnement « Alertes ») ; alerte envoyée dès le retour du SMTP | ☐ |
+| ALR-07 | Filtres | `types: [expiry]`, `servers: [ANSYS]` | Seules les échéances Ansys sont signalées | ☐ |
+
+### 5.10 ter Serveurs RLM (RLM)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| RLM-01 🔴 [E3] | Test dans l'assistant | Étape « Serveurs de licences » : type RLM, chemin de `rlmutil.exe`, « Tester » | Nombre de licences et de jetons, version RLM, démons ISV | ☐ |
+| RLM-02 🔴 [E3] | Collecte | `collect` avec un serveur `license_type: rlm` | Ligne `rlmstat OK` ; licences, jetons et utilisateurs visibles dans l'interface (En direct, Synthèse) | ☐ |
+| RLM-03 🔴 [E3] | Exactitude | Comparer « En direct » à `rlmutil rlmstat -a -c port@serveur` | Mêmes jetons émis / utilisés (pools additionnés par licence), mêmes utilisateurs et postes | ☐ |
+| RLM-04 [E3] | Échéances | Comparer « Serveurs et échéances » aux champs `exp:` des pools | Échéance la plus proche retenue ; `permanent` absent | ☐ |
+| RLM-05 | Serveur injoignable | `port_at_host` erroné | `ERROR` « Serveur RLM … injoignable », les autres serveurs `OK` | ☐ |
 
 ### 5.11 Assistant d'installation (INST)
 

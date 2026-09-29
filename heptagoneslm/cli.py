@@ -96,12 +96,41 @@ def cmd_collect(cfg: AppConfig, args) -> int:
             print("Une collecte est déjà en cours : exécution ignorée")
             return 0
         results = CollectionService(cfg, db).collect_all(only=args.server)
+        if cfg.email.alerts:
+            _notify_alerts(cfg, db)
     failed = [r for r in results if r.status != "OK"]
     for r in results:
         print(f"{r.server:<20} {r.collector:<8} {r.status:<6} {r.items:>6}  {r.message or ''}")
     if not results:
         log.warning("Aucun serveur collecté (vérifier la configuration / --server)")
     return 2 if failed else 0
+
+
+def _notify_alerts(cfg: AppConfig, db) -> None:
+    """Alertes e-mail après la collecte : une erreur d'envoi ne fait pas échouer la collecte."""
+    from heptagoneslm.alerts import check_and_notify
+
+    try:
+        result = check_and_notify(cfg, db)
+    except Exception as exc:
+        log.error("Évaluation des alertes impossible : %s (exécuter « init-db » après une mise à jour)", exc)
+        return
+    if result.status in ("SENT", "ERROR"):
+        print(f"Alertes : {result.status} {result.detail}")
+
+
+def cmd_check_alerts(cfg: AppConfig, args) -> int:
+    from heptagoneslm.alerts import check_and_notify
+
+    if not cfg.email.alerts:
+        print("Aucune alerte configurée (section email.alerts) : rien à évaluer.")
+        return 0
+    with _open_db(cfg) as db:
+        result = check_and_notify(cfg, db, dry_run_dir=args.dry_run)
+    print(f"Alertes : {result.status} {result.detail}")
+    for a in result.alerts:
+        print(f"  [{a.severity}] {a.title} — {a.detail}")
+    return 2 if result.status == "ERROR" else 0
 
 
 def cmd_report(cfg: AppConfig, args) -> int:
@@ -357,6 +386,9 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--skip-sent", action="store_true", help="ne pas renvoyer un rapport déjà envoyé pour la période")
     sr.add_argument("--dry-run", metavar="DOSSIER", help="écrire les messages en .eml au lieu de les envoyer")
 
+    ca = sub.add_parser("check-alerts", help="évalue les alertes et les envoie par e-mail (aussi fait après chaque collecte)")
+    ca.add_argument("--dry-run", metavar="DOSSIER", help="écrire le message en .eml sans l'envoyer ni mémoriser l'envoi")
+
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
@@ -395,6 +427,7 @@ WITH_CONFIG = {
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
     "send-report": cmd_send_report,
+    "check-alerts": cmd_check_alerts,
     "purge": cmd_purge,
     "apply-products": cmd_apply_products,
 }
