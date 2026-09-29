@@ -31,8 +31,16 @@ Publie aussi le contenu de 26.2.0 (non publiée séparément).
 - **Licences inutilisées** : vue dédiée (jamais utilisées sur la période, dernière utilisation,
   échéance, coût annuel).
 - Démonstration enrichie : licence inutilisée, réservations, emprunts, trois sites.
+- Assistant d'installation : bouton **« Rechercher l'outil »** (étape Serveurs de licences). Il trouve
+  lmutil.exe et rlmutil.exe sur ce serveur et sur les serveurs de licences déclarés (démons en cours
+  d'exécution, services Windows, dossiers d'installation connus, Program Files) ; un outil trouvé sur
+  un autre serveur est copié dans `<installation>\bin`.
 
 ### Corrigé
+- Assistant d'installation : le chemin de lmutil / rlmutil accepte le dossier de l'outil et un chemin
+  entre guillemets (« Copier en tant que chemin d'accès ») ; un dossier donné au test `lmstat`
+  provoquait une erreur interne.
+- Relance de la démonstration sur une base conservée (SQL Server) : réservations supprimées avant les features.
 - Le filtre « Services » s'applique désormais aussi aux refus et aux utilisateurs de la vue En direct.
 - La démonstration (`web --demo`) est régénérée après une mise à jour de l'application.
 - Schéma v6 (colonne `license_session.borrowed`, table `feature_reservation`) ; les colonnes ajoutées

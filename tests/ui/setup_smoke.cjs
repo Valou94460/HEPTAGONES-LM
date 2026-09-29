@@ -98,9 +98,18 @@ const fs = require("fs");
   await page.selectOption(`[data-srv="${r}"][data-key="license_type"]`, "rlm");
   await page.waitForSelector('[data-bind="rlmutil_path"]');
   check(!(await page.$(`[data-srv="${r}"][data-key="log"]`)), "RLM : l'option log debug ne doit pas s'afficher");
-  await page.fill('[data-bind="rlmutil_path"]', "C:\\HeptagonesLM\\bin\\rlmutil.exe");
   await page.fill(`[data-srv="${r}"][data-key="name"]`, "FOUNDRY");
   await page.fill(`[data-srv="${r}"][data-key="port_at_host"]`, "5053@licsrv-rlm");
+  // Bouton « Rechercher l'outil » : rlmutil trouvé sur le serveur RLM, copié sur ce serveur
+  await page.click("#find-tools");
+  await page.waitForSelector("table.tools-found", { timeout: 15000 });
+  const scan = await page.textContent("#tools-found");
+  check(scan.includes("licsrv-rlm") && scan.includes("rlmutil.exe"), `recherche de l'outil : ${scan}`);
+  await page.click('#tools-found [data-use*="rlmutil"]');
+  await page.waitForFunction(() => document.querySelector('[data-bind="rlmutil_path"]').value === "C:\\HeptagonesLM\\bin\\rlmutil.exe", null, { timeout: 15000 })
+    .catch(async () => failures.push(`rlmutil non retenu : ${await page.textContent("#tools-found")}`));
+  check((await page.textContent("#tools-found")).includes("Copié depuis licsrv-rlm"), "copie de rlmutil non signalée");
+  await shot("06c_recherche_outil");
   await test(`lm${r}`);
   await shot("06b_licences_rlm");
   await page.click(`[data-del="${r}"]`);

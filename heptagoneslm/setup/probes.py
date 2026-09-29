@@ -71,8 +71,8 @@ def test_lmstat(system: System, lmutil: str, port_at_host: str, license_type: st
     if not lmutil:
         return _res("error", f"Chemin de {tool}.exe non renseigné")
     r = system.run([lmutil, label, "-a", "-c", port_at_host], timeout=90)
-    if r.code in (124, 127):
-        return _res("error", r.message)
+    if r.code in (124, 126, 127):
+        return _res("error", r.message, [f"Indiquer le chemin complet de {tool}.exe, ou utiliser « Rechercher l'outil »."])
     status = (parse_rlmstat if rlm else parse_lmstat)(r.out + "\n" + r.err, port_at_host)
     if not status.server_up:
         return _res("error", f"Serveur {port_at_host} injoignable",

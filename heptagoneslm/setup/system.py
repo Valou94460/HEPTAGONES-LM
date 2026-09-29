@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
-from heptagoneslm.setup import iis
+from heptagoneslm.setup import iis, toolscan
 from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.iis import ps_quote
 
@@ -95,6 +95,7 @@ class System:
     def disk_free_gb(self, path: str) -> float: raise NotImplementedError
     def odbc_drivers(self) -> list[str]: raise NotImplementedError
     def find_lmutil(self) -> list[str]: raise NotImplementedError
+    def find_tools(self, hosts: list[str]) -> list[dict]: raise NotImplementedError
     def iis_state(self) -> dict: raise NotImplementedError
     def certificates(self) -> list[dict]: raise NotImplementedError
     def domain_info(self) -> dict: raise NotImplementedError
@@ -277,6 +278,9 @@ $fqdn = try { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName } catch
             found.append(which)
         return list(dict.fromkeys(found))
 
+    def find_tools(self, hosts: list[str]) -> list[dict]:
+        return toolscan.normalize(self.ps_json(toolscan.script(hosts), timeout=300))
+
     def iis_state(self) -> dict:
         return self.ps_json(iis.state_script())
 
@@ -407,6 +411,8 @@ foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome'
             proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env, stdin=subprocess.DEVNULL)
         except FileNotFoundError:
             return Result(127, "", f"programme introuvable : {cmd[0]}")
+        except OSError as exc:             # dossier au lieu d'un .exe, accès refusé…
+            return Result(126, "", f"impossible d'exécuter {cmd[0]} : {exc.strerror or exc}")
         except subprocess.TimeoutExpired:
             return Result(124, "", f"délai dépassé ({timeout} s)")
         return Result(proc.returncode, _decode(proc.stdout), _decode(proc.stderr))
@@ -690,6 +696,21 @@ class SimulatedSystem(System):
 
     def find_lmutil(self) -> list[str]:
         return [r"C:\Program Files\Autodesk\Network License Manager\lmutil.exe"]
+
+    def find_tools(self, hosts: list[str]) -> list[dict]:
+        self._step("find_tools", 3)
+        rows = [{"tool": "lmutil", "path": p, "host": "SRV-HEPTAGONESLM", "local": True, "how": "dossier connu"}
+                for p in self.find_lmutil()]
+        for h in hosts:
+            if "inconnu" in h.lower():
+                continue                                   # serveur injoignable : rien trouvé
+            if "rlm" in h.lower() or "foundry" in h.lower():
+                rows.append({"tool": "rlmutil", "host": h, "local": False, "how": "processus rlm.exe",
+                             "path": f"\\\\{h}\\C$\\Program Files\\Foundry\\LicensingTools8.1\\bin\\RLM\\rlmutil.exe"})
+            else:
+                rows.append({"tool": "lmutil", "host": h, "local": False, "how": "service FlexLM Service 1",
+                             "path": f"\\\\{h}\\C$\\Flexlm\\lmutil.exe"})
+        return toolscan.normalize(rows)
 
     def port_free(self, port: int) -> bool:
         return True

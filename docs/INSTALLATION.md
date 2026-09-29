@@ -53,7 +53,7 @@ avec Python : `heptagoneslm setup --simulate`).
 | 2 | Vérification du serveur | Système, droits, disque, domaine, pilote ODBC, lmutil, port, rôles et modules IIS, certificats | Corrections automatiques : rôles IIS, URL Rewrite, ARR |
 | 3 | Emplacement et compte | Dossier d'installation, compte de service, intervalle de collecte | Compte trouvé dans l'annuaire, mot de passe valide |
 | 4 | Base de données | SQL Server (instance, base, pilote, authentification Windows ou SQL, chiffrement, création) ou SQLite | Connexion, existence de la base, droits de création |
-| 5 | Serveurs de licences | Chemin de lmutil (FlexLM) et de rlmutil (RLM), serveurs : type, adresse (triades), log debug | `lmstat` / `rlmstat` en direct pour chaque serveur |
+| 5 | Serveurs de licences | Serveurs : type, adresse (triades), log debug ; chemin (ou dossier) de lmutil (FlexLM) et de rlmutil (RLM), ou bouton « Rechercher l'outil » (ce serveur et les serveurs de licences ; copie dans `bin` si trouvé ailleurs) | `lmstat` / `rlmstat` en direct pour chaque serveur |
 | 6 | Interface web et IIS | IIS avec connexion Windows automatique (recommandé), HTTPS intégré avec identifiants AD, ou poste local ; pare-feu | Certificat (nom, validité), groupe AD, connexion LDAP |
 | 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires, alertes immédiates (optionnel) | Envoi d'un message de test |
 | 8 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |

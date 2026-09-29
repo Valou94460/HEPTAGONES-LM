@@ -33,6 +33,24 @@ _THUMB_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
 
 
 LICENSE_TYPES = ("flexlm", "rlm")
+TOOL_FIELDS = {"lmutil_path": "lmutil.exe", "rlmutil_path": "rlmutil.exe"}
+
+
+def normalize_tool_path(value: str, exe: str) -> str:
+    """Chemin de lmutil.exe / rlmutil.exe tel que saisi : guillemets de « Copier en tant que
+    chemin d'accès » retirés, dossier complété par le nom de l'outil, extension ajoutée."""
+    v = str(value or "").strip().strip('"').strip("'").strip()
+    if not v:
+        return ""
+    v = v.rstrip("\\/") or v
+    if re.fullmatch(r"[A-Za-z]:", v):
+        v += "\\"
+    name = PureWindowsPath(v).name.lower()
+    if name == exe[:-4]:
+        return v + ".exe"
+    if not name.endswith(".exe"):
+        return str(PureWindowsPath(v) / exe)
+    return v
 
 
 @dataclass
@@ -135,6 +153,8 @@ class Answers:
                 if isinstance(value, str):
                     value = re.split(r"[,;\s]+", value)
                 kwargs[name] = [str(v).strip() for v in value or [] if str(v).strip()]
+            elif name in TOOL_FIELDS:
+                kwargs[name] = normalize_tool_path(value, TOOL_FIELDS[name])
             else:
                 kwargs[name] = "" if value is None else str(value).strip()
         return cls(**kwargs)

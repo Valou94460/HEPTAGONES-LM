@@ -22,6 +22,7 @@
   let preview = null, verification = null;
   let pollTimer = null, logCount = 0, install = { status: "idle" };
   const results = {};
+  let toolScan = null;                 // recherche de lmutil / rlmutil : {busy} | {found, hosts} | {error}
 
   /* -- Utilitaires ------------------------------------------------------------------------ */
   async function api(path, body) {
@@ -47,7 +48,7 @@
   const SEV = { ok: ["good", "✓"], warning: ["warning", "!"], error: ["critical", "✕"], info: ["info", "i"] };
   const dot = s => `<span class="status-dot sev-${(SEV[s] || SEV.info)[0]}" aria-hidden="true">${(SEV[s] || SEV.info)[1]}</span>`;
   const ICON = {
-    check: '<path d="M4 12l5 5L20 6"/>', db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    check: '<path d="M4 12l5 5L20 6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>', db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
@@ -356,17 +357,68 @@
         <td><button type="button" class="icon-x" data-del="${i}" title="Retirer" aria-label="Retirer ce serveur">×</button></td>
       </tr>`; }).join("");
     return `
-      <div class="panel"><h2>Outils des gestionnaires de licences</h2><div class="form-grid">
-        ${types.has("flexlm") ? input("lmutil_path", "Chemin de lmutil.exe (FlexLM)", { full: true, hint: found.length ? `Détecté : ${esc(found.join(" · "))}` : "Fourni avec Autodesk Network License Manager ou tout serveur FlexLM (à copier par exemple dans C:\\HeptagonesLM\\bin)." }) : ""}
-        ${types.has("rlm") ? input("rlmutil_path", "Chemin de rlmutil.exe (RLM)", { full: true, placeholder: "C:\\HeptagonesLM\\bin\\rlmutil.exe", hint: "Fourni avec le serveur de licences RLM de l'éditeur (Foundry, Maxon, Chaos…)." }) : ""}
-      </div></div>
       <div class="panel"><div class="panel-head"><div><h2>Serveurs</h2><p class="muted">Triade redondante : <code>27000@srv1:27000@srv2:27000@srv3</code>. Le log debug ajoute les refus de licence et des sessions à la seconde.</p></div>
         <button type="button" class="btn small" id="add-srv">+ Ajouter un serveur</button></div>
         <table class="servers"><thead><tr><th>Nom</th><th>Type</th><th>Adresse port@serveur</th><th>Collecte</th><th>Test</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-        <div class="f" data-f="servers"><span class="ferr"></span></div></div>`;
+        <div class="f" data-f="servers"><span class="ferr"></span></div></div>
+      <div class="panel"><h2>Outils des gestionnaires de licences</h2><div class="form-grid">
+        ${types.has("flexlm") ? input("lmutil_path", "Chemin de lmutil.exe (FlexLM)", { full: true, hint: found.length ? `Détecté : ${esc(found.join(" · "))}` : "Fourni avec Autodesk Network License Manager ou tout serveur FlexLM (à copier par exemple dans C:\\HeptagonesLM\\bin)." }) : ""}
+        ${types.has("rlm") ? input("rlmutil_path", "Chemin de rlmutil.exe (RLM)", { full: true, placeholder: "C:\\HeptagonesLM\\bin\\rlmutil.exe", hint: "Fourni avec le serveur de licences RLM de l'éditeur (Foundry, Maxon, Chaos…)." }) : ""}
+      </div>
+        <div class="test-row"><button type="button" class="btn" id="find-tools">${icon("search")} Rechercher l'outil</button>
+          <span class="muted" style="flex:1;min-width:240px">Cherche sur ce serveur et sur les serveurs de licences déclarés ci-dessus : démons en cours d'exécution, services, dossiers d'installation. Un outil trouvé sur un autre serveur est copié dans <code>${esc(A.install_dir)}\\bin</code>.</span></div>
+        <div id="tools-found">${renderTools(types)}</div></div>`;
+  }
+  function renderTools(types) {
+    const t = toolScan;
+    if (!t) return "";
+    if (t.busy) return `<div class="result"><span class="spinner"></span><span>Recherche en cours sur ${esc(t.busy)}… (jusqu'à quelques minutes pour un serveur distant)</span></div>`;
+    if (t.error) return `<div class="result">${dot("error")}<div><b>${esc(t.error)}</b></div></div>`;
+    const wanted = [...types].map(x => x === "rlm" ? "rlmutil" : "lmutil");
+    const rows = (t.found || []).filter(r => wanted.includes(r.tool));
+    const note = t.used ? `<div class="result">${dot("ok")}<div><b>${esc(t.used)}</b></div></div>` : "";
+    if (!rows.length) return `${note}<div class="result">${dot("warning")}<div><b>Aucun outil trouvé</b><ul>
+      <li>Serveurs examinés : ce serveur${t.hosts.length ? ", " + esc(t.hosts.join(", ")) : " (aucun serveur de licences déclaré)"}.</li>
+      <li>Pour un serveur distant, le compte qui lance l'assistant doit être administrateur de ce serveur (partage C$ et WMI).</li>
+      <li>Sinon, copier ${wanted.map(w => `<code>${w}.exe</code>`).join(" et ")} depuis le dossier du serveur de licences vers <code>${esc(A.install_dir)}\\bin</code> et indiquer ce chemin (ou le dossier).</li></ul></div></div>`;
+    return `${note}<table class="tools-found"><thead><tr><th>Outil</th><th>Emplacement</th><th>Trouvé par</th><th></th></tr></thead><tbody>${rows.map(r => {
+      const current = (A[r.tool + "_path"] || "").toLowerCase() === r.path.toLowerCase();
+      return `<tr><td><b>${r.tool}.exe</b></td><td><code>${esc(r.path)}</code><div class="muted">${r.local ? "Ce serveur" : esc(r.host)}</div></td>
+        <td class="muted">${esc(r.how)}</td>
+        <td>${current ? `<span class="muted">Retenu</span>` : `<button type="button" class="btn small" data-use="${esc(r.path)}">${r.local ? "Utiliser" : "Copier ici et utiliser"}</button>`}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
+  function bindTools() {
+    const root = $("tools-found"); if (!root) return;
+    root.querySelectorAll("[data-use]").forEach(b => b.addEventListener("click", async () => {
+      b.disabled = true; b.textContent = "…";
+      try {
+        const r = await api("/api/tools/use", { answers: A, path: b.dataset.use });
+        A[r.field] = r.path;
+        toolScan.used = r.copied ? `Copié depuis ${r.host} : ${r.path}` : `Chemin retenu : ${r.path}`;
+        save(); render();
+      } catch (e) { toolScan.used = null; toolScan.error = e.message; save(); render(); }
+    }));
+  }
+  async function findTools() {
+    const hosts = [...new Set(A.servers.flatMap(s => (s.port_at_host || "").split(":").map(p => p.split("@")[1]).filter(Boolean)))];
+    toolScan = { busy: ["ce serveur", ...hosts].join(", ") };
+    $("tools-found").innerHTML = renderTools(new Set());
+    $("find-tools").disabled = true;
+    try {
+      toolScan = await api("/api/tools/find", { answers: A });
+      // champ vide : le meilleur outil de ce serveur est retenu d'office
+      for (const tool of ["lmutil", "rlmutil"]) {
+        const best = toolScan.found.find(r => r.tool === tool && r.local);
+        if (best && !A[tool + "_path"]) { A[tool + "_path"] = best.path; toolScan.used = `Chemin retenu : ${best.path}`; }
+      }
+    } catch (e) { toolScan = { error: e.message }; }
+    save(); render();
   }
   STEPS[4].after = () => {
     const root = $("step-body");
+    $("find-tools")?.addEventListener("click", findTools);
+    bindTools();
     root.querySelectorAll("[data-srv]").forEach(el => {
       const i = +el.dataset.srv, key = el.dataset.key;
       el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {

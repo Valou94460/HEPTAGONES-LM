@@ -338,6 +338,121 @@ class SetupServerTest(unittest.TestCase):
         self.assertNotIn(b"Secret-1", report)
 
 
+class ToolPathTest(unittest.TestCase):
+    """lmutil / rlmutil : chemin saisi (dossier, guillemets) et recherche automatique."""
+
+    def test_folder_quotes_and_extension(self):
+        from heptagoneslm.setup.answers import normalize_tool_path as n
+        adsk = r"C:\Program Files\Autodesk\Network License Manager"
+        self.assertEqual(n(adsk, "lmutil.exe"), adsk + r"\lmutil.exe")                 # dossier
+        self.assertEqual(n(adsk + "\\", "lmutil.exe"), adsk + r"\lmutil.exe")
+        self.assertEqual(n(f'"{adsk}\\lmutil.exe"', "lmutil.exe"), adsk + r"\lmutil.exe")   # « Copier en tant que chemin »
+        self.assertEqual(n(r"C:\Flexlm\lmutil", "lmutil.exe"), r"C:\Flexlm\lmutil.exe")
+        self.assertEqual(n("C:\\", "lmutil.exe"), r"C:\lmutil.exe")
+        self.assertEqual(n(r"\\licsrv3\rlm$", "rlmutil.exe"), r"\\licsrv3\rlm$\rlmutil.exe")
+        self.assertEqual(n("", "lmutil.exe"), "")
+        a = answers(lmutil_path=f'"{adsk}"', rlmutil_path=r"D:\RLM")
+        self.assertEqual((a.lmutil_path, a.rlmutil_path), (adsk + r"\lmutil.exe", r"D:\RLM\rlmutil.exe"))
+        self.assertEqual(a.validate("licenses"), [])
+
+    def test_directory_given_to_real_run_is_a_clean_error(self):
+        from heptagoneslm.setup import probes
+        with tempfile.TemporaryDirectory() as tmp:
+            res = probes.test_lmstat(WindowsSystem(), tmp, "27000@licsrv1")
+        self.assertEqual(res["status"], "error")
+        self.assertIn("impossible d'exécuter", res["message"])
+        self.assertIn("Rechercher l'outil", res["details"][0])
+
+    def test_hosts_and_script(self):
+        from heptagoneslm.setup import toolscan
+        a = answers(servers=[{"name": "A", "port_at_host": "27000@srv1:27000@srv2:27000@SRV1"},
+                             {"name": "R", "port_at_host": "5053@licsrv-rlm", "license_type": "rlm"}])
+        self.assertEqual(toolscan.hosts_of(a.servers), ["srv1", "srv2", "licsrv-rlm"])
+        script = toolscan.script(["srv1", "licsrv-rlm"])
+        self.assertIn("'', 'srv1', 'licsrv-rlm'", script)
+        self.assertIn("Win32_Process", script)
+        self.assertIn("Win32_Service", script)
+        self.assertIn("'\\\\' + $h + '\\' + $p.Substring(0, 1) + '$'", script)        # \\srv1\C$\...
+        rows = toolscan.normalize([
+            {"tool": "lmutil", "path": r"\\srv1\C$\Flexlm\lmutil.exe", "host": "srv1", "local": False, "how": "recherche"},
+            {"tool": "lmutil", "path": r"C:\Autodesk\lmutil.exe", "host": "SRV", "local": True, "how": "dossier connu"},
+            {"tool": "lmutil", "path": r"\\srv1\C$\Flexlm\LMUTIL.exe", "host": "srv1", "local": False, "how": "service x"},
+            {"tool": "autre", "path": "x"}])
+        self.assertEqual([r["path"] for r in rows], [r"C:\Autodesk\lmutil.exe", r"\\srv1\C$\Flexlm\lmutil.exe"])
+        self.assertEqual(toolscan.normalize({"tool": "rlmutil", "path": "p", "local": True})[0]["tool"], "rlmutil")
+
+
+@unittest.skipUnless(__import__("os").name == "nt", "recherche réelle : Windows uniquement")
+class WindowsToolScanTest(unittest.TestCase):
+    """Script PowerShell réel : un lmutil.exe déposé dans C:\\Flexlm est trouvé sur ce serveur."""
+
+    def test_finds_tool_in_known_folder(self):
+        import os
+        import shutil
+        folder = r"C:\Flexlm"
+        created = not os.path.isdir(folder)
+        os.makedirs(folder, exist_ok=True)
+        tool = os.path.join(folder, "lmutil.exe")
+        shutil.copy(__import__("sys").executable, tool)
+        try:
+            found = WindowsSystem().find_tools(["localhost"])        # localhost : ce serveur, pas de doublon
+            mine = [r for r in found if r["path"].lower() == tool.lower()]
+            self.assertEqual(len(mine), 1, found)
+            self.assertTrue(mine[0]["local"])
+            self.assertEqual(mine[0]["tool"], "lmutil")
+        finally:
+            os.remove(tool)
+            if created:
+                shutil.rmtree(folder, ignore_errors=True)
+
+
+class ToolScanServerTest(unittest.TestCase):
+    """Bouton « Rechercher l'outil » : recherche puis copie depuis le serveur de licences."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.system = ready_system()
+        cls.httpd, cls.app = make_server(cls.system, 0, token="jeton-test")
+        cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
+        threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.httpd.shutdown()
+        cls.httpd.server_close()
+
+    req = SetupServerTest.req
+
+    def test_find_then_copy_remote_tool(self):
+        a = answers(lmutil_path="", servers=[{"name": "AUTODESK", "port_at_host": "27000@licsrv-adsk"},
+                                             {"name": "NUKE", "port_at_host": "5053@licsrv-rlm", "license_type": "rlm"},
+                                             {"name": "X", "port_at_host": "27000@inconnu"}]).to_dict(secrets=True)
+        status, body = self.req("/api/tools/find", {"answers": a})
+        self.assertEqual(status, 200)
+        found = json.loads(body)
+        self.assertEqual(found["hosts"], ["licsrv-adsk", "licsrv-rlm", "inconnu"])
+        self.assertTrue(found["found"][0]["local"])                         # ce serveur d'abord
+        remote = next(r for r in found["found"] if r["tool"] == "rlmutil")
+        self.assertEqual((remote["host"], remote["local"]), ("licsrv-rlm", False))
+
+        status, body = self.req("/api/tools/use", {"answers": a, "path": remote["path"]})
+        used = json.loads(body)
+        self.assertEqual((status, used["field"], used["copied"]), (200, "rlmutil_path", True))
+        self.assertEqual(used["path"], r"C:\HeptagonesLM\bin\rlmutil.exe")
+        self.assertTrue(self.system.exists(used["path"]))
+        self.assertEqual(self.app.answers.rlmutil_path, used["path"])
+
+        local = found["found"][0]
+        used = json.loads(self.req("/api/tools/use", {"answers": a, "path": local["path"]})[1])
+        self.assertEqual((used["field"], used["path"], used["copied"]), ("lmutil_path", local["path"], False))
+
+    def test_unknown_path_refused(self):
+        self.req("/api/tools/find", {"answers": answers().to_dict(secrets=True)})
+        status, body = self.req("/api/tools/use", {"path": r"C:\Windows\System32\cmd.exe"})
+        self.assertEqual(status, 422)
+        self.assertIn("relancer la recherche", json.loads(body)["error"])
+
+
 class UnattendedTest(unittest.TestCase):
     def write(self, data) -> str:
         tmp = tempfile.NamedTemporaryFile("w", suffix=".json", delete=False, encoding="utf-8")
