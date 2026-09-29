@@ -47,8 +47,7 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
 | **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
-| **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
-| **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
+| **HeptagonesLM-Setup.exe** | **Seul fichier à télécharger.** Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. Il installe l'application (`HeptagonesLM.exe` : collecte, interface, rapports) dans `C:\HeptagonesLM`. Aucun Python requis ; rien à installer sur les postes utilisateurs (navigateur). |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
 | **Rôles** | Administrateur, lecteur, responsable de service (ne voit que ses services, exports compris), attribués par groupe AD ou par compte, contrôlés par le serveur. |
 | **Alertes et tickets** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Par e-mail et / ou ticket automatique ServiceNow, Jira, GLPI, Teams / Slack (ouvert, complété, résolu). |
@@ -78,13 +77,15 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 
 ## Démarrage rapide
 
-### Essayer en 1 minute (Windows, sans rien installer)
+### Essayer sans rien installer (Windows)
 
-1. Télécharger **`HeptagonesLM.exe`** depuis la page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)
+1. Télécharger **`HeptagonesLM-Setup.exe`** depuis la page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)
    (ou, pour la dernière version de développement : onglet
-   [Actions](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-windows`).
-2. Double-cliquer : l'interface s'ouvre dans le navigateur sur des **données de
-   démonstration** (3 serveurs simulés, ~45 utilisateurs, 90 jours).
+   [Actions](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-Setup`).
+2. Parcourir l'assistant **en simulation**, sans rien modifier sur le poste :
+   `HeptagonesLM-Setup.exe setup --simulate` (bandeau « Mode simulation » affiché).
+
+L'interface sur données fictives (bandeau « Démonstration ») s'obtient avec Python, ci-dessous.
 
 > Windows SmartScreen peut avertir au premier lancement (exécutable non signé) :
 > « Informations complémentaires » › « Exécuter quand même ».
@@ -116,7 +117,7 @@ un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque 
 ![Assistant d'installation](docs/images/installation-progression.png)
 
 Installation silencieuse (industrialisation) : `HeptagonesLM-Setup.exe setup --answers reponses.json`.
-Démonstration sans rien modifier : `HeptagonesLM.exe setup --simulate`.
+Démonstration sans rien modifier : `HeptagonesLM-Setup.exe setup --simulate`.
 Tout est détaillé dans **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
 
 ### Installation manuelle
@@ -126,7 +127,7 @@ Prérequis sur le serveur HeptagonesLM (Windows) :
 - accès réseau aux serveurs de licences (port `lmgrd` et ports des démons vendeurs) ;
 - `lmutil.exe` (fourni avec tout gestionnaire FlexLM, ex. Autodesk Network License Manager) ;
 - [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) ;
-- soit `HeptagonesLM.exe`, soit Python 3.10+ (64 bits).
+- soit `HeptagonesLM.exe` (installé par l'assistant dans `C:\HeptagonesLM`), soit Python 3.10+ (64 bits).
 
 **1. Base de données** (une fois, par un DBA) :
 

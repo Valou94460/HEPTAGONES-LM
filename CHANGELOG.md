@@ -54,6 +54,9 @@ Publie aussi le contenu de 26.2.0 (non publiée séparément).
   prennent le type propre à SQL Server ou SQLite.
 
 ### Modifié
+- **Un seul exécutable livré : `HeptagonesLM-Setup.exe`** (release, zip, artefact de la CI
+  `HeptagonesLM-Setup`). `HeptagonesLM.exe` n'est plus proposé à part : l'assistant le contient et
+  l'installe sur le serveur.
 - Les alertes ont leur propre section `alerts` (destinataires e-mail, connecteurs ITSM, règles) ;
   la forme `email.alerts` reste acceptée. Schéma de base v6 (tables `itsm_ticket`, `feature_reservation`).
 

@@ -189,14 +189,20 @@ jobs:
           curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info | grep -q '"simulated": true'
           taskkill //F //IM HeptagonesLM-Setup.exe || true
 
-      - name: Publication de HeptagonesLM.exe et HeptagonesLM-Setup.exe
+      - name: Publication de HeptagonesLM-Setup.exe (seul exécutable livré)
         uses: actions/upload-artifact@v4
         with:
-          name: HeptagonesLM-windows
+          name: HeptagonesLM-Setup
           path: |
-            dist/HeptagonesLM.exe
             dist/HeptagonesLM-Setup.exe
             config/heptagoneslm.example.yaml
+
+      - name: HeptagonesLM.exe seul, pour les tests d'installation de la CI (non livré)
+        uses: actions/upload-artifact@v4
+        with:
+          name: interne-tests-HeptagonesLM-exe
+          path: dist/HeptagonesLM.exe
+          retention-days: 3
 
   setup-windows:
     name: Installation réelle sur Windows Server (assistant)
@@ -213,7 +219,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: HeptagonesLM-windows
+          name: HeptagonesLM-Setup
           path: livrables
 
       - name: Préparation (compte de service, groupe, certificat, DNS, faux lmutil)
@@ -298,8 +304,13 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: HeptagonesLM-windows
+          name: HeptagonesLM-Setup
           path: livrables
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: interne-tests-HeptagonesLM-exe
+          path: livrables/dist
 
       - uses: actions/setup-node@v4
         with:

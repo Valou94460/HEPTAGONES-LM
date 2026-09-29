@@ -24,8 +24,11 @@ Deux essais, du plus simple au plus complet :
 ## 2. Récupérer HeptagonesLM-Setup.exe
 
 1. Ouvrir la page du dernier run vert de la CI (voir la liste ci-dessous), connecté à GitHub.
-2. En bas de la page, section **Artifacts**, télécharger **`HeptagonesLM-windows`** (zip).
-3. Dézipper : `dist\HeptagonesLM-Setup.exe` (l'application `HeptagonesLM.exe` est incluse dedans).
+2. En bas de la page, section **Artifacts**, télécharger le zip : **`HeptagonesLM-windows`** pour le
+   run déjà disponible ci-dessous, **`HeptagonesLM-Setup`** pour les suivants.
+3. Dézipper et utiliser **uniquement `dist\HeptagonesLM-Setup.exe`**. L'application est incluse
+   dedans ; le zip du run déjà disponible contient aussi `HeptagonesLM.exe` : ne pas le lancer (il
+   ouvre la démonstration).
 
 | Version | Où | Remarque |
 |---|---|---|

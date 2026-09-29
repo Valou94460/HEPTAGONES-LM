@@ -42,7 +42,7 @@ installe avec une barre de progression, puis **vérifie chaque composant de bout
 3. Une fenêtre console affiche l'adresse de l'assistant et le navigateur s'ouvre.
    **Laisser la console ouverte** pendant toute l'installation.
 
-Démonstration sans rien modifier : `HeptagonesLM.exe setup --simulate` (tout poste, même non Windows
+Démonstration sans rien modifier : `HeptagonesLM-Setup.exe setup --simulate` (tout poste, même non Windows
 avec Python : `heptagoneslm setup --simulate`).
 
 ## 3. Les étapes
