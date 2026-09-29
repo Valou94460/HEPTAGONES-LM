@@ -355,6 +355,8 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Licences SaaS / cloud, connecteur ServiceNow, offre hébergée | ❌ | ✅ |
 | Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
 
+Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md).
+
 ## Documentation
 
 | Document | Contenu |
@@ -365,7 +367,8 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
-| [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation et évolutions prévues |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.2 (ITSM, rôles, prévision, gestionnaires, agent poste, cloud) |
+| [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation (mise en service) |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribuer : environnement, tests, conventions |
 
