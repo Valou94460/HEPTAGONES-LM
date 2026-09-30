@@ -84,6 +84,23 @@ Python et Node.js sont installés automatiquement par le workflow ; il n'y a rie
 la CI visent les machines GitHub (`windows-latest`) et non ce PC. Garder le dépôt **privé** tant qu'un
 runner auto-hébergé y est déclaré.
 
+## 2 bis. CI de secours : automatique dès que le runner tourne
+
+Dès que le runner est en ligne, le workflow **« CI poste auto-hébergé »** tourne **à chaque push**, sans
+fusion préalable sur `main` ni minutes GitHub consommées :
+
+1. tests unitaires ;
+2. démonstration (collecte avec le faux lmutil, rapport Excel) ;
+3. construction de `HeptagonesLM-Setup.exe`, puis vérification.
+
+Il **n'installe rien** sur le PC. Le résultat apparaît dans **Actions**, et l'artefact
+**`HeptagonesLM-Setup`** contient le Setup à jour, celui à utiliser pour le test manuel
+([TEST_MANUEL_SETUP.md](TEST_MANUEL_SETUP.md)).
+
+Pour le lancer sans nouveau push : **Actions** > **CI poste auto-hébergé** > **Run workflow**.
+Ce bouton apparaît une fois le fichier présent sur `main`. Avant cela, n'importe quel push sur la
+branche suffit.
+
 ## 3. Choisir le mode d'essai
 
 | Paramètre | Valeurs | Effet |
@@ -149,6 +166,7 @@ accès anonyme est accepté, ou si la collecte planifiée échoue.
 | Symptôme | Cause probable |
 |---|---|
 | Le run reste « Queued » | Runner arrêté (fenêtre `run.cmd` fermée) ou libellé `heptagoneslm-test` absent. |
+| Les jobs échouent en quelques secondes, même sur le PC | Compte GitHub bloqué pour un problème de paiement : Actions est alors désactivé pour tous les runners. Voir Settings > Billing. |
 | « Le runner doit tourner avec des droits d'administrateur » | `run.cmd` lancé depuis une PowerShell non administrateur. |
 | « Windows Famille/Home » | Édition sans authentification Windows pour IIS : utiliser un PC Pro ou Entreprise. |
 | Échec à l'étape « prérequis » | Téléchargement d'URL Rewrite ou d'ARR bloqué (proxy, filtrage) : voir `deroule.txt` et le guide d'installation. |

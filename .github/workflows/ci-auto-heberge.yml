@@ -1,0 +1,81 @@
+# CI de secours sur un PC Windows de l'équipe (runner GitHub auto-hébergé, libellé heptagoneslm-test).
+# Tourne à chaque push, même quand les machines GitHub sont indisponibles (quota, facturation) :
+# les jobs d'un runner auto-hébergé ne consomment pas de minutes GitHub Actions.
+# Aucune installation sur le PC : tests, construction de HeptagonesLM-Setup.exe, démonstration.
+# Prérequis : seulement le runner (Windows PowerShell 5.1 intégré). Guide : docs/POSTE_DE_TEST.md
+name: CI poste auto-hébergé
+
+on:
+  push:
+    branches: [main, "dev"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-auto-heberge-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Tests et HeptagonesLM-Setup.exe (poste auto-hébergé)
+    runs-on: [self-hosted, windows, heptagoneslm-test]
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Installation (environnement isolé)
+        run: |
+          python -m venv .venv
+          .\.venv\Scripts\python -m pip install --upgrade pip
+          .\.venv\Scripts\pip install -e ".[dev]" pyinstaller
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Tests unitaires
+        run: |
+          .\.venv\Scripts\python -m pytest -q
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Démonstration (historique simulé, collecte avec le faux lmutil, rapport Excel)
+        run: |
+          .\.venv\Scripts\heptagoneslm demo --days 10 --output-dir demo
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\.venv\Scripts\heptagoneslm -c demo\heptagoneslm.demo.yaml collect
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Construction de HeptagonesLM.exe et HeptagonesLM-Setup.exe
+        run: |
+          $pyi = ".\.venv\Scripts\pyinstaller"
+          & $pyi --noconfirm --clean --onefile --console --name HeptagonesLM --icon packaging/heptagoneslm.ico `
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" `
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          & $pyi --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico `
+            --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" `
+            --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Vérification des exécutables
+        run: |
+          .\dist\HeptagonesLM.exe --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\dist\HeptagonesLM.exe demo --days 3 --output-dir exe-demo
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          .\dist\HeptagonesLM-Setup.exe --version
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+
+      - name: Publication de HeptagonesLM-Setup.exe
+        uses: actions/upload-artifact@v4
+        with:
+          name: HeptagonesLM-Setup
+          path: |
+            dist/HeptagonesLM-Setup.exe
+            config/heptagoneslm.example.yaml

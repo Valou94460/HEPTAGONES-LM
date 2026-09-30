@@ -393,6 +393,8 @@ class WindowsToolScanTest(unittest.TestCase):
         import os
         import shutil
         folder = r"C:\Flexlm"
+        if os.path.exists(os.path.join(folder, "lmutil.exe")):
+            self.skipTest("un vrai C:\\Flexlm\\lmutil.exe est présent sur ce poste : il n'est pas touché")
         created = not os.path.isdir(folder)
         os.makedirs(folder, exist_ok=True)
         tool = os.path.join(folder, "lmutil.exe")
