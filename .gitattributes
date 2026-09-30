@@ -1,0 +1,3 @@
+# Scripts Windows : fins de ligne CRLF (les goto de cmd.exe peuvent échouer en LF)
+*.bat text eol=crlf
+*.cmd text eol=crlf

@@ -4,6 +4,7 @@ __pycache__/
 build/
 dist/
 .venv/
+.venv-build/
 venv/
 .pytest_cache/
 # données locales

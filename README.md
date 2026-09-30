@@ -90,6 +90,11 @@ L'interface sur données fictives (bandeau « Démonstration ») s'obtient avec 
 > Windows SmartScreen peut avertir au premier lancement (exécutable non signé) :
 > « Informations complémentaires » › « Exécuter quand même ».
 
+### Construire HeptagonesLM-Setup.exe sur son PC (sans GitHub Actions)
+
+Dans un clone du dépôt, double-cliquer **`scripts\construire_setup.bat`** (Python 3.10+ requis) :
+tests, puis `dist\HeptagonesLM-Setup.exe`.
+
 ### Avec Python
 
 ```bash
