@@ -380,18 +380,22 @@ jobs:
         continue-on-error: true
         run: node tests/ui/web_real_tour.cjs installation-reelle
 
+      - name: Regroupement des journaux d'installation
+        if: always()
+        run: |
+          # Un artefact ne peut pas mélanger l'espace de travail (D:) et C: : copie dans le dossier publié
+          $dest = New-Item -ItemType Directory installation-reelle\installation -Force
+          foreach ($f in "setup-gui.log", "setup-gui.err", "C:\HeptagonesLM\heptagoneslm.yaml", "C:\HeptagonesLM\iis\web.config") {
+            if (Test-Path $f) { Copy-Item $f $dest }
+          }
+          if (Test-Path C:\HeptagonesLM\logs) { Copy-Item C:\HeptagonesLM\logs (Join-Path $dest logs) -Recurse }
+
       - name: Publication de la vidéo, des captures et des journaux
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: installation-reelle
-          path: |
-            installation-reelle/
-            setup-gui.log
-            setup-gui.err
-            C:/HeptagonesLM/logs/
-            C:/HeptagonesLM/heptagoneslm.yaml
-            C:/HeptagonesLM/iis/web.config
+          path: installation-reelle/
           if-no-files-found: warn
 
   sqlserver:
