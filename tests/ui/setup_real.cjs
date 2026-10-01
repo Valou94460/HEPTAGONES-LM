@@ -41,7 +41,7 @@ const path = require("path");
   const title = () => page.textContent("#step-title");
   const next = async expected => {
     await page.click("#next");
-    await page.waitForFunction(t => document.getElementById("step-title").textContent === t, expected, { timeout: 60000 })
+    await page.waitForFunction(t => document.getElementById("step-title").textContent === t, expected, { timeout: 5 * 60000 })
       .catch(async () => check(false, `« ${expected} » non atteint (reste sur « ${await title()} » : ${await page.textContent("#error")})`));
     log("Étape :", expected);
   };
@@ -68,7 +68,7 @@ const path = require("path");
 
     // 2. Prérequis réels ; corrections automatiques (installation des rôles et modules IIS manquants)
     await next("Vérification du serveur");
-    await page.waitForSelector(".check-row", { timeout: 120000 });
+    await page.waitForSelector(".check-row", { timeout: 10 * 60000 });   // contrôles réels : plusieurs minutes (IIS, certificats, domaine)
     await shot("prerequis");
     for (let i = 0; i < 8; i++) {
       const fix = await page.$("[data-fix]");
