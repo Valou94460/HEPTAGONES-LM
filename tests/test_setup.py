@@ -351,6 +351,8 @@ class ToolPathTest(unittest.TestCase):
         self.assertEqual(n("C:\\", "lmutil.exe"), r"C:\lmutil.exe")
         self.assertEqual(n(r"\\licsrv3\rlm$", "rlmutil.exe"), r"\\licsrv3\rlm$\rlmutil.exe")
         self.assertEqual(n("", "lmutil.exe"), "")
+        self.assertEqual(n(r"C:\ci\lmutil.cmd", "lmutil.exe"), r"C:\ci\lmutil.cmd")     # script d'appel : tel quel
+        self.assertEqual(n(r"D:\Outils\RLMUTIL.BAT", "rlmutil.exe"), r"D:\Outils\RLMUTIL.BAT")
         a = answers(lmutil_path=f'"{adsk}"', rlmutil_path=r"D:\RLM")
         self.assertEqual((a.lmutil_path, a.rlmutil_path), (adsk + r"\lmutil.exe", r"D:\RLM\rlmutil.exe"))
         self.assertEqual(a.validate("licenses"), [])
@@ -402,7 +404,7 @@ class WindowsToolScanTest(unittest.TestCase):
         try:
             result = WindowsSystem().find_tools(["localhost", "serveur-inexistant.invalid"])
             mine = [r for r in result["found"] if r["path"].lower() == tool.lower()]   # localhost : pas de doublon
-            self.assertEqual(len(mine), 1, found)
+            self.assertEqual(len(mine), 1, result)
             self.assertTrue(mine[0]["local"])
             self.assertEqual(mine[0]["tool"], "lmutil")
             self.assertEqual(result["problems"], [{"host": "serveur-inexistant.invalid", "problem": "nom introuvable (DNS)"}])

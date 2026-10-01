@@ -351,7 +351,10 @@ jobs:
           Set-Content C:\ci\lmutil.cs $src -Encoding utf8
           & "$env:windir\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:C:\Flexlm\lmutil.exe C:\ci\lmutil.cs
           if ($LASTEXITCODE -ne 0) { throw "compilation de lmutil.exe" }
-          & C:\Flexlm\lmutil.exe lmstat -a -c 27000@licsrv-adsk | Select-Object -First 4
+          # Sortie complète d'abord (couper le tube interrompt le programme : code de sortie 1)
+          $sortie = & C:\Flexlm\lmutil.exe lmstat -a -c 27000@licsrv-adsk
+          if ($LASTEXITCODE -ne 0) { throw "lmutil.exe de test : code $LASTEXITCODE" }
+          $sortie | Select-Object -First 4
           Add-Content $env:GITHUB_ENV "CERT_THUMB=$($cert.Thumbprint)"
           Add-Content $env:GITHUB_ENV "SVC_ACCOUNT=$env:COMPUTERNAME\svc_heptagoneslm"
           Add-Content $env:GITHUB_ENV "ACCESS_GROUP=$env:COMPUTERNAME\HeptagonesLM_Lecteurs"

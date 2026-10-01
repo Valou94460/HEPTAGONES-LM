@@ -34,6 +34,8 @@ _THUMB_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
 
 LICENSE_TYPES = ("flexlm", "rlm")
 TOOL_FIELDS = {"lmutil_path": "lmutil.exe", "rlmutil_path": "rlmutil.exe"}
+# Fichiers exécutables acceptés tels quels (outil ou script d'appel de l'outil)
+_EXEC_SUFFIXES = (".exe", ".cmd", ".bat", ".com")
 
 
 def normalize_tool_path(value: str, exe: str) -> str:
@@ -48,7 +50,7 @@ def normalize_tool_path(value: str, exe: str) -> str:
     name = PureWindowsPath(v).name.lower()
     if name == exe[:-4]:
         return v + ".exe"
-    if not name.endswith(".exe"):
+    if not name.endswith(_EXEC_SUFFIXES):             # un dossier : y chercher l'outil
         return str(PureWindowsPath(v) / exe)
     return v
 
