@@ -32,16 +32,53 @@ _EMAIL_RE = re.compile(r"^[^@\s<>]+@[^@\s<>]+\.[^@\s<>]+$")
 _THUMB_RE = re.compile(r"^[0-9A-Fa-f]{40}$")
 
 
+LICENSE_TYPES = ("flexlm", "rlm")
+TOOL_FIELDS = {"lmutil_path": "lmutil.exe", "rlmutil_path": "rlmutil.exe"}
+# Fichiers exécutables acceptés tels quels (outil ou script d'appel de l'outil)
+_EXEC_SUFFIXES = (".exe", ".cmd", ".bat", ".com")
+
+
+def normalize_tool_path(value: str, exe: str) -> str:
+    """Chemin de lmutil.exe / rlmutil.exe tel que saisi : guillemets de « Copier en tant que
+    chemin d'accès » retirés, dossier complété par le nom de l'outil, extension ajoutée."""
+    v = str(value or "").strip().strip('"').strip("'").strip()
+    if not v:
+        return ""
+    v = v.rstrip("\\/") or v
+    if re.fullmatch(r"[A-Za-z]:", v):
+        v += "\\"
+    name = PureWindowsPath(v).name.lower()
+    if name == exe[:-4]:
+        return v + ".exe"
+    if not name.endswith(_EXEC_SUFFIXES):             # un dossier : y chercher l'outil
+        return str(PureWindowsPath(v) / exe)
+    return v
+
+
 @dataclass
 class LicenseServer:
     name: str = ""
     port_at_host: str = ""
     collectors: list[str] = field(default_factory=lambda: ["lmstat"])
     log_path: str = ""
+    license_type: str = "flexlm"      # flexlm | rlm
 
     @property
     def sessions_from(self) -> str:
+        if self.license_type == "rlm":
+            return "rlmstat"
         return "log" if "log" in self.collectors else "lmstat"
+
+    @classmethod
+    def from_dict(cls, s: dict) -> "LicenseServer":
+        license_type = str(s.get("license_type") or "flexlm").lower()
+        if license_type == "rlm":
+            collectors = ["rlmstat"]
+        else:
+            collectors = [c for c in (s.get("collectors") or ["lmstat"]) if c in ("lmstat", "log")] or ["lmstat"]
+        return cls(name=str(s.get("name", "")).strip(), port_at_host=str(s.get("port_at_host", "")).strip(),
+                   collectors=collectors, log_path=str(s.get("log_path", "") or "").strip(),
+                   license_type=license_type)
 
 
 @dataclass
@@ -63,6 +100,7 @@ class Answers:
     db_create: bool = True            # créer la base, la connexion et les droits du compte de service
     # Serveurs de licences
     lmutil_path: str = ""
+    rlmutil_path: str = ""            # serveurs RLM (Reprise) : rlmutil.exe
     servers: list[LicenseServer] = field(default_factory=list)
     # Interface web
     web_mode: str = "iis"             # iis | https | local
@@ -87,6 +125,7 @@ class Answers:
     smtp_password: str = ""
     sender: str = ""
     recipients: list[str] = field(default_factory=list)
+    email_alerts: bool = True         # alertes immédiates (collecte, refus, saturation, échéances)
     # Tâches planifiées
     collect_interval: int = 5
     # Mode silencieux : corriger automatiquement les prérequis manquants
@@ -103,10 +142,8 @@ class Answers:
                 continue
             default = getattr(cls(), name)
             if name == "servers":
-                kwargs[name] = [s if isinstance(s, LicenseServer) else LicenseServer(
-                    name=str(s.get("name", "")).strip(), port_at_host=str(s.get("port_at_host", "")).strip(),
-                    collectors=[c for c in (s.get("collectors") or ["lmstat"]) if c in ("lmstat", "log")] or ["lmstat"],
-                    log_path=str(s.get("log_path", "") or "").strip()) for s in (value or [])]
+                kwargs[name] = [s if isinstance(s, LicenseServer) else LicenseServer.from_dict(s)
+                                for s in (value or [])]
             elif isinstance(default, bool):
                 kwargs[name] = value if isinstance(value, bool) else str(value).lower() in ("1", "true", "yes", "oui", "on")
             elif isinstance(default, int):
@@ -118,6 +155,8 @@ class Answers:
                 if isinstance(value, str):
                     value = re.split(r"[,;\s]+", value)
                 kwargs[name] = [str(v).strip() for v in value or [] if str(v).strip()]
+            elif name in TOOL_FIELDS:
+                kwargs[name] = normalize_tool_path(value, TOOL_FIELDS[name])
             else:
                 kwargs[name] = "" if value is None else str(value).strip()
         return cls(**kwargs)
@@ -222,8 +261,11 @@ class Answers:
                     if not self.db_password:
                         err("db_password", "Mot de passe SQL requis")
         if want("licenses"):
-            if not self.lmutil_path:
+            types = {s.license_type for s in self.servers}
+            if (not types or "flexlm" in types) and not self.lmutil_path:
                 err("lmutil_path", "Chemin de lmutil.exe requis")
+            if "rlm" in types and not self.rlmutil_path:
+                err("rlmutil_path", "Chemin de rlmutil.exe requis pour les serveurs RLM")
             if not self.servers:
                 err("servers", "Déclarer au moins un serveur de licences")
             names = set()
@@ -233,6 +275,8 @@ class Answers:
                 elif s.name.lower() in names:
                     err(f"servers.{i}.name", "Nom déjà utilisé")
                 names.add(s.name.lower())
+                if s.license_type not in LICENSE_TYPES:
+                    err(f"servers.{i}.license_type", "Type de gestionnaire inconnu")
                 if not _PORT_AT_HOST_RE.match(s.port_at_host):
                     err(f"servers.{i}.port_at_host", "Format port@serveur attendu (ex. 27000@licsrv1)")
                 if "log" in s.collectors and not s.log_path:
@@ -287,7 +331,8 @@ class Answers:
     def config_dict(self) -> dict:
         cfg: dict = {
             "database": {"connection_string": self.connection_string()},
-            "lmutil_path": self.lmutil_path,              # tel quel (scripts .cmd : barres obliques inversées)
+            "lmutil_path": self.lmutil_path or "lmutil",  # tel quel (scripts .cmd : barres obliques inversées)
+            **({"rlmutil_path": self.rlmutil_path} if self.rlmutil_path else {}),
             "logging": {"file": self.path("logs", "heptagoneslm.log").replace("\\", "/"), "level": "INFO"},
             "servers": [],
             "products": [],
@@ -298,6 +343,9 @@ class Answers:
         for s in self.servers:
             entry = {"name": s.name, "port_at_host": s.port_at_host, "collectors": list(s.collectors),
                      "sessions_from": s.sessions_from}
+            if s.license_type != "flexlm":
+                entry = {"name": s.name, "port_at_host": s.port_at_host, "license_type": s.license_type,
+                         "collectors": list(s.collectors), "sessions_from": s.sessions_from}
             if s.log_path:
                 entry["log_path"] = s.log_path
             cfg["servers"].append(entry)
@@ -324,6 +372,8 @@ class Answers:
                 email["username"] = self.smtp_user
                 email["password"] = f"${{{SMTP_PASSWORD_VAR}}}"
             cfg["email"] = email
+            if self.email_alerts:
+                cfg["alerts"] = {"recipients": list(self.recipients)}
         return cfg
 
     def yaml_text(self, generated_at: str = "") -> str:

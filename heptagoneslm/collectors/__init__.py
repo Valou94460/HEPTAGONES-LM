@@ -14,5 +14,6 @@ from heptagoneslm.collectors.base import (  # noqa: F401
     register,
 )
 
-# Enregistrement des implémentations : ajouter ici les futurs types (rlm...).
+# Enregistrement des implémentations : ajouter ici les futurs types (dsls, lmx...).
 from heptagoneslm.collectors import flexlm  # noqa: F401,E402
+from heptagoneslm.collectors import rlm  # noqa: F401,E402

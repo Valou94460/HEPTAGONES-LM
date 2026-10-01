@@ -189,14 +189,20 @@ jobs:
           curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info | grep -q '"simulated": true'
           taskkill //F //IM HeptagonesLM-Setup.exe || true
 
-      - name: Publication de HeptagonesLM.exe et HeptagonesLM-Setup.exe
+      - name: Publication de HeptagonesLM-Setup.exe (seul exécutable livré)
         uses: actions/upload-artifact@v4
         with:
-          name: HeptagonesLM-windows
+          name: HeptagonesLM-Setup
           path: |
-            dist/HeptagonesLM.exe
             dist/HeptagonesLM-Setup.exe
             config/heptagoneslm.example.yaml
+
+      - name: HeptagonesLM.exe seul, pour les tests d'installation de la CI (non livré)
+        uses: actions/upload-artifact@v4
+        with:
+          name: interne-tests-HeptagonesLM-exe
+          path: dist/HeptagonesLM.exe
+          retention-days: 3
 
   setup-windows:
     name: Installation réelle sur Windows Server (assistant)
@@ -213,7 +219,7 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
-          name: HeptagonesLM-windows
+          name: HeptagonesLM-Setup
           path: livrables
 
       - name: Préparation (compte de service, groupe, certificat, DNS, faux lmutil)
@@ -252,53 +258,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Installation : code $LASTEXITCODE" }
 
       - name: Contrôles après installation
-        run: |
-          Get-ScheduledTask -TaskPath "\HeptagonesLM\" | Format-Table TaskName, State, @{n='Compte';e={$_.Principal.UserId}}
-          & "$env:windir\system32\inetsrv\appcmd.exe" list site
-          # Authentification unique : IIS (Windows) -> module HeptagonesLMUserHeader -> HeptagonesLM (en-tête X-Remote-User)
-          $url = "https://heptagoneslm.ci.local/api/me"
-          function Get-Me([string[]]$extra) {
-            $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" @extra -o me.json -w "%{http_code}" $url
-            $body = Get-Content me.json -Raw
-            Write-Host "[$code] $body"
-            if ($code -ne "200") { throw "GET /api/me via IIS : $code" }
-            return $body | ConvertFrom-Json
-          }
-          $me = Get-Me @()
-          if ($me.auth -ne "header" -or $me.user -ne "ci_lecteur") { throw "Authentification unique non transmise" }
-          # En-tête forgé par le client : ignoré (remplacé par l'utilisateur authentifié)
-          $me = Get-Me @("-H", "X-Remote-User: administrateur")
-          if ($me.user -ne "ci_lecteur") { throw "en-tête X-Remote-User du client accepté" }
-          # Test d'accès depuis un poste (/acces) : méthode transmise par le module, résultat enregistré
-          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o acces.html -w "%{http_code}" https://heptagoneslm.ci.local/acces
-          if ($code -ne "200") { throw "page /acces : $code" }
-          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o test.json -w "%{http_code}" https://heptagoneslm.ci.local/api/access-test
-          Write-Host "[$code] $(Get-Content test.json -Raw)"
-          $t = Get-Content test.json -Raw | ConvertFrom-Json
-          if ($code -ne "200" -or $t.method -ne "NTLM" -or $t.user -ne "ci_lecteur") { throw "test d'accès : méthode ou utilisateur non transmis" }
-          Set-Content body.json '{"prompted": false}' -Encoding ascii
-          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -H "Content-Type: application/json" -H "X-HeptagonesLM: 1" `
-            --data-binary "@body.json" -o rec.json -w "%{http_code}" https://heptagoneslm.ci.local/api/access-test
-          Write-Host "[$code] $(Get-Content rec.json -Raw)"
-          if ($code -ne "200") { throw "enregistrement du test d'accès : $code" }
-          # Authentifié mais hors du groupe autorisé : refus par IIS
-          $code = curl.exe -sk --ntlm -u "svc_heptagoneslm:$env:SVC_PWD" -o NUL -w "%{http_code}" $url
-          Write-Host "Hors du groupe : $code"
-          if ($code -ne "401") { throw "accès accordé hors du groupe ($code)" }
-          # Sans identifiants : refus par IIS
-          try { Invoke-WebRequest "https://heptagoneslm.ci.local/" -SkipCertificateCheck -ErrorAction Stop; throw "accès anonyme accepté" }
-          catch { if ($_.Exception.Response.StatusCode.value__ -ne 401) { throw $_ } }
-          # Collecte planifiée exécutée par le compte de service
-          Start-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte"
-          # Attente de la fin réelle de la tâche (démarrage de l'exécutable variable selon l'antivirus)
-          $task = Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte"
-          for ($i = 0; $i -lt 90; $i++) {
-            Start-Sleep 2
-            $info = $task | Get-ScheduledTaskInfo
-            if ((Get-ScheduledTask -TaskPath "\HeptagonesLM\" -TaskName "HeptagonesLM - Collecte").State -ne "Running" -and $info.LastTaskResult -ne 267009) { break }
-          }
-          Write-Host "Collecte planifiée : dernier résultat $($info.LastTaskResult)"
-          if ($info.LastTaskResult -ne 0) { Get-Content C:\HeptagonesLM\logs\heptagoneslm.log -Tail 40; throw "collecte planifiée en échec" }
+        run: ./tests/windows/post_install_checks.ps1
 
       - name: Relance de l'installation (idempotence)
         run: |
@@ -322,6 +282,120 @@ jobs:
             C:/HeptagonesLM/logs/
             C:/HeptagonesLM/heptagoneslm.yaml
             C:/HeptagonesLM/iis/web.config
+          if-no-files-found: warn
+
+  setup-windows-gui:
+    # Installation réelle (Windows Server, sans --simulate) par l'assistant graphique, pilotée par un
+    # navigateur et filmée : vidéo, captures et déroulé horodaté publiés dans « installation-reelle ».
+    name: Installation réelle filmée (assistant graphique)
+    needs: exe
+    runs-on: windows-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # comptes locaux jetables, propres à la CI
+      PUBLIC_HOST: heptagoneslm.ci.local
+      TOUR_USER: ci_lecteur
+      EXPECT_LMUTIL: 'C:\Flexlm\lmutil.exe'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: HeptagonesLM-Setup
+          path: livrables
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: interne-tests-HeptagonesLM-exe
+          path: livrables/dist
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Navigateur de test (Playwright, Chromium)
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1
+          npx playwright install chromium
+
+      - name: Préparation (compte de service, groupe, certificat, DNS, lmutil.exe de test)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = "Stop"
+          $secure = ConvertTo-SecureString $env:SVC_PWD -AsPlainText -Force
+          New-LocalUser -Name svc_heptagoneslm -Password $secure -PasswordNeverExpires -UserMayNotChangePassword | Out-Null
+          New-LocalGroup -Name HeptagonesLM_Lecteurs | Out-Null
+          New-LocalUser -Name ci_lecteur -Password $secure -PasswordNeverExpires | Out-Null
+          Add-LocalGroupMember -Group HeptagonesLM_Lecteurs -Member ci_lecteur
+          $cert = New-SelfSignedCertificate -DnsName $env:PUBLIC_HOST -CertStoreLocation Cert:\LocalMachine\My
+          Add-Content C:\Windows\System32\drivers\etc\hosts "127.0.0.1 $env:PUBLIC_HOST"
+          New-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa -Name DisableLoopbackCheck -Value 1 -PropertyType DWord -Force | Out-Null
+          # Seul élément de test : il n'existe pas de serveur FlexLM sur les machines GitHub. Ce lmutil.exe
+          # (placé dans C:\Flexlm, à trouver par le bouton « Rechercher l'outil ») relaie vers
+          # « HeptagonesLM.exe fake-lmutil », qui répond comme lmstat avec les données de la démonstration.
+          New-Item -ItemType Directory C:\ci, C:\Flexlm -Force | Out-Null
+          Copy-Item livrables\dist\HeptagonesLM.exe C:\ci\HeptagonesLM.exe
+          $src = @'
+          using System; using System.Diagnostics; using System.Linq;
+          class LmutilTest {
+            static int Main(string[] args) {
+              var psi = new ProcessStartInfo(@"C:\ci\HeptagonesLM.exe", "fake-lmutil " + string.Join(" ", args.Select(a => "\"" + a + "\"")));
+              psi.UseShellExecute = false;
+              var p = Process.Start(psi); p.WaitForExit(); return p.ExitCode;
+            }
+          }
+          '@
+          Set-Content C:\ci\lmutil.cs $src -Encoding utf8
+          & "$env:windir\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /out:C:\Flexlm\lmutil.exe C:\ci\lmutil.cs
+          if ($LASTEXITCODE -ne 0) { throw "compilation de lmutil.exe" }
+          # Sortie complète d'abord (couper le tube interrompt le programme : code de sortie 1)
+          $sortie = & C:\Flexlm\lmutil.exe lmstat -a -c 27000@licsrv-adsk
+          if ($LASTEXITCODE -ne 0) { throw "lmutil.exe de test : code $LASTEXITCODE" }
+          $sortie | Select-Object -First 4
+          Add-Content $env:GITHUB_ENV "CERT_THUMB=$($cert.Thumbprint)"
+          Add-Content $env:GITHUB_ENV "SVC_ACCOUNT=$env:COMPUTERNAME\svc_heptagoneslm"
+          Add-Content $env:GITHUB_ENV "ACCESS_GROUP=$env:COMPUTERNAME\HeptagonesLM_Lecteurs"
+
+      - name: Assistant d'installation réel, piloté par le navigateur et filmé
+        timeout-minutes: 50
+        run: |
+          $p = Start-Process .\livrables\dist\HeptagonesLM-Setup.exe -ArgumentList "setup", "--no-open", "--port", "8792", "--token", "ci-reel" `
+               -RedirectStandardOutput setup-gui.log -RedirectStandardError setup-gui.err -PassThru
+          for ($i = 0; $i -lt 90; $i++) {
+            if ((curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8792/setup.css) -ne "000") { break }
+            Start-Sleep 1
+          }
+          node tests/ui/setup_real.cjs http://127.0.0.1:8792 ci-reel installation-reelle
+          $code = $LASTEXITCODE
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          if ($code -ne 0) { Get-Content setup-gui.log, setup-gui.err -Tail 60 -ErrorAction SilentlyContinue; throw "parcours réel de l'assistant en échec" }
+
+      - name: Contrôles après installation (SSO via IIS, groupes, collecte par le compte de service)
+        run: ./tests/windows/post_install_checks.ps1
+
+      - name: Visite filmée de l'interface installée (IIS, connexion Windows)
+        continue-on-error: true
+        run: node tests/ui/web_real_tour.cjs installation-reelle
+
+      - name: Regroupement des journaux d'installation
+        if: always()
+        run: |
+          # Un artefact ne peut pas mélanger l'espace de travail (D:) et C: : copie dans le dossier publié
+          $dest = New-Item -ItemType Directory installation-reelle\installation -Force
+          foreach ($f in "setup-gui.log", "setup-gui.err", "C:\HeptagonesLM\heptagoneslm.yaml", "C:\HeptagonesLM\iis\web.config") {
+            if (Test-Path $f) { Copy-Item $f $dest }
+          }
+          if (Test-Path C:\HeptagonesLM\logs) { Copy-Item C:\HeptagonesLM\logs (Join-Path $dest logs) -Recurse }
+
+      - name: Publication de la vidéo, des captures et des journaux
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installation-reelle
+          path: installation-reelle/
           if-no-files-found: warn
 
   sqlserver:
@@ -391,6 +465,43 @@ jobs:
           heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml collect
           heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml purge
           heptagoneslm -c demo-mssql/heptagoneslm.demo.yaml report --period last-7d -o demo-mssql/reports/HeptagonesLM_mssql_7j.xlsx
+
+      - name: Alertes et tickets ITSM sur SQL Server (évaluation, état, anti-répétition)
+        run: |
+          python - <<'EOF'
+          import json, threading
+          from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+          import yaml
+          from heptagoneslm.alerts import check_and_notify
+          from heptagoneslm.config import parse_config
+          from heptagoneslm.storage import Database
+          hooks = []
+          class Hook(BaseHTTPRequestHandler):
+              def log_message(self, *a): pass
+              def do_POST(self):
+                  hooks.append(json.loads(self.rfile.read(int(self.headers["Content-Length"]))))
+                  self.send_response(200); self.send_header("Content-Length", "0"); self.end_headers()
+          srv = ThreadingHTTPServer(("127.0.0.1", 0), Hook)
+          threading.Thread(target=srv.serve_forever, daemon=True).start()
+          raw = yaml.safe_load(open("demo-mssql/heptagoneslm.demo.yaml", encoding="utf-8"))
+          raw["email"] = {"smtp_host": "localhost", "sender": "ci@entreprise.local"}
+          raw["alerts"] = {"recipients": ["ci@entreprise.local"], "expiry_days": 400,
+                           "itsm": [{"type": "webhook", "url": f"http://127.0.0.1:{srv.server_address[1]}/hook",
+                                     "allow_http": True, "min_severity": "warning"}]}
+          cfg = parse_config(raw)
+          sent = []
+          with Database(cfg.database.connection_string) as db:
+              first = check_and_notify(cfg, db, sender=lambda msg, c: sent.append(msg))
+              again = check_and_notify(cfg, db, sender=lambda msg, c: sent.append(msg))
+              states = db.scalar("SELECT COUNT(*) FROM alert_state")
+              tickets = db.scalar("SELECT COUNT(*) FROM itsm_ticket WHERE status = 'OPEN'")
+          print(first.status, *[f"[{a.severity}] {a.title}" for a in first.alerts], sep="\n  ")
+          print("tickets :", *first.tickets, sep="\n  ")
+          print("2e évaluation :", again.status, "- états :", states, "- tickets ouverts :", tickets)
+          assert first.status == "SENT" and len(sent) == 1, first
+          assert again.status == "NONE" and not again.tickets, (again.status, again.tickets)
+          assert states >= len(first.alerts) and tickets == len(hooks) >= 1, (states, tickets, len(hooks))
+          EOF
 
       - name: Verrou de collecte (deux collectes simultanées)
         run: |

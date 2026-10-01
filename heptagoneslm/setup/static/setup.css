@@ -175,7 +175,7 @@ details summary { cursor: pointer; font-weight: 600; font-size: 13.5px; }
 
 table.servers { width: 100%; border-collapse: collapse; }
 table.servers th { position: static; background: none; cursor: default; padding: 6px 8px; font-size: 12px; }
-table.servers th:nth-child(1) { width: 22%; } table.servers th:nth-child(2) { width: 30%; }
+table.servers th:nth-child(1) { width: 20%; } table.servers th:nth-child(2) { width: 112px; } table.servers th:nth-child(3) { width: 26%; }
 table.servers td { padding: 6px 8px; border-bottom: 1px solid var(--grid); vertical-align: top; white-space: normal; }
 table.servers input[type="text"] { width: 100%; height: 36px; }
 table.servers .result { margin-top: 6px; min-width: 0; }
@@ -200,3 +200,17 @@ table.servers .toggle span { white-space: nowrap; }
 .cmd code { flex: 1; min-width: 0; font: 12px/1.5 Consolas, "Cascadia Mono", monospace; background: var(--surface-2);
   border: 1px solid var(--grid); border-radius: 8px; padding: 6px 9px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .cmd .btn { flex-shrink: 0; }
+
+/* Recherche de lmutil / rlmutil */
+#find-tools { display: inline-flex; align-items: center; gap: 8px; }
+#find-tools svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+#tools-found { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+#tools-found:empty { display: none; }
+table.tools-found { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; }
+table.tools-found th:nth-child(1) { width: 96px; }
+table.tools-found th:nth-child(3) { width: 170px; }
+table.tools-found th:nth-child(4) { width: 180px; }
+table.tools-found th { text-align: left; font-weight: 600; color: var(--text-2); padding: 6px 8px; border-bottom: 1px solid var(--border); }
+table.tools-found td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
+table.tools-found code { word-break: break-all; white-space: normal; }
+table.tools-found td:last-child { text-align: right; white-space: nowrap; }

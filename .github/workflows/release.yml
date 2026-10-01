@@ -84,12 +84,13 @@ jobs:
       - name: Paquet de distribution
         run: |
           mkdir -p paquet/HeptagonesLM/sql paquet/HeptagonesLM/scripts
-          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/HeptagonesLM/
+          # Un seul exécutable livré : l'assistant (il contient HeptagonesLM.exe et l'installe sur le serveur)
+          cp dist/HeptagonesLM-Setup.exe README.md LICENSE CHANGELOG.md paquet/HeptagonesLM/
           cp config/heptagoneslm.example.yaml paquet/HeptagonesLM/heptagoneslm.example.yaml
           cp sql/sqlserver/*.sql paquet/HeptagonesLM/sql/
           cp scripts/*.ps1 scripts/*.bat paquet/HeptagonesLM/scripts/
           mkdir -p livrables
-          cp dist/HeptagonesLM.exe dist/HeptagonesLM-Setup.exe livrables/
+          cp dist/HeptagonesLM-Setup.exe livrables/
           (cd paquet && 7z a -tzip "../livrables/HeptagonesLM-${TAG}-windows.zip" HeptagonesLM > /dev/null)
 
       - uses: actions/upload-artifact@v4
@@ -113,7 +114,7 @@ jobs:
       - name: Empreintes SHA-256
         run: |
           cd livrables
-          sha256sum HeptagonesLM.exe HeptagonesLM-Setup.exe "HeptagonesLM-${TAG}-windows.zip" > SHA256SUMS
+          sha256sum HeptagonesLM-Setup.exe "HeptagonesLM-${TAG}-windows.zip" > SHA256SUMS
           cat SHA256SUMS
 
       - name: Publication
@@ -122,7 +123,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           cd livrables
-          files=(HeptagonesLM-Setup.exe HeptagonesLM.exe "HeptagonesLM-${TAG}-windows.zip" SHA256SUMS)
+          files=(HeptagonesLM-Setup.exe "HeptagonesLM-${TAG}-windows.zip" SHA256SUMS)
           if gh release view "$TAG" > /dev/null 2>&1; then
             # Release déjà créée (depuis l'interface GitHub) : on y joint les fichiers construits
             gh release upload "$TAG" "${files[@]}" --clobber

@@ -20,7 +20,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from heptagoneslm import __version__
-from heptagoneslm.setup import probes
+from heptagoneslm.setup import probes, toolscan
 from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.checks import apply_fix, blocking, run_checks
 from heptagoneslm.setup.installer import Installer, build_plan, schedule_label, _tasks, Context
@@ -46,6 +46,7 @@ SIM_SERVERS = [{"name": "AUTODESK", "port_at_host": "27000@licsrv-adsk", "collec
 class SetupApp:
     def __init__(self, system: System, token: str | None = None):
         self.system = system
+        self.tools_found: list[dict] = []
         self.token = token or secrets.token_urlsafe(32)
         self.answers = Answers()
         self.installer: Installer | None = None
@@ -221,6 +222,13 @@ class SetupHandler(BaseHTTPRequestHandler):
                                    "blocking": len(blocking(checks))})
             if path == "/api/test":
                 return self._json(self._test(a, body))
+            if path == "/api/tools/find":
+                hosts = toolscan.hosts_of(a.servers)
+                result = app.system.find_tools(hosts)
+                app.tools_found = result["found"]
+                return self._json({"hosts": hosts, **result})
+            if path == "/api/tools/use":
+                return self._json(self._use_tool(a, str(body.get("path", ""))))
             if path == "/api/preview":
                 errors = a.validate()
                 return self._json({"errors": errors, "yaml": a.yaml_text() if not errors else "",
@@ -256,6 +264,24 @@ class SetupHandler(BaseHTTPRequestHandler):
                               HTTPStatus.INTERNAL_SERVER_ERROR)
         return self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)
 
+    def _use_tool(self, a: Answers, path: str) -> dict:
+        """Retient un outil trouvé par la recherche ; copié dans <installation>\\bin s'il est distant."""
+        row = next((r for r in self.app.tools_found if r["path"].lower() == path.lower()), None)
+        if row is None:
+            raise SetupError("Outil inconnu : relancer la recherche")
+        field = f"{row['tool']}_path"
+        if row["local"]:
+            target = row["path"]
+        else:
+            target = a.path("bin", toolscan.TOOLS[row["tool"]])
+            try:
+                self.app.system.makedirs(a.path("bin"))
+                self.app.system.copy_file(row["path"], target)
+            except OSError as exc:
+                raise SetupError(f"Copie impossible depuis {row['host']} : {exc.strerror or exc}") from exc
+        setattr(self.app.answers, field, target)
+        return {"field": field, "path": target, "copied": not row["local"], "host": row["host"]}
+
     def _test(self, a: Answers, body: dict) -> dict:
         kind, s = body.get("kind"), self.app.system
         if kind == "account":
@@ -263,6 +289,8 @@ class SetupHandler(BaseHTTPRequestHandler):
         if kind == "database":
             return probes.test_database(s, a)
         if kind == "lmstat":
+            if body.get("license_type") == "rlm":
+                return probes.test_lmstat(s, a.rlmutil_path, str(body.get("port_at_host", "")), "rlm")
             return probes.test_lmstat(s, a.lmutil_path, str(body.get("port_at_host", "")))
         if kind == "certificate":
             return probes.test_certificate(s, a)

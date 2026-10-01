@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import re
 import socket
+import time
 from datetime import datetime, timedelta
 
 import yaml
@@ -14,6 +15,7 @@ from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.checks import Check
 from heptagoneslm.setup.installer import WEB_TASK, Context, _tasks, backend_url, firewall_rule_name
 from heptagoneslm.setup.system import SetupError, System
+from heptagoneslm.storage.schema import SCHEMA_VERSION
 
 NEVER_RUN = 267011        # SCHED_S_TASK_HAS_NOT_RUN
 RUNNING = 267009          # SCHED_S_TASK_RUNNING
@@ -74,7 +76,7 @@ def verify(system: System, a: Answers) -> dict:
     try:
         st = db_status(system, a)
         schema = st.get("schema")
-        add("schema", "Base de données", "Schéma de la base", "ok" if schema and schema >= 3 else "error",
+        add("schema", "Base de données", "Schéma de la base", "ok" if schema and schema >= SCHEMA_VERSION else "error",
             f"version {schema}" if schema else "schéma absent : relancer l'initialisation")
         for s in a.servers:
             info = st["servers"].get(s.name)
@@ -124,7 +126,15 @@ def verify(system: System, a: Answers) -> dict:
         else:
             add("iis_site", "IIS", f"Site « {a.iis_site} »", "ok" if site.get("state") == "Started" else "error",
                 f"{site.get('state')} · " + ", ".join(site.get("bindings") or []))
-            probe = system.http_status(f"https://127.0.0.1:{a.iis_port}/", sni_host=a.public_host)
+            # Premier appel après la création du site : IIS démarre le pool et compile le module
+            # (App_Code) ; quelques nouvelles tentatives avant de conclure.
+            probe, reason = None, None
+            for attempt in range(4):
+                probe = system.http_status(f"https://127.0.0.1:{a.iis_port}/", sni_host=a.public_host, timeout=20)
+                reason = getattr(system, "last_http_error", None)
+                if probe or system.simulated:
+                    break
+                time.sleep(5)
             if probe in (200, 401):
                 add("iis_chain", "IIS", "HTTPS et authentification Windows", "ok",
                     "IIS demande l'authentification Windows puis relaie vers HeptagonesLM" if probe == 401 else "Page servie")
@@ -133,7 +143,8 @@ def verify(system: System, a: Answers) -> dict:
                     "502 : IIS ne joint pas HeptagonesLM (proxy ARR, port interne)")
             else:
                 add("iis_chain", "IIS", "HTTPS et authentification Windows", "error",
-                    f"Réponse inattendue : {probe or 'aucune'} (liaison HTTPS, certificat, web.config)")
+                    f"Réponse inattendue : {probe or 'aucune'}" + (f" — {reason}" if reason else "")
+                    + " (liaison HTTPS, certificat, web.config)")
     if a.open_firewall and a.web_mode != "local":
         try:
             ok = system.firewall_exists(firewall_rule_name(a))

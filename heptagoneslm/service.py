@@ -90,6 +90,9 @@ class CollectionService:
             publisher=rule.publisher if rule else None,
         )
 
+    def _host_id(self, hostname: str) -> int:
+        return self.repo.get_or_create_host(hostname, self.config.resolve_site(hostname))
+
     # -- collecte ---------------------------------------------------------
 
     def collect_all(self, only: list[str] | None = None) -> list[RunResult]:
@@ -152,6 +155,7 @@ class CollectionService:
             fid = self._feature_id(server_id, feat.name, now, feat.vendor, feat.version)
             self.repo.set_feature_expiry(fid, feat.expires)
             self.repo.add_snapshot(fid, now, feat.issued, feat.in_use, feat.queued)
+            self.repo.replace_reservations(fid, feat.reservations, now)
             for co in feat.checkouts:
                 current[co.session_key()] = (co, fid)
 
@@ -180,13 +184,14 @@ class CollectionService:
             self.repo.open_session(
                 fid,
                 self.repo.get_or_create_user(co.user),
-                self.repo.get_or_create_host(co.host),
+                self._host_id(co.host),
                 checkout_time=start,
                 seen_at=now,
                 source=source,
                 count=co.count,
                 display=co.display,
                 handle=co.handle,
+                borrowed=co.borrowed,
             )
         return len(status.features)
 
@@ -219,7 +224,7 @@ class CollectionService:
 
             fid = self._feature_id(server_id, e.feature, e.event_time, e.vendor)
             uid = self.repo.get_or_create_user(e.user or "")
-            hid = self.repo.get_or_create_host(e.host or "")
+            hid = self._host_id(e.host or "")
 
             if e.event_type in PERSISTED_EVENT_TYPES:
                 self.repo.add_event(server_id, e.event_time, e.event_type.value, fid, uid, hid, e.count, e.detail)
@@ -257,5 +262,9 @@ class CollectionService:
             )
 
     def apply_product_mapping(self) -> int:
+        """Réapplique le référentiel (produits et sites) à tout l'historique."""
         with self.db.transaction():
-            return self.repo.apply_product_mapping(self.config.resolve_product)
+            changed = self.repo.apply_product_mapping(self.config.resolve_product)
+            if self.config.sites:
+                changed += self.repo.apply_site_mapping(self.config.resolve_site)
+            return changed

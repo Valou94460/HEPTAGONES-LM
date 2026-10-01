@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version testée** | 26.1.1 |
+| **Version testée** | 26.3.0 |
 | **Objet** | Valider HeptagonesLM avant la mise en production : collecte FlexLM, historisation SQL Server, interface web, exports, exécutable Windows, exploitation |
 | **Documents liés** | [README](../README.md) · [Architecture](ARCHITECTURE.md) · [Configuration d'exemple](../config/heptagoneslm.example.yaml) |
 
@@ -129,7 +129,7 @@ sur E3 pour les cas marqués **[E3]**.
 
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
-| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 26.1.1` | ☐ |
+| INS-01 🔴 | Exécutable autonome | Copier `HeptagonesLM.exe` sur un poste **sans Python** ; `HeptagonesLM.exe --version` | Affiche `HeptagonesLM 26.3.0` | ☐ |
 | INS-02 | Installation Python | `py -3 -m venv venv` ; `venv\Scripts\pip install .` ; `heptagoneslm --version` | Installation sans erreur, version affichée | ☐ |
 | INS-03 🔴 [E3] | Création de la base | DBA : `sqlcmd -S … -i sql\sqlserver\00_create_database.sql` (base de test) | Base et compte de service créés, rôles attribués | ☐ |
 | INS-04 🔴 [E3] | Création du schéma | `HeptagonesLM.exe -c heptagoneslm.yaml init-db` | Message « Schéma créé / mis à jour, N serveur(s) » ; tables et 3 vues visibles dans SSMS | ☐ |
@@ -306,6 +306,62 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 
 ---
 
+### 5.10 bis Alertes immédiates (ALR)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ALR-01 🔴 | Aperçu | `check-alerts --dry-run apercu` avec un serveur en échec | Un `.eml` « Collecte en échec : <serveur> » ; rien n'est envoyé ni mémorisé | ☐ |
+| ALR-02 🔴 [E3] | Collecte en échec puis rétablie | Serveur fictif `27000@inexistant` ; attendre deux collectes ; puis le retirer | Un seul message « Collecte en échec » (pas de répétition à chaque collecte), puis un message « Collecte rétablie » | ☐ |
+| ALR-03 🔴 [E3] | Refus | Provoquer un refus (toutes les licences d'un produit prises) | Message « N refus de licence : <produit> » avec les utilisateurs, à la collecte suivante | ☐ |
+| ALR-04 [E3] | Saturation | Utiliser tous les jetons d'une feature | Message « Plus aucun jeton disponible » ; pas de rappel avant `repeat_hours` | ☐ |
+| ALR-05 | Échéance | Licence expirant sous 30 jours | Un message au palier J-30, un au palier J-7, un à l'expiration — pas de rappel quotidien | ☐ |
+| ALR-06 [E3] | SMTP indisponible | `smtp_host` erroné pendant une alerte | La collecte reste `OK` ; échec tracé (`report_delivery`, abonnement « Alertes ») ; alerte envoyée dès le retour du SMTP | ☐ |
+| ALR-07 | Filtres | `types: [expiry]`, `servers: [ANSYS]` | Seules les échéances Ansys sont signalées | ☐ |
+
+### 5.10 quater Tickets ITSM (ITSM)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ITSM-01 🔴 [E3] | Test de connexion | `test-itsm` pour chaque connecteur | `OK` : ticket de test ouvert (numéro et lien), commenté puis résolu dans l'outil | ☐ |
+| ITSM-02 🔴 [E3] | Ouverture | Provoquer une collecte en échec (serveur fictif) | Un seul ticket ouvert (ServiceNow : incident, urgence 1 ; Jira : ticket du projet ; GLPI : incident), avec description et lien vers le tableau de bord | ☐ |
+| ITSM-03 [E3] | Pas de doublon | Laisser la panne pendant plusieurs collectes | Aucun nouveau ticket ; commentaire de rappel après `repeat_hours` | ☐ |
+| ITSM-04 🔴 [E3] | Résolution | Rétablir le serveur | Ticket résolu automatiquement (ServiceNow : état « Résolu » ; Jira : transition de résolution ; GLPI : solution ajoutée) | ☐ |
+| ITSM-05 [E3] | Refus | Provoquer des refus, puis plus aucun pendant 24 h | Ticket ouvert, puis résolu après 24 h sans nouveau refus | ☐ |
+| ITSM-06 [E3] | Outil indisponible | Couper l'accès à l'outil ITSM pendant une alerte, puis le rétablir | Erreur journalisée, e-mail envoyé ; ticket ouvert à la collecte suivant le rétablissement | ☐ |
+| ITSM-07 | Gravité minimale | `min_severity: serious` (défaut) | Saturation et échéances à plus de 7 jours : pas de ticket ; pannes, refus, échéances proches : ticket | ☐ |
+| ITSM-08 [E3] | Teams / Slack | Connecteur `webhook` au format `teams` ou `slack` | Message reçu dans le canal à l'ouverture et à la résolution | ☐ |
+
+### 5.10 quinquies Rôles (ROLE)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ROLE-01 🔴 [E3] | Responsable de service | Compte membre du groupe d'un rôle `departments` ; ouvrir l'interface | Bandeau « Vue limitée — Responsable de service : … » ; filtres limités à ses services ; sessions, répartition, refus, En direct : uniquement ses utilisateurs | ☐ |
+| ROLE-02 🔴 [E3] | Hors périmètre | Modifier l'URL : `department=<autre service>` | Refus 403 « hors de votre périmètre », ligne dans le journal d'audit | ☐ |
+| ROLE-03 🔴 [E3] | Exports | Export CSV / Excel d'une vue ; classeur complet | Exports limités au périmètre ; classeur complet refusé | ☐ |
+| ROLE-04 [E3] | Lecteur / administrateur | Compte du groupe `readers` / `admins` | Vue globale | ☐ |
+| ROLE-05 [E3] | Sans rôle | Compte autorisé par IIS mais sans rôle (`default: none`) | Interface refusée (403 « pas de rôle ») ; page `/acces` accessible | ☐ |
+| ROLE-06 🔴 [E3] | Groupes via IIS | Mode `header` : `/api/me` | `groups` > 0 ; un en-tête `X-Remote-Groups` ajouté à la main est ignoré | ☐ |
+
+### 5.10 sexies Emprunts, réservations, sites, licences inutilisées (OPT)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| OPT-01 [E3] | Licence empruntée | Emprunter une licence (`lmborrow`) puis collecter | Session marquée « Emprunt » (Sessions) et « emprunt » (En direct) ; indicateur « Jetons empruntés » | ☐ |
+| OPT-02 🔴 [E3] | Réservations | Serveur dont le fichier d'options contient des `RESERVE` | Vue Réservations : bénéficiaire, jetons, taux d'usage ; conforme aux lignes `RESERVATION` de lmstat | ☐ |
+| OPT-03 [E3] | Réservation retirée | Supprimer une ligne `RESERVE`, relire les options (`lmreread`), collecter | Réservation disparue de la vue | ☐ |
+| OPT-04 🔴 [E3] | Sites | Règles `sites` ; `apply-products` | Filtre « Sites » proposé ; Répartition par site ; sessions filtrées sur un site | ☐ |
+| OPT-05 🔴 | Licences inutilisées | Période où une feature émise n'a jamais été utilisée | Présente dans « Licences inutilisées » avec son coût annuel ; absente dès la première utilisation | ☐ |
+
+### 5.10 ter Serveurs RLM (RLM)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| RLM-01 🔴 [E3] | Test dans l'assistant | Étape « Serveurs de licences » : type RLM, chemin de `rlmutil.exe`, « Tester » | Nombre de licences et de jetons, version RLM, démons ISV | ☐ |
+| RLM-02 🔴 [E3] | Collecte | `collect` avec un serveur `license_type: rlm` | Ligne `rlmstat OK` ; licences, jetons et utilisateurs visibles dans l'interface (En direct, Synthèse) | ☐ |
+| RLM-03 🔴 [E3] | Exactitude | Comparer « En direct » à `rlmutil rlmstat -a -c port@serveur` | Mêmes jetons émis / utilisés (pools additionnés par licence), mêmes utilisateurs et postes | ☐ |
+| RLM-04 [E3] | Échéances | Comparer « Serveurs et échéances » aux champs `exp:` des pools | Échéance la plus proche retenue ; `permanent` absent | ☐ |
+| RLM-05 | Serveur injoignable | `port_at_host` erroné | `ERROR` « Serveur RLM … injoignable », les autres serveurs `OK` | ☐ |
+
 ### 5.11 Assistant d'installation (INST)
 
 Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
@@ -440,7 +496,7 @@ achats, DSI) sur les données réelles (E3), après au moins 2 semaines de colle
 
 ### 11.2 Suivi des anomalies
 
-Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/FREE-LM/issues/new/choose)
+Chaque anomalie est ouverte en [issue GitHub](https://github.com/Valou94460/HEPTAGONES-LM/issues/new/choose)
 (modèle « Signaler un bug ») avec l'identifiant du cas (ex. `[COL-03]`), la gravité et
 les journaux (`heptagoneslm.log`, lancé avec `-v`). Pour un problème de parsing, joindre la
 sortie `lmstat` ou l'extrait de log **anonymisé** : il deviendra un test automatisé.

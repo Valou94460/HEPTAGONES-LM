@@ -98,6 +98,16 @@ class Repository:
         )
         return fid
 
+    def has_table(self, table: str) -> bool:
+        """Vrai si la table existe (base pas encore migrée par init-db sinon)."""
+        if self.db.dialect == "mssql":
+            ok = self.db.scalar("SELECT OBJECT_ID(?, 'U')", [f"dbo.{table}"]) is not None
+        else:
+            ok = bool(self.db.scalar("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", [table]))
+        if not ok:
+            log.warning("Table %s absente : exécuter « heptagoneslm init-db » pour mettre à jour le schéma", table)
+        return ok
+
     def has_column(self, table: str, column: str) -> bool:
         """Vrai si la colonne existe (base pas encore migrée par init-db sinon)."""
         key = (table, column)
@@ -129,14 +139,14 @@ class Repository:
             self._users[key] = uid
         return uid
 
-    def get_or_create_host(self, hostname: str) -> int:
+    def get_or_create_host(self, hostname: str, site: str | None = None) -> int:
         key = _norm(hostname) or "(inconnu)"
         hid = self._hosts.get(key)
         if hid is None:
             row = self.db.query("SELECT id FROM workstation WHERE hostname = ?", [key])
             hid = int(row[0][0]) if row else self.db.insert(
                 "workstation",
-                {"hostname": key, "first_seen": datetime.now().replace(microsecond=0)},
+                {"hostname": key, "site": site, "first_seen": datetime.now().replace(microsecond=0)},
             )
             self._hosts[key] = hid
         return hid
@@ -224,22 +234,44 @@ class Repository:
         count: int = 1,
         display: str | None = None,
         handle: str | None = None,
+        borrowed: bool = False,
     ) -> int:
-        return self.db.insert(
-            "license_session",
-            {
-                "feature_id": feature_id,
-                "user_id": user_id,
-                "workstation_id": workstation_id,
-                "display": display,
-                "handle": handle,
-                "license_count": count,
-                "checkout_time": checkout_time,
-                "checkin_time": None,
-                "last_seen": seen_at,
-                "source": source,
-            },
-        )
+        values = {
+            "feature_id": feature_id,
+            "user_id": user_id,
+            "workstation_id": workstation_id,
+            "display": display,
+            "handle": handle,
+            "license_count": count,
+            "checkout_time": checkout_time,
+            "checkin_time": None,
+            "last_seen": seen_at,
+            "source": source,
+        }
+        if borrowed and self.has_column("license_session", "borrowed"):
+            values["borrowed"] = 1
+        return self.db.insert("license_session", values)
+
+    def replace_reservations(self, feature_id: int, reservations, seen_at: datetime) -> None:
+        """Réservations d'une feature au dernier sondage (remplace les précédentes)."""
+        self.db.execute("DELETE FROM feature_reservation WHERE feature_id = ?", [feature_id])
+        merged: dict[tuple[str, str], int] = {}
+        for r in reservations:
+            key = (r.kind, r.name.lower() if r.kind in ("USER", "HOST") else r.name)
+            merged[key] = merged.get(key, 0) + r.count
+        self.db.executemany(
+            "INSERT INTO feature_reservation (feature_id, kind, name, reserved, updated_at) VALUES (?, ?, ?, ?, ?)",
+            [(feature_id, k, n, c, seen_at) for (k, n), c in merged.items()])
+
+    def apply_site_mapping(self, resolver) -> int:
+        """Réapplique les règles de site (config ``sites``) à tous les postes ; retourne le nombre modifié."""
+        changed = 0
+        for hid, hostname, site in self.db.query("SELECT id, hostname, site FROM workstation"):
+            new = resolver(hostname)
+            if new and new != site:
+                self.db.execute("UPDATE workstation SET site = ? WHERE id = ?", [new, hid])
+                changed += 1
+        return changed
 
     def touch_sessions(self, session_ids: list[int], seen_at: datetime) -> None:
         self.db.executemany(

@@ -9,11 +9,11 @@
     install_dir: "C:\\HeptagonesLM", service_account: "", service_password: "", collect_interval: 5,
     db_mode: "sqlserver", db_server: "", db_name: "HeptagonesLM", db_driver: "ODBC Driver 18 for SQL Server", db_auth: "windows",
     db_user: "", db_password: "", db_encrypt: true, db_trust_cert: false, db_create: true,
-    lmutil_path: "", servers: [],
+    lmutil_path: "", rlmutil_path: "", servers: [],
     web_mode: "iis", web_port: 8765, public_host: "", access_group: "", iis_site: "HeptagonesLM", iis_port: 443,
     iis_cert_thumbprint: "", tls_cert: "", tls_key: "", ldap_servers: [], base_dn: "", upn_suffix: "", open_firewall: true,
     email_enabled: false, smtp_host: "", smtp_port: 25, smtp_security: "starttls", smtp_user: "", smtp_password: "",
-    sender: "", recipients: [],
+    sender: "", recipients: [], email_alerts: true,
   };
   let info = null;
   let A = {};
@@ -22,6 +22,7 @@
   let preview = null, verification = null;
   let pollTimer = null, logCount = 0, install = { status: "idle" };
   const results = {};
+  let toolScan = null;                 // recherche de lmutil / rlmutil : {busy} | {found, hosts} | {error}
 
   /* -- Utilitaires ------------------------------------------------------------------------ */
   async function api(path, body) {
@@ -47,7 +48,7 @@
   const SEV = { ok: ["good", "✓"], warning: ["warning", "!"], error: ["critical", "✕"], info: ["info", "i"] };
   const dot = s => `<span class="status-dot sev-${(SEV[s] || SEV.info)[0]}" aria-hidden="true">${(SEV[s] || SEV.info)[1]}</span>`;
   const ICON = {
-    check: '<path d="M4 12l5 5L20 6"/>', db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    check: '<path d="M4 12l5 5L20 6"/>', search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>', db: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
     shield: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
@@ -117,7 +118,10 @@
     }));
     root.querySelectorAll("[data-test]").forEach(b => b.addEventListener("click", () => {
       const extra = {};
-      if (b.dataset.kind === "lmstat") extra.port_at_host = A.servers[+b.dataset.index]?.port_at_host || "";
+      if (b.dataset.kind === "lmstat") {
+        const srv = A.servers[+b.dataset.index] || {};
+        extra.port_at_host = srv.port_at_host || ""; extra.license_type = srv.license_type || "flexlm";
+      }
       if (b.dataset.kind === "ldap") { extra.username = $("ldap-user")?.value || ""; extra.password = $("ldap-pass")?.value || ""; }
       if (b.dataset.kind === "smtp") extra.to = (A.recipients || [])[0];
       runTest(b.dataset.test, b.dataset.kind, extra);
@@ -140,7 +144,7 @@
     { id: "checks", title: "Vérification du serveur", desc: "Contrôle des prérequis. Les éléments manquants peuvent être installés automatiquement.", render: renderChecks, enter: () => runChecks() },
     { id: "location", title: "Emplacement et compte de service", desc: "Dossier d'installation et compte Windows dédié qui exécutera les tâches de HeptagonesLM.", render: renderLocation, validate: "location" },
     { id: "database", title: "Base de données", desc: "L'historique est conservé dans SQL Server. L'assistant peut créer la base et les droits du compte de service.", render: renderDatabase, validate: "database" },
-    { id: "licenses", title: "Serveurs de licences", desc: "Serveurs FlexLM à surveiller. Testez chacun : l'assistant interroge lmstat comme le fera la collecte.", render: renderLicenses, validate: "licenses" },
+    { id: "licenses", title: "Serveurs de licences", desc: "Serveurs FlexLM ou RLM à surveiller. Testez chacun : l'assistant interroge lmstat ou rlmstat comme le fera la collecte.", render: renderLicenses, validate: "licenses" },
     { id: "web", title: "Interface web et IIS", desc: "Mode d'accès des utilisateurs à l'interface.", render: renderWeb, validate: "web" },
     { id: "email", title: "Rapport par e-mail", desc: "Envoi automatique du rapport mensuel (optionnel, modifiable plus tard).", render: renderEmail, validate: "email" },
     { id: "summary", title: "Récapitulatif", desc: "Vérifiez la configuration avant de lancer l'installation.", render: renderSummary, enter: () => loadSummary(), next: "Installer" },
@@ -200,7 +204,7 @@
     const feats = [
       ["shield", "Contrôle des prérequis", "Windows, droits, pilote ODBC, lmutil, IIS et ses modules ; installation automatique de ce qui manque."],
       ["db", "Base SQL Server", "Test de connexion, création de la base, de la connexion Windows et des droits du compte de service."],
-      ["server", "Serveurs de licences", "Déclaration et test en direct de chaque serveur FlexLM (lmstat)."],
+      ["server", "Serveurs de licences", "Déclaration et test en direct de chaque serveur FlexLM (lmstat) ou RLM (rlmstat)."],
       ["globe", "IIS et connexion Windows", "Site HTTPS, authentification unique, restriction à un groupe AD, pare-feu."],
       ["clock", "Tâches planifiées", "Collecte toutes les 5 minutes, rapport mensuel, e-mails, purge, interface permanente."],
       ["check", "Vérification finale", "Chaque composant est testé de bout en bout, avec un rapport d'installation."],
@@ -335,41 +339,103 @@
 
   /* 5. Serveurs de licences */
   function renderLicenses() {
-    if (!A.servers.length) A.servers.push({ name: "", port_at_host: "", collectors: ["lmstat"], log_path: "" });
+    if (!A.servers.length) A.servers.push({ name: "", port_at_host: "", collectors: ["lmstat"], log_path: "", license_type: "flexlm" });
     const found = info.lmutil_found || [];
-    const rows = A.servers.map((s, i) => `
+    const types = new Set(A.servers.map(s => s.license_type || "flexlm"));
+    const rows = A.servers.map((s, i) => {
+      const rlm = s.license_type === "rlm";
+      return `
       <tr>
-        <td><div class="f" data-f="servers.${i}.name"><input type="text" data-srv="${i}" data-key="name" value="${esc(s.name)}" placeholder="AUTODESK" aria-label="Nom du serveur"><span class="ferr"></span></div></td>
-        <td><div class="f" data-f="servers.${i}.port_at_host"><input type="text" data-srv="${i}" data-key="port_at_host" value="${esc(s.port_at_host)}" placeholder="27000@licsrv1" aria-label="Adresse port@serveur"><span class="ferr"></span></div></td>
-        <td><label class="toggle"><input type="checkbox" data-srv="${i}" data-key="log" ${s.collectors.includes("log") ? "checked" : ""}><span>Log debug</span></label>
-          ${s.collectors.includes("log") ? `<div class="f" data-f="servers.${i}.log_path" style="margin-top:6px"><input type="text" data-srv="${i}" data-key="log_path" value="${esc(s.log_path || "")}" placeholder="\\\\licsrv1\\logs$\\license.log"><span class="ferr"></span></div>` : ""}</td>
+        <td><div class="f" data-f="servers.${i}.name"><input type="text" data-srv="${i}" data-key="name" value="${esc(s.name)}" placeholder="${rlm ? "FOUNDRY" : "AUTODESK"}" aria-label="Nom du serveur"><span class="ferr"></span></div></td>
+        <td><div class="f" data-f="servers.${i}.license_type"><select data-srv="${i}" data-key="license_type" aria-label="Gestionnaire de licences">
+          <option value="flexlm" ${rlm ? "" : "selected"}>FlexLM</option><option value="rlm" ${rlm ? "selected" : ""}>RLM</option></select><span class="ferr"></span></div></td>
+        <td><div class="f" data-f="servers.${i}.port_at_host"><input type="text" data-srv="${i}" data-key="port_at_host" value="${esc(s.port_at_host)}" placeholder="${rlm ? "5053@licsrv3" : "27000@licsrv1"}" aria-label="Adresse port@serveur"><span class="ferr"></span></div></td>
+        <td>${rlm ? `<span class="muted">rlmstat</span>` : `<label class="toggle"><input type="checkbox" data-srv="${i}" data-key="log" ${s.collectors.includes("log") ? "checked" : ""}><span>Log debug</span></label>
+          ${s.collectors.includes("log") ? `<div class="f" data-f="servers.${i}.log_path" style="margin-top:6px"><input type="text" data-srv="${i}" data-key="log_path" value="${esc(s.log_path || "")}" placeholder="\\\\licsrv1\\logs$\\license.log"><span class="ferr"></span></div>` : ""}`}</td>
         <td style="width:240px"><button type="button" class="btn small" data-test="lm${i}" data-kind="lmstat" data-index="${i}">Tester</button>
           <div class="result" id="res-lm${i}">${renderResult(results["lm" + i])}</div></td>
         <td><button type="button" class="icon-x" data-del="${i}" title="Retirer" aria-label="Retirer ce serveur">×</button></td>
-      </tr>`).join("");
+      </tr>`; }).join("");
     return `
-      <div class="panel"><h2>Outil lmutil</h2><div class="form-grid">
-        ${input("lmutil_path", "Chemin de lmutil.exe", { full: true, hint: found.length ? `Détecté : ${esc(found.join(" · "))}` : "Fourni avec Autodesk Network License Manager ou tout serveur FlexLM (à copier par exemple dans C:\\HeptagonesLM\\bin)." })}
-      </div></div>
       <div class="panel"><div class="panel-head"><div><h2>Serveurs</h2><p class="muted">Triade redondante : <code>27000@srv1:27000@srv2:27000@srv3</code>. Le log debug ajoute les refus de licence et des sessions à la seconde.</p></div>
         <button type="button" class="btn small" id="add-srv">+ Ajouter un serveur</button></div>
-        <table class="servers"><thead><tr><th>Nom</th><th>Adresse port@serveur</th><th>Collecte</th><th>Test</th><th></th></tr></thead><tbody>${rows}</tbody></table>
-        <div class="f" data-f="servers"><span class="ferr"></span></div></div>`;
+        <table class="servers"><thead><tr><th>Nom</th><th>Type</th><th>Adresse port@serveur</th><th>Collecte</th><th>Test</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+        <div class="f" data-f="servers"><span class="ferr"></span></div></div>
+      <div class="panel"><h2>Outils des gestionnaires de licences</h2><div class="form-grid">
+        ${types.has("flexlm") ? input("lmutil_path", "Chemin de lmutil.exe (FlexLM)", { full: true, hint: found.length ? `Détecté : ${esc(found.join(" · "))}` : "Fourni avec Autodesk Network License Manager ou tout serveur FlexLM (à copier par exemple dans C:\\HeptagonesLM\\bin)." }) : ""}
+        ${types.has("rlm") ? input("rlmutil_path", "Chemin de rlmutil.exe (RLM)", { full: true, placeholder: "C:\\HeptagonesLM\\bin\\rlmutil.exe", hint: "Fourni avec le serveur de licences RLM de l'éditeur (Foundry, Maxon, Chaos…)." }) : ""}
+      </div>
+        <div class="test-row"><button type="button" class="btn" id="find-tools">${icon("search")} Rechercher l'outil</button>
+          <span class="muted" style="flex:1;min-width:240px">Cherche sur ce serveur et sur les serveurs de licences déclarés ci-dessus : démons en cours d'exécution, services, dossiers d'installation. Un outil trouvé sur un autre serveur est copié dans <code>${esc(A.install_dir)}\\bin</code>.</span></div>
+        <div id="tools-found">${renderTools(types)}</div></div>`;
+  }
+  function renderTools(types) {
+    const t = toolScan;
+    if (!t) return "";
+    if (t.busy) return `<div class="result"><span class="spinner"></span><span>Recherche en cours sur ${esc(t.busy)}… (jusqu'à quelques minutes pour un serveur distant)</span></div>`;
+    if (t.error) return `<div class="result">${dot("error")}<div><b>${esc(t.error)}</b></div></div>`;
+    const wanted = [...types].map(x => x === "rlm" ? "rlmutil" : "lmutil");
+    const rows = (t.found || []).filter(r => wanted.includes(r.tool));
+    const note = (t.used ? `<div class="result">${dot("ok")}<div><b>${esc(t.used)}</b></div></div>` : "")
+      + ((t.problems || []).length ? `<div class="result">${dot("warning")}<div><b>Serveurs non examinés</b><ul>${t.problems.map(p => `<li>${esc(p.host)} : ${esc(p.problem)}</li>`).join("")}</ul></div></div>` : "");
+    if (!rows.length) return `${note}<div class="result">${dot("warning")}<div><b>Aucun outil trouvé</b><ul>
+      <li>Serveurs examinés : ce serveur${t.hosts.length ? ", " + esc(t.hosts.join(", ")) : " (aucun serveur de licences déclaré)"}.</li>
+      <li>Pour un serveur distant, le compte qui lance l'assistant doit être administrateur de ce serveur (partage C$ et WMI).</li>
+      <li>Sinon, copier ${wanted.map(w => `<code>${w}.exe</code>`).join(" et ")} depuis le dossier du serveur de licences vers <code>${esc(A.install_dir)}\\bin</code> et indiquer ce chemin (ou le dossier).</li></ul></div></div>`;
+    return `${note}<table class="tools-found"><thead><tr><th>Outil</th><th>Emplacement</th><th>Trouvé par</th><th></th></tr></thead><tbody>${rows.map(r => {
+      const current = (A[r.tool + "_path"] || "").toLowerCase() === r.path.toLowerCase();
+      return `<tr><td><b>${r.tool}.exe</b></td><td><code>${esc(r.path)}</code><div class="muted">${r.local ? "Ce serveur" : esc(r.host)}</div></td>
+        <td class="muted">${esc(r.how)}</td>
+        <td>${current ? `<span class="muted">Retenu</span>` : `<button type="button" class="btn small" data-use="${esc(r.path)}">${r.local ? "Utiliser" : "Copier ici et utiliser"}</button>`}</td></tr>`;
+    }).join("")}</tbody></table>`;
+  }
+  function bindTools() {
+    const root = $("tools-found"); if (!root) return;
+    root.querySelectorAll("[data-use]").forEach(b => b.addEventListener("click", async () => {
+      b.disabled = true; b.textContent = "…";
+      try {
+        const r = await api("/api/tools/use", { answers: A, path: b.dataset.use });
+        A[r.field] = r.path;
+        toolScan.used = r.copied ? `Copié depuis ${r.host} : ${r.path}` : `Chemin retenu : ${r.path}`;
+        save(); render();
+      } catch (e) { toolScan.used = null; toolScan.error = e.message; save(); render(); }
+    }));
+  }
+  async function findTools() {
+    const hosts = [...new Set(A.servers.flatMap(s => (s.port_at_host || "").split(":").map(p => p.split("@")[1]).filter(Boolean)))];
+    toolScan = { busy: ["ce serveur", ...hosts].join(", ") };
+    $("tools-found").innerHTML = renderTools(new Set());
+    $("find-tools").disabled = true;
+    try {
+      toolScan = await api("/api/tools/find", { answers: A });
+      // champ vide : le meilleur outil de ce serveur est retenu d'office
+      for (const tool of ["lmutil", "rlmutil"]) {
+        const best = toolScan.found.find(r => r.tool === tool && r.local);
+        if (best && !A[tool + "_path"]) { A[tool + "_path"] = best.path; toolScan.used = `Chemin retenu : ${best.path}`; }
+      }
+    } catch (e) { toolScan = { error: e.message }; }
+    save(); render();
   }
   STEPS[4].after = () => {
     const root = $("step-body");
+    $("find-tools")?.addEventListener("click", findTools);
+    bindTools();
     root.querySelectorAll("[data-srv]").forEach(el => {
       const i = +el.dataset.srv, key = el.dataset.key;
-      el.addEventListener(el.type === "checkbox" ? "change" : "input", () => {
+      el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {
         const s = A.servers[i];
         if (key === "log") { s.collectors = el.checked ? ["lmstat", "log"] : ["lmstat"]; save(); render(); return; }
+        if (key === "license_type") {
+          s.license_type = el.value; s.collectors = el.value === "rlm" ? ["rlmstat"] : ["lmstat"];
+          delete results["lm" + i]; save(); render(); return;
+        }
         s[key] = el.value; save();
       });
     });
     root.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", () => {
       A.servers.splice(+b.dataset.del, 1); Object.keys(results).filter(k => k.startsWith("lm")).forEach(k => delete results[k]); save(); render();
     }));
-    $("add-srv").addEventListener("click", () => { A.servers.push({ name: "", port_at_host: "", collectors: ["lmstat"], log_path: "" }); save(); render(); });
+    $("add-srv").addEventListener("click", () => { A.servers.push({ name: "", port_at_host: "", collectors: ["lmstat"], log_path: "", license_type: "flexlm" }); save(); render(); });
   };
 
   /* 6. Interface web */
@@ -431,6 +497,7 @@
         ${input("smtp_user", "Identifiant (optionnel)")}
         ${input("smtp_password", "Mot de passe (optionnel)", { type: "password", hint: "Stocké dans la variable d'environnement machine HEPTAGONESLM_SMTP_PASSWORD." })}
         ${input("recipients", "Destinataires", { list: true, full: true, placeholder: "dsi@entreprise.local, achats@entreprise.local" })}
+        ${toggle("email_alerts", "Alertes immédiates", "Collecte en échec ou arrêtée, refus de licence, plus aucun jeton disponible, licence qui expire : un e-mail dès la collecte suivante, rappel au plus une fois par jour.", { full: true })}
       </div>${testBlock("smtp", "smtp", "Envoyer un message de test au premier destinataire")}</div>` : ""}`;
   }
 
@@ -461,9 +528,9 @@
       <div class="recap">
         ${block("Emplacement", 2, [["Dossier", esc(a.install_dir)], ["Compte de service", esc(a.service_account)], ["Collecte", `toutes les ${esc(a.collect_interval)} min`]])}
         ${block("Base de données", 3, a.db_mode === "sqlite" ? [["Mode", "SQLite local"]] : [["Instance", esc(a.db_server)], ["Base", esc(a.db_name) + (a.db_create ? " (créée si absente)" : "")], ["Authentification", a.db_auth === "sql" ? "SQL : " + esc(a.db_user) : "Windows (compte de service)"], ["Chiffrement", a.db_encrypt ? "Oui" : "Non"]])}
-        ${block("Serveurs de licences", 4, [["lmutil", esc(a.lmutil_path)], ...a.servers.map(s => [s.name, esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
+        ${block("Serveurs de licences", 4, [...(a.servers.some(s => s.license_type !== "rlm") ? [["lmutil", esc(a.lmutil_path)]] : []), ...(a.servers.some(s => s.license_type === "rlm") ? [["rlmutil", esc(a.rlmutil_path)]] : []), ...a.servers.map(s => [s.name, (s.license_type === "rlm" ? "RLM · " : "") + esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
         ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
-        ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))]] : [["Rapport par e-mail", "Désactivé"]])}
+        ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))], ["Alertes immédiates", a.email_alerts ? "Activées" : "Désactivées"]] : [["Rapport par e-mail", "Désactivé"]])}
         <div class="panel"><h2>Tâches planifiées</h2><dl class="kv">${preview.plan.tasks.map(t => `<dt>${esc(t.name.replace("HeptagonesLM - ", ""))}</dt><dd>${esc(t.schedule)}</dd>`).join("")}</dl></div>
       </div>
       <div class="panel"><h2>Étapes de l'installation</h2><ol class="plan">${preview.plan.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>
@@ -615,7 +682,7 @@
     $("sim-banner").hidden = !info.simulated;
     $("sys-badge").textContent = info.simulated ? "Simulation" : (info.os && info.os.hostname) || "Windows";
     A = { ...BASE, ...info.defaults };
-    A.servers = (info.defaults.servers || []).map(s => ({ log_path: "", ...s }));
+    A.servers = (info.defaults.servers || []).map(s => ({ log_path: "", license_type: "flexlm", ...s }));
     const saved = restore();
     if (saved && saved.A) { A = { ...A, ...saved.A }; step = saved.step || 0; maxStep = saved.maxStep || 0; }
     try {

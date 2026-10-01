@@ -9,10 +9,10 @@ Deux familles de collecteurs existent :
   retourne les nouveaux ``LicenseEvent`` (OUT/IN/DENIED...). Il reçoit et
   renvoie un état opaque (offset, date courante...) persisté par le service.
 
-Pour ajouter un nouveau gestionnaire de licences (ex. RLM) : implémenter une
-ou deux classes héritant de ces interfaces, puis les déclarer avec
-``@register("rlm", "rlmstat")`` dans un module importé par
-``heptagoneslm.collectors``.
+Pour ajouter un nouveau gestionnaire de licences : implémenter une ou deux
+classes héritant de ces interfaces, puis les déclarer avec
+``@register("<type>", "<collecteur>")`` dans un module importé par
+``heptagoneslm.collectors`` (exemple complet : ``collectors/rlm``).
 """
 
 from __future__ import annotations

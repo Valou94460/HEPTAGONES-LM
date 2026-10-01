@@ -34,6 +34,8 @@ class SimFeature:
     mean_hours: float         # durée moyenne d'une session
     counts: tuple[int, ...] = (1,)  # nb de jetons par checkout (ex. HPC)
     annual_cost: float | None = None  # coût annuel d'un jeton (démonstration)
+    reservations: tuple[tuple[str, str, int], ...] = ()   # (USER|HOST|GROUP, bénéficiaire, jetons)
+    borrow_share: int = 0     # 1 utilisateur sur N emprunte la licence (utilisation hors ligne)
 
 
 @dataclass(frozen=True)
@@ -111,6 +113,8 @@ DEFAULT_SCENARIO: tuple[SimServer, ...] = (
             SimFeature("87545ACD_2024_0F", 12, "AutoCAD 2024", "Autodesk", 26, 0.55, 3.0, annual_cost=2300),
             SimFeature("87048INVPROSA_2024_0F", 6, "Inventor Professional 2024", "Autodesk", 12, 0.6, 4.0, annual_cost=3900),
             SimFeature("87706RVT_2024_0F", 3, "Revit 2024", "Autodesk", 6, 0.45, 3.5, annual_cost=3400),
+            # Licence achetée mais jamais utilisée : vue « Licences inutilisées »
+            SimFeature("87763MAYA_2024_0F", 2, "Maya 2024", "Autodesk", 0, 0.0, 1.0, annual_cost=2100),
         ),
     ),
     SimServer(
@@ -125,8 +129,10 @@ DEFAULT_SCENARIO: tuple[SimServer, ...] = (
     SimServer(
         name="MATLAB", host="licsrv-mlm", port=27000, vendor="MLM",
         features=(
-            SimFeature("MATLAB", 10, "MATLAB", "MathWorks", 18, 0.5, 2.5, annual_cost=2700),
-            SimFeature("SIMULINK", 4, "Simulink", "MathWorks", 8, 0.4, 3.0, annual_cost=3600),
+            SimFeature("MATLAB", 10, "MATLAB", "MathWorks", 18, 0.5, 2.5, annual_cost=2700,
+                       reservations=(("GROUP", "simulation", 2),), borrow_share=6),
+            SimFeature("SIMULINK", 4, "Simulink", "MathWorks", 8, 0.4, 3.0, annual_cost=3600,
+                       reservations=(("USER", "USER0", 1),)),
             SimFeature("Optimization_Toolbox", 2, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5, annual_cost=1200),
             SimFeature("Signal_Toolbox", 3, "MATLAB Toolboxes", "MathWorks", 6, 0.3, 1.5, annual_cost=1200),
         ),
@@ -250,6 +256,9 @@ def render_lmstat(server: SimServer, when: datetime) -> str:
         out.append(f'  "{f.name}" v2024.0, vendor: {server.vendor}, expiry: {_expiry(f, when)}')
         out.append("  floating license")
         out.append("")
+        for kind, name, count in f.reservations:
+            name = _pool(server, f)[0] if name == "USER0" else name     # 1er utilisateur du pool
+            out.append(f"    {count} RESERVATION{'s' if count > 1 else ''} for {kind} {name} ({server.host}/{server.port})")
         if active:
             for s in active:
                 line = (
@@ -258,6 +267,8 @@ def render_lmstat(server: SimServer, when: datetime) -> str:
                 )
                 if s.count > 1:
                     line += f", {s.count} licenses"
+                if f.borrow_share and zlib.crc32(s.user.encode()) % f.borrow_share == 0:
+                    line += " (linger: 1209600 / 604800)"
                 out.append(line)
             out.append("")
     return "\n".join(out) + "\n"
@@ -321,3 +332,29 @@ def sync_log(server: SimServer, path: Path, until: datetime, start: datetime | N
             fh.write(line + "\n")
     state.write_text(max(after, until).isoformat())
     return len(lines)
+
+
+def render_rlmstat(port_at_host: str, when: datetime | None = None) -> str:
+    """Sortie ``rlmstat -a`` d'un serveur RLM fictif (assistant d'installation en simulation)."""
+    when = when or datetime.now().replace(microsecond=0)
+    port, _, host = port_at_host.partition("@")
+    host, port = host or "licsrv-rlm", port or "5053"
+    day = f"{when:%m/%d}"
+    return (
+        "rlmutil v14.2\nCopyright (C) 2006-2021, Reprise Software, Inc. All rights reserved.\n\n"
+        f"\trlm status on {host} (port {port}), up 12d 04:10:02\n"
+        "\trlm software version v14.2 (build:2)\n\n"
+        "\t--------- ISV servers ----------\n\t   Name           Port Running Restarts\n"
+        "\tfoundry          62137     Yes        0\n\n\t------------------------\n\n"
+        f"\tfoundry license pool status on {host} (port 62137)\n\n"
+        f"\tnuke_i v{when.year}.0\n"
+        f"\t\tcount: 10, # reservations: 0, inuse: 2, exp: 31-dec-{when.year + 1}\n"
+        "\t\tobsolete: 0, min_remove: 120, total checkouts: 57\n"
+        f"\tnukex_i v{when.year}.0\n"
+        "\t\tcount: 4, # reservations: 0, inuse: 1, exp: permanent\n"
+        "\t\tobsolete: 0, min_remove: 120, total checkouts: 12\n\n\t------------------------\n\n"
+        f"\tfoundry license usage status on {host} (port 62137)\n\n"
+        f"\tnuke_i v{when.year}.0: alice.martin@PC-ALICE 1/0 at {day} 08:12  (handle: 41)\n"
+        f"\tnuke_i v{when.year}.0: bruno.bernard@PC-BRUNO 1/0 at {day} 09:40  (handle: 42)\n"
+        f"\tnukex_i v{when.year}.0: chloe.dubois@PC-CHLOE 1/0 at {day} 10:05  (handle: 43)\n"
+    )

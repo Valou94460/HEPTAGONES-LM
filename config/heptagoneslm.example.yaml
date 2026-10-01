@@ -15,6 +15,8 @@ database:
 
 # Chemin de lmutil.exe (fourni avec le gestionnaire de licences, ex. Autodesk NLM)
 lmutil_path: "C:/HeptagonesLM/bin/lmutil.exe"
+# Serveurs RLM (Reprise) : chemin de rlmutil.exe
+# rlmutil_path: "C:/HeptagonesLM/bin/rlmutil.exe"
 
 logging:
   file: "C:/HeptagonesLM/logs/heptagoneslm.log"
@@ -43,6 +45,11 @@ servers:
     # lmutil_path: "C:/MATLAB/etc/win64/lmutil.exe"   # surcharge par serveur
     # enabled: false
 
+  # Serveur RLM (Reprise License Manager) : sondage rlmutil rlmstat -a
+  # - name: FOUNDRY
+  #   license_type: rlm
+  #   port_at_host: "5053@licsrv3"   # port du serveur rlm (5053 par défaut)
+
 # Correspondance feature FlexLM -> produit lisible dans les rapports.
 # Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
 # Après modification : `heptagoneslm apply-products` pour réappliquer à l'historique.
@@ -57,6 +64,13 @@ products:
   - { pattern: "*_Toolbox",         product: "MATLAB Toolboxes",        publisher: MathWorks, vendor: MLM }
   - { pattern: "ansys",             product: "Ansys Mechanical Enterprise", publisher: Ansys }
   - { pattern: "a_spaceclaim_*",    product: "Ansys SpaceClaim",        publisher: Ansys }
+
+# Sites des postes (multi-sites) : motif fnmatch sur le nom du poste, la première règle gagne.
+# Filtre et répartition « Site » dans l'interface. Après modification : `heptagoneslm apply-products`.
+# sites:
+#   - { pattern: "par-*", site: "Paris" }
+#   - { pattern: "lyo-*", site: "Lyon" }
+#   - { pattern: "*",     site: "Autres sites" }
 
 reporting:
   output_dir: "C:/HeptagonesLM/reports"
@@ -90,6 +104,17 @@ web:
     # header_name: X-Remote-User
     # trusted_proxies: ["127.0.0.1"]
     # allowed_users: []                         # vide = tout utilisateur authentifié par IIS
+  # Rôles (docs/AUTHENTIFICATION.md § 2 bis) : sans cette section, tout utilisateur autorisé voit tout
+  # roles:
+  #   admins: ["ENTREPRISE\\GG_HeptagonesLM_Admins"]
+  #   readers: ["ENTREPRISE\\GG_HeptagonesLM_Lecteurs"]
+  #   departments:                              # responsables de service : leurs services uniquement
+  #     - group: "ENTREPRISE\\GG_Resp_Simulation"
+  #       departments: ["Simulation & calcul"]
+  #     - user: chef.methodes
+  #       departments: ["Méthodes industrialisation"]
+  #       servers: [AUTODESK]                   # optionnel (ou products)
+  #   default: none                             # sans rôle : none (refusé) | reader
 
 # ---------------------------------------------------------------------------
 # Envoi du rapport par e-mail (heptagoneslm send-report, tâche « Envoi des rapports »)
@@ -109,6 +134,50 @@ web:
 #       recipients: [responsable.simulation@entreprise.local]
 #       servers: [ANSYS]
 #       attach_excel: true
+
+# ---------------------------------------------------------------------------
+# Alertes immédiates : e-mail et / ou tickets ITSM, évaluées après chaque collecte
+# (ou : heptagoneslm check-alerts ; test des connecteurs : heptagoneslm test-itsm)
+# ---------------------------------------------------------------------------
+# alerts:
+#   recipients: [exploitation@entreprise.local]   # e-mail (nécessite email.smtp_host) ; vide = pas d'e-mail
+#   types: [collection, denial, saturation, expiry]   # défaut : toutes
+#   # collection : collecte en échec / arrêtée (+ « rétablie ») ; denial : nouveaux refus ;
+#   # saturation : plus aucun jeton disponible ; expiry : licence qui expire (J-30, J-7, expirée)
+#   # servers: [ANSYS]           # limiter à ces serveurs (défaut : tous)
+#   # products: ["AutoCAD 2024"] # limiter à ces produits (défaut : tous)
+#   expiry_days: 30              # préavis avant l'échéance
+#   repeat_hours: 24             # rappel d'une alerte toujours présente (et commentaire sur le ticket)
+#   min_denials: 1               # refus minimum pour alerter sur un produit
+#
+#   # Tickets : ouverts à l'apparition, commentés aux rappels, résolus quand la condition disparaît.
+#   # Communs : name, types, min_severity (info | warning | serious | critical, défaut serious),
+#   #           timeout_s, verify_tls, ca_file (AC interne), fields (champs supplémentaires à la création)
+#   itsm:
+#     - type: servicenow
+#       url: https://entreprise.service-now.com
+#       username: svc_heptagoneslm
+#       password: ${HEPTAGONESLM_ITSM_PASSWORD}
+#       assignment_group: "Support licences"       # optionnel
+#       caller: svc_heptagoneslm                   # optionnel
+#     - type: jira
+#       url: https://entreprise.atlassian.net      # ou Jira Data Center
+#       username: svc-heptagoneslm@entreprise.fr   # Cloud : e-mail + jeton d'API ; Data Center : jeton seul (PAT)
+#       token: ${HEPTAGONESLM_JIRA_TOKEN}
+#       project: LIC
+#       issue_type: Incident
+#       # resolve_transitions: ["Done", "Terminé"]  # transition utilisée pour résoudre
+#     - type: glpi
+#       url: https://glpi.entreprise.local/apirest.php
+#       app_token: ${HEPTAGONESLM_GLPI_APP_TOKEN}
+#       user_token: ${HEPTAGONESLM_GLPI_USER_TOKEN}
+#       entity_id: 0                               # optionnel
+#       category_id: 12                            # optionnel
+#     - type: webhook                              # Teams, Slack ou tout outil acceptant du JSON
+#       name: teams-exploitation
+#       url: ${HEPTAGONESLM_TEAMS_WEBHOOK}
+#       format: teams                              # json | teams | slack
+#       min_severity: warning
 
 retention:
   snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés

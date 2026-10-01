@@ -7,7 +7,7 @@
   const { fmt, esc } = C;
   const $ = id => document.getElementById(id);
   const PAGE = 200;
-  const LIST_KEYS = ["server", "product", "user", "department"];
+  const LIST_KEYS = ["server", "product", "user", "department", "site"];
   const LIVE_REFRESH_MS = 60000;
   const STALE_MINUTES = 60;
   const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
@@ -16,7 +16,7 @@
   const NAV = [
     ["Pilotage", ["dashboard", "live"]],
     ["Analyse", ["summary", "timeseries", "breakdown", "matrix", "heatmap"]],
-    ["Optimisation", ["efficiency", "optimization", "contention", "denials"]],
+    ["Optimisation", ["efficiency", "optimization", "unused", "reservations", "contention", "denials"]],
     ["Données", ["sessions", "collections"]],
   ];
   const ICONS = {
@@ -27,6 +27,8 @@
     breakdown: '<path d="M12 3a9 9 0 1 0 9 9h-9z"/><path d="M15 3.5A9 9 0 0 1 20.5 9H15z"/>',
     matrix: '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
     heatmap: '<rect x="3" y="3" width="5" height="5" rx="1"/><rect x="10" y="3" width="5" height="5" rx="1"/><rect x="17" y="3" width="4" height="5" rx="1"/><rect x="3" y="10" width="5" height="5" rx="1"/><rect x="10" y="10" width="5" height="5" rx="1"/><rect x="3" y="17" width="5" height="4" rx="1"/>',
+    unused: '<rect x="4" y="6" width="16" height="12" rx="2"/><path d="M4 10h16M9 14h6"/>',
+    reservations: '<path d="M7 3v4M17 3v4"/><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M9 13l2 2 4-4"/>',
     efficiency: '<path d="M12 13l4-4"/><path d="M3.5 17a9 9 0 1 1 17 0"/><circle cx="12" cy="13" r="1"/>',
     optimization: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2s1 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.3 0-2.4-.5-3-1.5M12 6.5V8M12 16v1.5"/>',
     contention: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
@@ -49,7 +51,7 @@
 
   const state = {
     type: "dashboard", preset: "30d", start: "", end: "",
-    server: [], product: [], user: [], department: [],
+    server: [], product: [], user: [], department: [], site: [],
     granularity: "day", metric: "peak", dimension: "user",
   };
   let meta = null;
@@ -250,12 +252,14 @@
     }
     if (!meta.reports[state.type]) state.type = "dashboard";
     $("version").textContent = meta.version || "";
+    if (meta.demo) $("demo-banner").hidden = false;
     fetchJSON("api/me").then(me => {
       if (me.auth === "none") return;
       const name = me.display_name || me.user;
       $("user-badge").hidden = false;
       $("user-name").textContent = name;
-      $("user-name").title = me.department ? `${me.user} — ${me.department}` : me.user;
+      $("user-name").title = (me.department ? `${me.user} — ${me.department}` : me.user) +
+        (me.access ? `\n${me.access.label}` : "");
       const av = $("user-avatar");
       av.textContent = initials(name); av.style.background = avatarColor(me.user);
       if (me.auth === "ldap") {
@@ -268,6 +272,12 @@
       }
     }).catch(() => null);
     $("coverage").textContent = meta.data_start ? `Données du ${fmt(meta.data_start, "date")} au ${fmt(meta.data_end, "date")}` : "Aucune donnée collectée";
+    // Rôle limité à des services : bandeau et classeur complet masqué (refusé par le serveur)
+    if (meta.access && !meta.access.global) {
+      $("coverage").textContent += ` · Vue limitée — ${meta.access.label}`;
+      const full = document.querySelector('[data-export="full"]');
+      if (full) full.hidden = true;
+    }
     renderNav();
     renderHealth();
 
@@ -278,6 +288,12 @@
     const deps = meta.departments.map(d => ({ value: d, label: d }));
     deps.push({ value: "(non renseigné)", label: "(non renseigné)" });
     multis.department = createMulti($("ms-department"), "Services", deps, "department");
+    // Sites : proposés dès que des règles « sites » classent les postes
+    if ((meta.sites || []).length) {
+      const sites = meta.sites.map(x => ({ value: x, label: x }));
+      sites.push({ value: "(non renseigné)", label: "(non renseigné)" });
+      multis.site = createMulti($("ms-site"), "Sites", sites, "site");
+    } else $("ms-site").hidden = true;
 
     // Période
     document.querySelectorAll("#presets [data-preset]").forEach(b => b.addEventListener("click", () => {
@@ -288,7 +304,7 @@
       state[id] = ev.target.value; state.preset = "custom"; changed();
     });
     $("reset").addEventListener("click", () => {
-      Object.assign(state, { server: [], product: [], user: [], department: [] });
+      Object.assign(state, { server: [], product: [], user: [], department: [], site: [] });
       Object.values(multis).forEach(m => m.refreshLabel()); changed();
     });
     document.querySelectorAll("[data-export]").forEach(b => b.addEventListener("click", () => doExport(b.dataset.export)));
@@ -380,7 +396,7 @@
     });
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
     $("page-title").textContent = (meta && meta.reports[state.type]) || "";
-    document.title = `${$("page-title").textContent} — HeptagonesLM`;
+    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${$("page-title").textContent} — HeptagonesLM`;
     document.querySelectorAll("[data-opt]").forEach(b => b.setAttribute("aria-pressed", String(state[b.dataset.opt] === b.dataset.value)));
     const dim = $("dimension");
     if (dim) dim.value = state.dimension;
@@ -644,7 +660,7 @@
     const pulse = $("live-pulse");
     if (!live || !live.updated_at) {
       pulse.classList.add("off");
-      box.innerHTML = empty("Aucun sondage lmstat disponible.");
+      box.innerHTML = empty("Aucun sondage des serveurs de licences disponible.");
       return;
     }
     pulse.classList.toggle("off", minutesOld(live.updated_at) > STALE_MINUTES);
@@ -668,7 +684,7 @@
     v.innerHTML =
       `<section class="kpi-grid">${r.kpis.map(k => `<div class="kpi"><span class="label">${esc(k.label)}</span><span class="value">${fmt(k.value, k.type)}</span></div>`).join("")}</section>` +
       `<div class="live-bar"><span><span class="pulse${stale || !live.updated_at ? " off" : ""}"></span>` +
-      (live.updated_at ? `Dernier sondage ${esc(ago(live.updated_at))} (${fmt(live.updated_at, "datetime")}) · actualisation automatique chaque minute` : "Aucun sondage lmstat disponible") +
+      (live.updated_at ? `Dernier sondage ${esc(ago(live.updated_at))} (${fmt(live.updated_at, "datetime")}) · actualisation automatique chaque minute` : "Aucun sondage des serveurs de licences disponible") +
       `</span><input type="search" id="live-search" placeholder="Rechercher un produit ou un utilisateur" aria-label="Rechercher un produit ou un utilisateur"></div>` +
       `<section class="live-grid" id="live-grid"></section>`;
     const search = $("live-search");
@@ -683,7 +699,7 @@
       const u = p.utilization || 0;
       const [sev, label] = p.issued && p.free !== null && p.free <= 0 ? ["critical", "Saturé"] : u >= 0.85 ? ["warning", "Tendu"] : ["good", "Disponible"];
       const users = p.users.length ? p.users.map(x =>
-        `<div class="user">${avatar(x.user, x.username)}<div><div>${esc(x.user)}</div><small>${esc(x.host || "")}${x.department ? " · " + esc(x.department) : ""}</small></div>` +
+        `<div class="user">${avatar(x.user, x.username)}<div><div>${esc(x.user)}${x.borrowed ? ' <span class="tag" title="Licence empruntée : utilisation hors ligne">emprunt</span>' : ""}</div><small>${esc(x.host || "")}${x.site ? " · " + esc(x.site) : ""}${x.department ? " · " + esc(x.department) : ""}</small></div>` +
         `<small title="depuis le ${fmt(x.since, "datetime")}">${x.licenses > 1 ? `${x.licenses} jetons · ` : ""}${esc(since(x.since))}</small></div>`).join("")
         : `<small class="muted">${p.in_use ? "Utilisateurs non identifiés pour l'instant" : "Aucun utilisateur"}</small>`;
       return `<article class="card live-card"><div class="top"><div><h2>${esc(p.product)}</h2><small>${esc(p.server)}</small></div>` +

@@ -5,6 +5,79 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.3.0] — 2026-09-29
+
+Publie aussi le contenu de 26.2.0 (non publiée séparément).
+
+### Ajouté
+- **Tickets ITSM automatiques** (`alerts.itsm`) : ServiceNow (incident, API Table), Jira (Cloud et
+  Data Center, API REST v2), GLPI (API REST) et webhook générique (JSON, Microsoft Teams, Slack).
+  Chaque alerte ouvre un ticket, le complète à chaque rappel et le résout quand la condition
+  disparaît ; sans doublon (table `itsm_ticket`), avec rattrapage si l'outil était injoignable ;
+  filtres par type et gravité minimale (`min_severity`, « serious » par défaut).
+- Commande `test-itsm` : ouvre, commente et résout un ticket de test dans chaque outil configuré.
+- **Rôles** (`web.roles`) : administrateur, lecteur, responsable de service (ne voit que les
+  utilisateurs de ses services — sessions, répartition, refus, En direct, exports — et en option
+  certains serveurs ou produits), par groupe AD ou par compte ; contrôle par le serveur, refus 403
+  tracés. Le module IIS transmet les groupes Windows (`X-Remote-Groups`).
+
+- **Licences empruntées** (FlexLM, « linger ») : signalées dans les sessions et la vue En direct
+  (indicateur « Jetons empruntés »).
+- **Réservations / utilisateurs nommés** : lignes `RESERVATION` de lmstat mémorisées (table
+  `feature_reservation`) ; vue « Réservations » avec le taux d'usage réel du bénéficiaire et une
+  recommandation (réservation peu utilisée).
+- **Multi-sites** : section `sites` (site des postes d'après leur nom), filtre et répartition par site,
+  réappliqués à l'historique par `apply-products`.
+- **Licences inutilisées** : vue dédiée (jamais utilisées sur la période, dernière utilisation,
+  échéance, coût annuel).
+- Démonstration enrichie : licence inutilisée, réservations, emprunts, trois sites.
+- Assistant d'installation : bouton **« Rechercher l'outil »** (étape Serveurs de licences). Il trouve
+  lmutil.exe et rlmutil.exe sur ce serveur et sur les serveurs de licences déclarés (démons en cours
+  d'exécution, services Windows, dossiers d'installation connus, Program Files) ; un outil trouvé sur
+  un autre serveur est copié dans `<installation>\bin`.
+
+### Corrigé
+- **Démonstration signalée** : bandeau permanent « Démonstration — données fictives » et titre
+  d'onglet « [Démonstration] » dès que l'interface tourne sur des données simulées (`web --demo`,
+  option `web.demo`). Auparavant, rien ne distinguait la démonstration de vraies données.
+- **HeptagonesLM.exe par double-clic** : n'ouvre plus la démonstration sans le dire. Il ouvre
+  l'installation trouvée, y compris dans `C:\HeptagonesLM`, ou simplement le navigateur si l'interface
+  est déjà servie ; sans installation, il propose d'installer (assistant, élévation) ou de voir la
+  démonstration.
+- Assistant d'installation : le chemin de lmutil / rlmutil accepte le dossier de l'outil et un chemin
+  entre guillemets (« Copier en tant que chemin d'accès ») ; un dossier donné au test `lmstat`
+  provoquait une erreur interne.
+- Relance de la démonstration sur une base conservée (SQL Server) : réservations supprimées avant les features.
+- Le filtre « Services » s'applique désormais aussi aux refus et aux utilisateurs de la vue En direct.
+- La démonstration (`web --demo`) est régénérée après une mise à jour de l'application.
+- Schéma v6 (colonne `license_session.borrowed`, table `feature_reservation`) ; les colonnes ajoutées
+  prennent le type propre à SQL Server ou SQLite.
+
+### Modifié
+- **Un seul exécutable livré : `HeptagonesLM-Setup.exe`** (release, zip, artefact de la CI
+  `HeptagonesLM-Setup`). `HeptagonesLM.exe` n'est plus proposé à part : l'assistant le contient et
+  l'installe sur le serveur.
+- Les alertes ont leur propre section `alerts` (destinataires e-mail, connecteurs ITSM, règles) ;
+  la forme `email.alerts` reste acceptée. Schéma de base v6 (tables `itsm_ticket`, `feature_reservation`).
+
+## [26.2.0] — 2026-09-29
+
+### Ajouté
+- **Alertes immédiates par e-mail** (`email.alerts`), évaluées après chaque collecte ou par
+  `check-alerts` : collecte en échec (puis « rétablie ») ou arrêtée, nouveaux refus de licence,
+  plus aucun jeton disponible, licence qui expire (paliers J-30, J-7, expirée). Anti-répétition
+  (`repeat_hours`), filtres par type, serveur et produit ; aucune alerte perdue si le SMTP est
+  indisponible. Option « Alertes immédiates » dans l'assistant d'installation (étape E-mail).
+- **Collecteur RLM** (Reprise License Manager : Foundry, Maxon, Chaos…) : `rlmutil rlmstat -a`,
+  pools additionnés par licence, utilisateurs, postes et échéances. `license_type: rlm` dans la
+  configuration ; type de serveur et chemin de `rlmutil.exe` dans l'assistant, avec test en direct.
+
+### Modifié
+- Schéma de base v4 (table `alert_state`) : exécuter `init-db` après la mise à jour
+  (fait automatiquement par l'assistant).
+- Le type de gestionnaire (`license_type`) et les collecteurs d'un serveur sont vérifiés au
+  chargement de la configuration.
+
 ## [26.1.1] — 2026-09-29
 
 ### Ajouté
@@ -123,6 +196,8 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/FREE-LM/compare/v26.1.1...HEAD
-[26.1.1]: https://github.com/Valou94460/FREE-LM/compare/v26.1.0...v26.1.1
-[26.1.0]: https://github.com/Valou94460/FREE-LM/releases/tag/v26.1.0
+[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.0...HEAD
+[26.3.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
+[26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
+[26.1.1]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.0...v26.1.1
+[26.1.0]: https://github.com/Valou94460/HEPTAGONES-LM/releases/tag/v26.1.0

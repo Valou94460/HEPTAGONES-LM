@@ -15,7 +15,7 @@
       <svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="hlm-logo" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3f6ff0"/><stop offset="1" stop-color="#5cc8e6"/></linearGradient></defs><polygon points="16.00,4.20 25.54,8.79 27.89,19.11 21.29,27.39 10.71,27.39 4.11,19.11 6.46,8.79" fill="none" stroke="url(#hlm-logo)" stroke-width="3.2" stroke-linejoin="round"/><polygon points="16.00,10.80 20.38,12.91 21.46,17.65 18.43,21.45 13.57,21.45 10.54,17.65 11.62,12.91" fill="url(#hlm-logo)" stroke="url(#hlm-logo)" stroke-width="1.6" stroke-linejoin="round"/></svg>
       <div>
         <div class="brand-name">HeptagonesLM</div>
-        <p class="subtitle">Licences FlexLM</p>
+        <p class="subtitle">Licences FlexLM et RLM</p>
       </div>
     </div>
     <nav id="nav" aria-label="Rapports"></nav>
@@ -31,6 +31,10 @@
   </aside>
 
   <div class="content">
+    <div id="demo-banner" class="demo-banner" role="note" hidden>
+      <b>Démonstration</b> — données fictives générées par HeptagonesLM : aucun serveur de licences n'est interrogé.
+      Pour une installation réelle, lancer <code>HeptagonesLM-Setup.exe</code>.
+    </div>
     <header class="topbar">
       <button id="menu" class="icon-btn" type="button" aria-label="Menu" aria-controls="sidebar" aria-expanded="false">
         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
@@ -68,6 +72,7 @@
       <div class="ms" id="ms-product"></div>
       <div class="ms" id="ms-user"></div>
       <div class="ms" id="ms-department"></div>
+      <div class="ms" id="ms-site"></div>
       <button id="reset" class="btn ghost small" type="button" hidden>Réinitialiser</button>
       <span class="spacer"></span>
       <div class="exports" role="group" aria-label="Exporter">

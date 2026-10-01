@@ -3,21 +3,22 @@
 # HeptagonesLM
 
 
-[![CI](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml)
+[![CI](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml/badge.svg)](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/python-3.10%20%7C%203.12-blue)
 ![Plateformes](https://img.shields.io/badge/plateformes-Windows%20%7C%20Linux-lightgrey)
 ![Base](https://img.shields.io/badge/base-SQL%20Server%20%7C%20SQLite-orange)
 [![Licence MIT](https://img.shields.io/badge/licence-MIT-green)](LICENSE)
 
-**Suivi et reporting open source de la consommation de licences FlexLM / FlexNet**
-(Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher).
-Une alternative gratuite à OpenLM pour le reporting d'usage.
+**Suivi et reporting open source de la consommation de licences FlexLM / FlexNet et RLM**
+(Autodesk, Ansys, MATLAB… et tout éditeur utilisant FlexNet Publisher ; Foundry, Maxon,
+Chaos… avec Reprise License Manager).
+Une alternative gratuite à OpenLM pour la mesure et l'optimisation des licences.
 
-HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`) et lit
-leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
+HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`,
+`rlmutil rlmstat`) et lit leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
 quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
 tableau de bord web et en exports Excel — avec alertes, vue en direct, efficacité des
-jetons et chiffrage des économies possibles.
+jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 
 ![Tableau de bord](docs/images/tableau-de-bord.png)
 
@@ -38,20 +39,22 @@ jetons et chiffrage des économies possibles.
 
 | | |
 |---|---|
-| **Collecte** | Sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug FlexLM (refus, sessions à la seconde). Aucun agent sur les postes clients. |
+| **Collecte** | FlexLM : sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug (refus, sessions à la seconde). RLM : sondage `rlmutil rlmstat -a` (pools, jetons, utilisateurs, échéances). Aucun agent sur les postes clients. |
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
-| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service. |
+| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
+| **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
 | **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
-| **HeptagonesLM.exe** | Exécutable Windows autonome : double-clic → interface dans le navigateur. Aucun Python requis. |
-| **HeptagonesLM-Setup.exe** | Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. |
+| **HeptagonesLM-Setup.exe** | **Seul fichier à télécharger.** Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. Il installe l'application (`HeptagonesLM.exe` : collecte, interface, rapports) dans `C:\HeptagonesLM`. Aucun Python requis ; rien à installer sur les postes utilisateurs (navigateur). |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
+| **Rôles** | Administrateur, lecteur, responsable de service (ne voit que ses services, exports compris), attribués par groupe AD ou par compte, contrôlés par le serveur. |
+| **Alertes et tickets** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Par e-mail et / ou ticket automatique ServiceNow, Jira, GLPI, Teams / Slack (ouvert, complété, résolu). |
 | **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
 | **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
-| **Extensible** | Architecture à collecteurs : d'autres gestionnaires (RLM, LM-X…) s'ajoutent sans toucher au reste. |
+| **Extensible** | Architecture à collecteurs : d'autres gestionnaires (DSLS, LM-X…) s'ajoutent sans toucher au reste, comme RLM. |
 
 <table>
 <tr>
@@ -74,21 +77,28 @@ jetons et chiffrage des économies possibles.
 
 ## Démarrage rapide
 
-### Essayer en 1 minute (Windows, sans rien installer)
+### Essayer sans rien installer (Windows)
 
-1. Télécharger **`HeptagonesLM.exe`** depuis la page [Releases](https://github.com/Valou94460/FREE-LM/releases)
+1. Télécharger **`HeptagonesLM-Setup.exe`** depuis la page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)
    (ou, pour la dernière version de développement : onglet
-   [Actions](https://github.com/Valou94460/FREE-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-windows`).
-2. Double-cliquer : l'interface s'ouvre dans le navigateur sur des **données de
-   démonstration** (3 serveurs simulés, ~45 utilisateurs, 90 jours).
+   [Actions](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-Setup`).
+2. Parcourir l'assistant **en simulation**, sans rien modifier sur le poste :
+   `HeptagonesLM-Setup.exe setup --simulate` (bandeau « Mode simulation » affiché).
+
+L'interface sur données fictives (bandeau « Démonstration ») s'obtient avec Python, ci-dessous.
 
 > Windows SmartScreen peut avertir au premier lancement (exécutable non signé) :
 > « Informations complémentaires » › « Exécuter quand même ».
 
+### Construire HeptagonesLM-Setup.exe sur son PC (sans GitHub Actions)
+
+Dans un clone du dépôt, double-cliquer **`scripts\construire_setup.bat`** (Python 3.10+ requis) :
+tests, puis `dist\HeptagonesLM-Setup.exe`.
+
 ### Avec Python
 
 ```bash
-pip install git+https://github.com/Valou94460/FREE-LM.git
+pip install git+https://github.com/Valou94460/HEPTAGONES-LM.git
 heptagoneslm web --demo --open          # interface sur données simulées
 heptagoneslm demo --days 30             # ou : base + rapport Excel de démonstration dans ./demo
 ```
@@ -97,7 +107,7 @@ heptagoneslm demo --days 30             # ou : base + rapport Excel de démonstr
 
 ### Installation assistée (recommandée)
 
-Double-cliquer sur **`HeptagonesLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/FREE-LM/releases)) :
+Double-cliquer sur **`HeptagonesLM-Setup.exe`** (page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)) :
 un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque étape.
 
 1. **Vérification du serveur** : Windows, droits, pilote ODBC, lmutil, rôles et modules IIS —
@@ -112,7 +122,7 @@ un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque 
 ![Assistant d'installation](docs/images/installation-progression.png)
 
 Installation silencieuse (industrialisation) : `HeptagonesLM-Setup.exe setup --answers reponses.json`.
-Démonstration sans rien modifier : `HeptagonesLM.exe setup --simulate`.
+Démonstration sans rien modifier : `HeptagonesLM-Setup.exe setup --simulate`.
 Tout est détaillé dans **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
 
 ### Installation manuelle
@@ -122,7 +132,7 @@ Prérequis sur le serveur HeptagonesLM (Windows) :
 - accès réseau aux serveurs de licences (port `lmgrd` et ports des démons vendeurs) ;
 - `lmutil.exe` (fourni avec tout gestionnaire FlexLM, ex. Autodesk Network License Manager) ;
 - [ODBC Driver 18 for SQL Server](https://learn.microsoft.com/sql/connect/odbc/download-odbc-driver-for-sql-server) ;
-- soit `HeptagonesLM.exe`, soit Python 3.10+ (64 bits).
+- soit `HeptagonesLM.exe` (installé par l'assistant dans `C:\HeptagonesLM`), soit Python 3.10+ (64 bits).
 
 **1. Base de données** (une fois, par un DBA) :
 
@@ -269,6 +279,42 @@ La tâche planifiée « Envoi des rapports » (`send-report --skip-sent`, quotid
 n'envoie chaque abonnement qu'une fois par période et rattrape un 1er du mois manqué ;
 les envois sont tracés en base (`report_delivery`).
 
+### Alertes immédiates et tickets ITSM
+
+```yaml
+alerts:
+  recipients: [exploitation@entreprise.local]         # e-mail (optionnel)
+  # types: [collection, denial, saturation, expiry]   # défaut : toutes
+  # repeat_hours: 24                                  # rappel d'une alerte toujours présente
+  itsm:                                               # tickets automatiques (optionnel)
+    - type: servicenow                                # servicenow | jira | glpi | webhook
+      url: https://entreprise.service-now.com
+      username: svc_heptagoneslm
+      password: ${HEPTAGONESLM_ITSM_PASSWORD}
+```
+
+Évaluées après chaque collecte (toutes les 5 minutes), elles partent en un seul message :
+
+| Type | Déclencheur |
+|---|---|
+| `collection` | Collecte en échec sur un serveur (puis message « rétablie »), aucune collecte depuis plus d'une heure |
+| `denial` | Nouveaux refus de licence sur un produit (utilisateurs concernés) |
+| `saturation` | Plus aucun jeton disponible sur une licence au dernier sondage |
+| `expiry` | Licence qui expire dans `expiry_days` jours (30 par défaut), dans 7 jours, ou expirée |
+
+Une alerte toujours présente n'est rappelée qu'après `repeat_hours` ; un SMTP indisponible ne
+fait perdre aucune alerte (renvoyée à la collecte suivante). Aperçu sans envoi :
+`HeptagonesLM.exe -c heptagoneslm.yaml check-alerts --dry-run apercu`.
+
+**Tickets ITSM** : ServiceNow (incident), Jira (Cloud ou Data Center), GLPI et webhook
+(JSON, Microsoft Teams, Slack). Chaque alerte ouvre un ticket, le complète à chaque rappel et
+le résout quand la condition disparaît (collecte rétablie, jetons disponibles, licence
+renouvelée ; pour les refus, après `repeat_hours` sans nouveau refus) — sans doublon, avec
+rattrapage si l'outil était injoignable. Par défaut, seules les alertes graves
+(`min_severity: serious` : pannes, refus, échéances à moins de 7 jours) ouvrent un ticket.
+Vérification à l'installation : `HeptagonesLM.exe -c heptagoneslm.yaml test-itsm` (ticket de
+test ouvert, commenté puis résolu). Exemples complets : `config/heptagoneslm.example.yaml`.
+
 <img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">
 
 ## Configuration
@@ -314,6 +360,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 |---|:---:|:---:|
 | Coût de licence | Gratuit (MIT) | Payant |
 | Collecte FlexLM (lmstat + logs), sans agent client | ✅ | ✅ |
+| Collecte RLM (Reprise) | ✅ | ✅ |
 | Historique SQL Server | ✅ | ✅ |
 | Rapports d'usage, contention, refus, par service | ✅ | ✅ |
 | Tableau de bord avec alertes (serveur, refus, expiration, saturation) | ✅ | ✅ |
@@ -323,10 +370,16 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Interface web + exports Excel / CSV | ✅ | ✅ |
 | Connexion comptes Windows / AD, restriction par groupe | ✅ | ✅ |
 | Rapports périodiques par e-mail | ✅ | ✅ |
-| Rôles fins (droits par service, administration en ligne) | ❌ | ✅ |
-| Alertes poussées par e-mail / ticket, libération de licences inactives (agent poste) | ❌ | ✅ |
-| Licences SaaS / cloud, connecteur ServiceNow | ❌ | ✅ |
-| Autres gestionnaires (RLM, DSLS, Sentinel…) | Extensible, à développer | ✅ |
+| Alertes immédiates par e-mail (collecte, refus, saturation, échéances) | ✅ | ✅ |
+| Tickets ITSM automatiques (ServiceNow, Jira, GLPI, webhook Teams / Slack) | ✅ | ✅ |
+| Rôles par service (groupes AD) | ✅ | ✅ |
+| Licences empruntées, réservations (named user), multi-sites, licences inutilisées | ✅ | ✅ |
+| Administration en ligne (configuration depuis l'interface) | ❌ | ✅ |
+| Libération de licences inactives (agent sur les postes) | ❌ | ✅ |
+| Licences SaaS / cloud, offre hébergée | ❌ | ✅ |
+| Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
+
+Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md).
 
 ## Documentation
 
@@ -338,14 +391,15 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
-| [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation et évolutions prévues |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.2 (ITSM, rôles, prévision, gestionnaires, agent poste, cloud) |
+| [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation (mise en service) |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribuer : environnement, tests, conventions |
 
 ## Développement et tests
 
 ```bash
-git clone https://github.com/Valou94460/FREE-LM.git && cd FREE-LM
+git clone https://github.com/Valou94460/HEPTAGONES-LM.git && cd HEPTAGONES-LM
 pip install -e ".[dev]"
 python -m pytest                     # ~90 tests, SQLite en mémoire, aucun serveur requis
 heptagoneslm web --demo --open             # interface sur données simulées
@@ -355,7 +409,7 @@ La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Lin
 Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
 l'interface et de la page de connexion dans un vrai navigateur (Playwright), démonstration contre un vrai
 SQL Server 2022, construction et vérification de `HeptagonesLM.exe`. Une étiquette
-`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/FREE-LM/releases)
+`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/HEPTAGONES-LM/releases)
 avec l'exécutable.
 
 ## Licence

@@ -96,11 +96,64 @@ def cmd_collect(cfg: AppConfig, args) -> int:
             print("Une collecte est déjà en cours : exécution ignorée")
             return 0
         results = CollectionService(cfg, db).collect_all(only=args.server)
+        if cfg.alerts:
+            _notify_alerts(cfg, db)
     failed = [r for r in results if r.status != "OK"]
     for r in results:
         print(f"{r.server:<20} {r.collector:<8} {r.status:<6} {r.items:>6}  {r.message or ''}")
     if not results:
         log.warning("Aucun serveur collecté (vérifier la configuration / --server)")
+    return 2 if failed else 0
+
+
+def _notify_alerts(cfg: AppConfig, db) -> None:
+    """Alertes e-mail après la collecte : une erreur d'envoi ne fait pas échouer la collecte."""
+    from heptagoneslm.alerts import check_and_notify
+
+    try:
+        result = check_and_notify(cfg, db)
+    except Exception as exc:
+        log.error("Évaluation des alertes impossible : %s (exécuter « init-db » après une mise à jour)", exc)
+        return
+    if result.status in ("SENT", "ERROR"):
+        print(f"Alertes : {result.status} {result.detail}")
+        for t in result.tickets:
+            print(f"  ticket : {t}")
+
+
+def cmd_check_alerts(cfg: AppConfig, args) -> int:
+    from heptagoneslm.alerts import check_and_notify
+
+    if not cfg.alerts:
+        print("Aucune alerte configurée (section alerts) : rien à évaluer.")
+        return 0
+    with _open_db(cfg) as db:
+        result = check_and_notify(cfg, db, dry_run_dir=args.dry_run)
+    print(f"Alertes : {result.status} {result.detail}")
+    for a in result.alerts:
+        print(f"  [{a.severity}] {a.title} — {a.detail}")
+    for t in result.tickets:
+        print(f"  ticket : {t}")
+    return 2 if result.status == "ERROR" else 0
+
+
+def cmd_test_itsm(cfg: AppConfig, args) -> int:
+    from heptagoneslm.itsm import ItsmError, check_connector
+
+    connectors = cfg.alerts.itsm if cfg.alerts else []
+    if args.connector:
+        connectors = [c for c in connectors if c.name.lower() == args.connector.lower()]
+    if not connectors:
+        print("Aucun connecteur ITSM correspondant (section alerts.itsm).")
+        return 1
+    failed = 0
+    for c in connectors:
+        try:
+            steps = check_connector(c, cfg, resolve=not args.keep_open)
+            print(f"{c.name:<16} OK     " + " ; ".join(steps))
+        except ItsmError as exc:
+            failed += 1
+            print(f"{c.name:<16} ERREUR {exc}")
     return 2 if failed else 0
 
 
@@ -271,12 +324,20 @@ def cmd_web(args) -> int:
     if args.demo:
         from heptagoneslm.simulation.demo import run_demo
 
+        from heptagoneslm import __version__
+        from heptagoneslm.storage.schema import SCHEMA_VERSION
+
         home = demo_home()
         db = home / "heptagoneslm_demo.db"
-        fresh = db.exists() and date.fromtimestamp(db.stat().st_mtime) == date.today()
+        marker = home / "demo.version"
+        stamp = f"{__version__} schéma {SCHEMA_VERSION}"
+        # Régénérée chaque jour, et après une mise à jour (nouvelles tables, nouvelles données simulées)
+        fresh = (db.exists() and date.fromtimestamp(db.stat().st_mtime) == date.today()
+                 and marker.exists() and marker.read_text(encoding="utf-8").strip() == stamp)
         if not fresh:
             print(f"Préparation des données de démonstration ({args.demo_days} jours simulés)…")
             run_demo(home, days=args.demo_days, make_report=False)
+            marker.write_text(stamp, encoding="utf-8")
         cfg = load_config(home / "heptagoneslm.demo.yaml")
         print("Mode démonstration : données simulées (Autodesk, Ansys, MATLAB).")
     else:
@@ -357,6 +418,13 @@ def build_parser() -> argparse.ArgumentParser:
     sr.add_argument("--skip-sent", action="store_true", help="ne pas renvoyer un rapport déjà envoyé pour la période")
     sr.add_argument("--dry-run", metavar="DOSSIER", help="écrire les messages en .eml au lieu de les envoyer")
 
+    ca = sub.add_parser("check-alerts", help="évalue les alertes et les envoie par e-mail (aussi fait après chaque collecte)")
+    ca.add_argument("--dry-run", metavar="DOSSIER", help="écrire le message en .eml sans l'envoyer ni mémoriser l'envoi")
+
+    ti = sub.add_parser("test-itsm", help="ouvre, commente et résout un ticket de test dans chaque outil ITSM configuré")
+    ti.add_argument("--connector", help="limiter à ce connecteur (nom)")
+    ti.add_argument("--keep-open", action="store_true", help="laisser le ticket de test ouvert")
+
     sub.add_parser("purge", help="supprime les données au-delà des durées de rétention")
     sub.add_parser("apply-products", help="réapplique le mapping feature -> produit à tout l'historique")
 
@@ -395,6 +463,8 @@ WITH_CONFIG = {
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
     "send-report": cmd_send_report,
+    "check-alerts": cmd_check_alerts,
+    "test-itsm": cmd_test_itsm,
     "purge": cmd_purge,
     "apply-products": cmd_apply_products,
 }

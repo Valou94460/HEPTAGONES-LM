@@ -108,7 +108,11 @@ def demo_config_dict(output_dir: Path, connection_string: str, lmutil: Path, sce
         "logging": {"file": str(output_dir / "logs" / "heptagoneslm.log"), "level": "INFO"},
         "servers": servers,
         "products": products,
+        # Sites des postes (démonstration) : d'après le numéro du poste PC-nnnn
+        "sites": [{"pattern": "pc-[1-3]*", "site": "Paris"}, {"pattern": "pc-[4-6]*", "site": "Lyon"},
+                  {"pattern": "pc-*", "site": "Toulouse"}],
         "reporting": {"output_dir": str(output_dir / "reports"), "top_n_chart": 10, "business_hours": [8, 19]},
+        "web": {"demo": True},            # bandeau « Démonstration » dans l'interface
         "retention": {"snapshots_days": 90, "events_days": 730},
     }
 
@@ -118,7 +122,7 @@ def _reset_demo_data(db: Database, server_ids: list[int]) -> None:
     marks = ", ".join("?" for _ in server_ids)
     features = f"SELECT id FROM feature WHERE server_id IN ({marks})"
     with db.transaction():
-        for table in ("license_session", "usage_snapshot", "usage_hourly"):
+        for table in ("license_session", "usage_snapshot", "usage_hourly", "feature_reservation"):
             db.execute(f"DELETE FROM {table} WHERE feature_id IN ({features})", server_ids)
         for table in ("license_event", "collection_run", "collector_state", "feature"):
             db.execute(f"DELETE FROM {table} WHERE server_id IN ({marks})", server_ids)
