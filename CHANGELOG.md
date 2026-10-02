@@ -32,7 +32,14 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
   service ; la configuration n'en contient qu'une référence `dpapi:`, déchiffrée en mémoire au moment
   de l'appel. Vérification finale : secret présent et déchiffrable sur le serveur.
 
+- Dossier d'exploitation 1.10 : recette et PV (§ 5.1, 5.3), section `autodesk` (§ 6.2), licences Autodesk
+  nommées (§ 8.15).
+
 ### Corrigé
+- Installation sur Windows Server 2025 : test de refus hors du groupe sans `ConvertTo-SecureString` (module
+  parfois impossible à charger depuis PowerShell 7) ; état des rôles IIS lu par une requête CIM ciblée
+  (vérification du serveur : 98,7 s → 10 s) ; création du site IIS fiabilisée (identifiant explicite, seconde
+  tentative) ; version réelle du schéma dans le résumé de l'installation.
 - Assistant : le message d'erreur d'un champ disparaît dès que le champ est corrigé.
 
 ## [26.3.0] — 2026-10-01

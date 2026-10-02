@@ -41,7 +41,7 @@ selon les priorités des premiers clients.
 | **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account, licences inactives / jamais utilisées et coût récupérable (26.3.1) · API Autodesk : ❌ | 27.2 |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
-| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 69 pages, plan de test, guide d'installation | — |
+| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.10, environ 72 pages), plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
 > Le comparatif corrigé (version 26.3.0) reprend ce tableau : les intégrations ITSM, les rôles
