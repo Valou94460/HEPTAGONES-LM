@@ -94,6 +94,14 @@ class ParallelChecksTest(unittest.TestCase):
         # IIS présent : requête CIM ciblée avant Get-WindowsFeature (plus d'une minute et demie sur Server 2025)
         self.assertLess(script.index("Win32_OptionalFeature"), script.index("Get-WindowsFeature -Name"))
 
+    def test_new_website_gets_explicit_id(self):
+        from heptagoneslm.setup.answers import Answers
+
+        a = Answers()
+        a.iis_cert_thumbprint = "AB12"
+        script = iis.configure_site_script(a, "C:/HeptagonesLM/iis")
+        self.assertIn("New-Website -Name $site -Id $id", script)   # IIS sans aucun site : NullReferenceException
+
     def test_http_auth_status_script(self):
         from heptagoneslm.setup.system import WindowsSystem
 

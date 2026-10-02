@@ -650,7 +650,16 @@ $procs | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
         return int(data.get("stopped") or 0)
 
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict:
-        return self.ps_json(iis.configure_site_script(a, physical_path), timeout=600) or {}
+        script = iis.configure_site_script(a, physical_path)
+        try:
+            return self.ps_json(script, timeout=600) or {}
+        except SetupError as exc:
+            # Juste après l'installation des rôles ou d'ARR, la configuration IIS peut être encore en cours
+            # de rechargement (NullReferenceException du fournisseur IIS:\) : une seconde tentative suffit.
+            if "Object reference" not in str(exc) and "Référence d'objet" not in str(exc):
+                raise
+            time.sleep(10)
+            return self.ps_json(script, timeout=600) or {}
 
     def firewall_rule(self, name: str, port: int) -> None:
         r = self.ps(f"""

@@ -304,7 +304,11 @@ Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedRuntimeVersion -Value 'v4.
 Set-ItemProperty "IIS:\\AppPools\\$pool" -Name managedPipelineMode -Value 'Integrated'
 Set-ItemProperty "IIS:\\AppPools\\$pool" -Name startMode -Value 'AlwaysRunning'
 if (-not (Get-Website -Name $site)) {{
-    New-Website -Name $site -PhysicalPath $path -ApplicationPool $pool -Port $port -HostHeader $hostName -Ssl -SslFlags 1 | Out-Null
+    # Identifiant explicite : sans site existant (pas de « Default Web Site »), New-Website échoue sinon
+    # avec « Object reference not set to an instance of an object ».
+    $ids = @(Get-ChildItem IIS:\\Sites -ErrorAction SilentlyContinue | ForEach-Object {{ [int]$_.id }})
+    $id = if ($ids.Count) {{ ($ids | Measure-Object -Maximum).Maximum + 1 }} else {{ 1 }}
+    New-Website -Name $site -Id $id -PhysicalPath $path -ApplicationPool $pool -Port $port -HostHeader $hostName -Ssl -SslFlags 1 | Out-Null
 }} else {{
     Set-ItemProperty "IIS:\\Sites\\$site" -Name physicalPath -Value $path
     Set-ItemProperty "IIS:\\Sites\\$site" -Name applicationPool -Value $pool
