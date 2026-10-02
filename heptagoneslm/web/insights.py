@@ -716,3 +716,68 @@ def report_unused(db: Database, p) -> dict:
     result = api._result("unused", "Licences inutilisées", p.describe(), columns, rows, chart, kpis, notes)
     result["currency"] = p.currency
     return result
+
+
+NAMED_STATUS = {"never": "Jamais utilisée", "inactive": "Inactive", "active": "Active"}
+
+
+def report_named(db: Database, p) -> dict:
+    """Licences Autodesk « utilisateur nommé » (exports du portail Autodesk Account) : affectées mais inutilisées."""
+    from heptagoneslm import autodesk
+    from heptagoneslm.storage.repository import Repository
+
+    api = _api()
+    money = "money"
+    C = api._col
+    columns = [C("status_label", "Statut"), C("product", "Produit"), C("email", "Utilisateur"),
+               C("display_name", "Nom"), C("last_used", "Dernière utilisation", "date"),
+               C("inactive_for", "Jours sans utilisation", "int"), C("days_used", "Jours d'utilisation", "int"),
+               C("assigned_date", "Affectée le", "date"), C("unit_cost", "Coût annuel", money)]
+    title = "Autodesk · utilisateurs nommés"
+    how = ("Exporter le rapport depuis Autodesk Account (manage.autodesk.com › Reporting › Usage report › Export) "
+           "puis l'importer : « heptagoneslm import-autodesk export.csv » ou le déposer dans le dossier "
+           "autodesk.import_dir (importé à la collecte suivante).")
+    if not Repository(db).has_table("named_seat"):
+        return api._result("named", title, "Base à mettre à jour", columns, [],
+                           notes=["Exécuter « heptagoneslm init-db » pour créer les tables des licences nommées.", how])
+    if p.scoped:
+        return api._result("named", title, "Réservé aux administrateurs", columns, [],
+                           notes=["Les licences nommées ne sont pas rattachées à un service : rapport réservé aux "
+                                  "administrateurs de licences."])
+    report_date, rows = autodesk.seats(db, p.named_inactive_days, p.named_costs, p.products or None)
+    if report_date is None:
+        return api._result("named", title, "Aucun export importé", columns, [], notes=[how])
+    for r in rows:
+        r["status_label"] = NAMED_STATUS[r["status"]]
+    idle = [r for r in rows if r["status"] in ("inactive", "never")]
+    has_costs = any(r["unit_cost"] is not None for r in rows)
+    users = {r["email"] for r in rows}
+    kpis = [
+        {"label": "Licences affectées", "value": len(rows), "type": "int"},
+        {"label": "Utilisateurs", "value": len(users), "type": "int"},
+        {"label": "Actives", "value": sum(r["status"] == "active" for r in rows), "type": "int"},
+        {"label": f"Inactives (≥ {p.named_inactive_days} j)", "value": sum(r["status"] == "inactive" for r in rows),
+         "type": "int"},
+        {"label": "Jamais utilisées", "value": sum(r["status"] == "never" for r in rows), "type": "int"},
+        {"label": "Coût annuel récupérable", "value": sum(r["recoverable_cost"] or 0 for r in rows) if has_costs else None,
+         "type": money},
+    ]
+    per_product: dict[str, int] = {}
+    for r in idle:
+        per_product[r["product"]] = per_product.get(r["product"], 0) + 1
+    items = [{"label": k, "value": v} for k, v in sorted(per_product.items(), key=lambda kv: (-kv[1], kv[0]))]
+    chart = ({"kind": "bar", "format": "int", "title": "Licences inactives ou jamais utilisées par produit",
+              "items": items[:api.MAX_BAR_ITEMS]} if items else None)
+    age = (date.today() - report_date).days
+    notes = [f"Licences nommées du rapport Autodesk du {report_date:%d/%m/%Y} : une licence est inactive lorsque "
+             f"l'utilisateur ne l'a pas lancée depuis {p.named_inactive_days} jours (autodesk.inactive_days). "
+             "La réaffecter dans Autodesk Account ou ne pas la renouveler à l'échéance."]
+    if age > 45:
+        notes.append(f"Dernier export importé il y a {age} jours : en importer un plus récent. " + how)
+    if rows and not has_costs:
+        notes.append("Renseignez autodesk.annual_costs (produit ou motif → coût annuel) pour chiffrer les économies.")
+    description = f"Rapport Autodesk du {report_date:%d/%m/%Y}" + (f" — produits : {', '.join(p.products)}"
+                                                                  if p.products else "")
+    result = api._result("named", title, description, columns, rows, chart, kpis, notes)
+    result["currency"] = p.currency
+    return result

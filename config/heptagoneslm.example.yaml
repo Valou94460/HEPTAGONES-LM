@@ -179,6 +179,19 @@ web:
 #       format: teams                              # json | teams | slack
 #       min_severity: warning
 
+# Licences Autodesk « utilisateur nommé » (abonnements sans serveur de licences).
+# Exporter le rapport depuis Autodesk Account : manage.autodesk.com › Reporting › Usage report › Export
+# (CSV ou Excel), puis le déposer dans import_dir (importé à la collecte suivante) ou lancer
+# « heptagoneslm import-autodesk export.csv ».
+# autodesk:
+#   import_dir: C:\HeptagonesLM\autodesk
+#   inactive_days: 30                              # inactive au-delà de 30 jours sans lancement
+#   annual_costs:                                  # coût annuel d'une licence (motif * accepté)
+#     "AutoCAD": 2300
+#     "AutoCAD LT": 560
+#     "Revit": 3100
+#     "Product Design*": 3500
+
 retention:
   snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés
   events_days: 730         # refus, journal des collectes

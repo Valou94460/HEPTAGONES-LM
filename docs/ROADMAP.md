@@ -19,7 +19,7 @@ selon les priorités des premiers clients.
 | Licences sous-utilisées | Oui | ✅ Alerte « sous-utilisé », efficacité des jetons, recommandation | — |
 | Licences **inutilisées** (aucun usage sur la période) | Oui | ✅ Vue dédiée avec coût annuel (26.3) | — |
 | Alertes | Oui | ✅ Tableau de bord + e-mail immédiat (collecte, refus, saturation, échéances) | — |
-| Reporting, tableaux de bord, exports | Oui | ✅ 13 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
+| Reporting, tableaux de bord, exports | Oui | ✅ 16 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
 | Heatmaps | Oui | ✅ Profil horaire (jour × heure) | — |
 | Analytics avancées : **prévision** | Oui | ❌ | 26.4 |
 | Optimisation des achats / renouvellements | Oui | 🟡 Jetons recommandés, coûts, économies · pas de rapport de renouvellement | 26.4 |
@@ -38,6 +38,7 @@ selon les priorités des premiers clients.
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
+| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account, licences inactives / jamais utilisées et coût récupérable (26.3.1) · API Autodesk : ❌ | 27.2 |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
 | Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 69 pages, plan de test, guide d'installation | — |
@@ -112,7 +113,9 @@ Chaque collecteur est validé sur une sortie réelle fournie par un client (test
 
 ### 27.2.0 — Cloud et SAM (cible : T2 2027, à cadrer)
 - Offre hébergée (instance par client, collecteur local relayant vers le cloud).
-- Licences SaaS / nominatives des éditeurs (portails Autodesk, etc.) selon les API disponibles.
+- Licences SaaS / nominatives des éditeurs selon les API disponibles : API Autodesk (insights, réservée aux
+  clients Business Success Plan, à valider sur un compte réel) en complément de l'import des exports du
+  portail livré en 26.3.1 ; autres portails (Adobe, Microsoft…) à la demande.
 - Inventaire logiciel des postes (via l'agent 27.1) : premier niveau de SAM.
 
 ## 3. Hors logiciel : l'offre de service

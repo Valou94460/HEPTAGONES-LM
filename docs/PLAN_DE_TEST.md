@@ -100,7 +100,8 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
 | `tests/test_setup.py` | 21 | Assistant d'installation : réponses et `heptagoneslm.yaml` généré (3 modes, validé par le chargeur réel), secrets jamais écrits, `web.config` IIS, échappement PowerShell, scripts sans mot de passe, prérequis et corrections, installation complète, échec puis reprise, plan selon le mode, vérification, serveur local (jeton, Host, anti-CSRF), mode silencieux |
 | `tests/ui/setup_smoke.cjs` | — | Navigateur réel : parcours complet de l'assistant (simulation) : corrections automatiques, validation des champs, tous les tests de connexion, installation jusqu'à 100 %, vérification verte, rapport sans mot de passe, mobile |
-| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 11 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
+| `tests/test_autodesk.py` | 16 | Licences Autodesk nommées : exports du portail (présentation 2026, français, `;`, Windows-1252, lignes de titre, Excel), dates jj/mm ou mm/jj déduites de l'export, import idempotent et forcé, doublons, statuts (active, inactive, jamais utilisée, désaffectée), coûts, dossier surveillé, rapport web et export CSV, base non migrée, configuration, commandes `import-autodesk` et `collect` |
+| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 12 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
 
@@ -198,7 +199,7 @@ Lancer `HeptagonesLM.exe` (double-clic) ou `heptagoneslm web --demo --open`.
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
 | WEB-01 🔴 | Ouverture | Lancer l'interface | Tableau de bord affiché, badge « Collectes OK », plage des données affichée (barre latérale) | ☐ |
-| WEB-02 🔴 | 13 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
+| WEB-02 🔴 | 16 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
 | WEB-03 | Préréglages de période | Tester 7 j, 30 j, mois en cours, mois précédent, année, toutes les données | Dates « Du / Au » cohérentes, données rechargées | ☐ |
 | WEB-04 | Dates personnalisées | Saisir des dates | Préréglage passe à « Personnalisée », données de la période | ☐ |
 | WEB-05 | Début après la fin | Du > Au | Message « La date de début doit précéder la date de fin » | ☐ |
@@ -352,6 +353,9 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | OPT-03 [E3] | Réservation retirée | Supprimer une ligne `RESERVE`, relire les options (`lmreread`), collecter | Réservation disparue de la vue | ☐ |
 | OPT-04 🔴 [E3] | Sites | Règles `sites` ; `apply-products` | Filtre « Sites » proposé ; Répartition par site ; sessions filtrées sur un site | ☐ |
 | OPT-05 🔴 | Licences inutilisées | Période où une feature émise n'a jamais été utilisée | Présente dans « Licences inutilisées » avec son coût annuel ; absente dès la première utilisation | ☐ |
+| OPT-06 🔴 | Autodesk nominatif : import | Exporter « Usage report » depuis Autodesk Account (CSV puis Excel) ; `import-autodesk export.csv` | Nombre de licences affiché = lignes de l'export ; 2ᵉ import du même fichier : « déjà importé » | ☐ |
+| OPT-07 🔴 | Autodesk nominatif : rapport | Rapport « Autodesk · utilisateurs nommés » ; comparer 5 utilisateurs avec le portail | Statut (active, inactive, jamais utilisée), dernière utilisation et coût identiques au portail ; seuil `inactive_days` respecté | ☐ |
+| OPT-08 | Autodesk nominatif : dossier surveillé | Déposer un export dans `autodesk.import_dir`, attendre la collecte suivante | Importé une seule fois ; un fichier illisible est journalisé sans faire échouer la collecte | ☐ |
 
 ### 5.10 ter Serveurs RLM (RLM)
 

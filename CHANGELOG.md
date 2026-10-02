@@ -6,6 +6,13 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Licences Autodesk « utilisateur nommé »** : import des exports « Usage report » du portail Autodesk
+  Account (CSV ou Excel, colonnes en anglais ou en français, présentation 2026 comprise) par
+  `heptagoneslm import-autodesk export.csv` ou par dépôt dans un dossier surveillé (`autodesk.import_dir`,
+  importé à la collecte suivante, une seule fois par fichier). Nouveau rapport « Autodesk · utilisateurs
+  nommés » : licences actives, inactives (au-delà de `autodesk.inactive_days`, 30 jours par défaut) et jamais
+  utilisées, coût annuel récupérable (`autodesk.annual_costs`), exportable comme les autres vues.
+  Schéma v7 (tables `named_seat`, `named_import`) : exécuter `init-db` après la mise à jour.
 - **Recette sur le site client** (étape 12 de l'assistant, ou depuis l'accueil quand HeptagonesLM est déjà
   installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé feature par feature à la
   base (lecture indépendante de la sortie brute), collecte planifiée sur N heures, vérification de bout en

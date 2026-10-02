@@ -78,6 +78,14 @@ class RetentionConfig:
 
 
 @dataclass
+class AutodeskConfig:
+    """Licences Autodesk « utilisateur nommé » importées des exports du portail Autodesk Account."""
+    import_dir: str | None = None  # dossier surveillé : chaque export déposé est importé à la collecte
+    inactive_days: int = 30        # licence inactive au-delà de ce nombre de jours sans utilisation
+    annual_costs: dict[str, float] = field(default_factory=dict)  # motif de produit -> coût annuel d'une licence
+
+
+@dataclass
 class AuthConfig:
     """Authentification de l'interface web.
 
@@ -244,6 +252,7 @@ class AppConfig:
     web: WebConfig = field(default_factory=WebConfig)
     email: EmailConfig = field(default_factory=EmailConfig)
     alerts: AlertConfig | None = None
+    autodesk: AutodeskConfig = field(default_factory=AutodeskConfig)
 
     def server(self, name: str) -> ServerConfig:
         for srv in self.servers:
@@ -375,6 +384,7 @@ def parse_config(raw: dict) -> AppConfig:
         events_days=int(ret.get("events_days", 730)),
     )
     logging_cfg = raw.get("logging") or {}
+    autodesk = _parse_autodesk(raw.get("autodesk") or {})
     email_cfg = _parse_email(raw.get("email") or {})
     # Section de premier niveau « alerts » ; « email.alerts » accepté (première forme, 26.2 en préparation).
     if raw.get("alerts") and (raw.get("email") or {}).get("alerts"):
@@ -398,7 +408,24 @@ def parse_config(raw: dict) -> AppConfig:
         rlmutil_path=_expand(raw.get("rlmutil_path", "rlmutil")),
         log_file=_expand(logging_cfg.get("file")),
         log_level=logging_cfg.get("level", "INFO"),
+        autodesk=autodesk,
     )
+
+
+def _parse_autodesk(a) -> AutodeskConfig:
+    if not isinstance(a, dict):
+        raise ConfigError("autodesk doit être une section (import_dir, inactive_days, annual_costs)")
+    costs = a.get("annual_costs") or {}
+    if not isinstance(costs, dict):
+        raise ConfigError("autodesk.annual_costs : associer un produit (motif * accepté) à un coût annuel")
+    try:
+        parsed = {str(k): float(v) for k, v in costs.items()}
+        inactive = int(a.get("inactive_days", 30))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"autodesk : valeur numérique attendue ({exc})") from exc
+    if inactive < 1:
+        raise ConfigError("autodesk.inactive_days doit être supérieur ou égal à 1")
+    return AutodeskConfig(import_dir=_expand(a.get("import_dir")), inactive_days=inactive, annual_costs=parsed)
 
 
 PERIODS = ("last-month", "this-month", "last-week", "last-7d", "last-year")

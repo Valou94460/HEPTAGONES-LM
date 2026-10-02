@@ -14,6 +14,7 @@ Produits dans le répertoire de sortie :
 * ``heptagoneslm.demo.yaml``    configuration prête pour continuer « en direct »
 * ``fake_lmutil[.bat]``   faux lmutil appelé par ``heptagoneslm collect``
 * ``reports/*.xlsx``      rapport Excel de la période simulée
+* ``autodesk/*.csv``      export « Usage report » simulé du portail Autodesk (licences nommées)
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from __future__ import annotations
 import importlib.util
 import logging
 import os
+import random
 import shutil
 import stat
 import sys
@@ -114,7 +116,39 @@ def demo_config_dict(output_dir: Path, connection_string: str, lmutil: Path, sce
         "reporting": {"output_dir": str(output_dir / "reports"), "top_n_chart": 10, "business_hours": [8, 19]},
         "web": {"demo": True},            # bandeau « Démonstration » dans l'interface
         "retention": {"snapshots_days": 90, "events_days": 730},
+        # Licences Autodesk nommées : exports du portail déposés dans ce dossier
+        "autodesk": {"import_dir": str(output_dir / "autodesk"), "inactive_days": 30,
+                     "annual_costs": {k: v for k, v, _ in AUTODESK_PRODUCTS}},
     }
+
+
+# Produits Autodesk nommés de la démonstration : (produit, coût annuel, nombre de licences)
+AUTODESK_PRODUCTS = (("AutoCAD", 2300.0, 18), ("AutoCAD LT", 560.0, 10), ("Revit", 3100.0, 8),
+                     ("Inventor Professional", 3000.0, 6), ("Civil 3D", 2900.0, 4))
+
+
+def write_autodesk_export(folder: Path, end: datetime, users: list[str]) -> Path:
+    """Export « Usage report » simulé du portail Autodesk Account (format CSV du portail)."""
+    rng = random.Random(42)
+    report = end.date()
+    folder.mkdir(parents=True, exist_ok=True)
+    lines = ["Product name,User email,First name,Last name,Seat assignment,Assigned date,Last used date,Days used,Version"]
+    for product, _cost, count in AUTODESK_PRODUCTS:
+        for user in rng.sample(users, min(count, len(users))):
+            first, _, last = display_name_of(user).partition(" ")
+            assigned = report - timedelta(days=rng.randint(60, 700))
+            roll = rng.random()
+            if roll < 0.12:            # affectée mais jamais lancée
+                last_used, days_used = "", 0
+            elif roll < 0.35:          # inactive depuis plus de 30 jours
+                last_used, days_used = (report - timedelta(days=rng.randint(31, 200))).isoformat(), rng.randint(1, 40)
+            else:
+                last_used, days_used = (report - timedelta(days=rng.randint(0, 20))).isoformat(), rng.randint(20, 120)
+            lines.append(f"{product},{user}@exemple.fr,{first},{last},Assigned,{assigned.isoformat()},{last_used},"
+                         f"{days_used},2026")
+    path = folder / f"usage_report_{report:%Y%m%d}.csv"
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return path
 
 
 def _reset_demo_data(db: Database, server_ids: list[int]) -> None:
@@ -203,6 +237,10 @@ def run_demo(
         )
         with db.transaction():
             import_users(svc.repo, read_users_csv(users_csv))
+
+        from heptagoneslm.autodesk import import_report
+
+        import_report(db, write_autodesk_export(output_dir / "autodesk", end, list(USERS)), force=True)
 
         log.info("Simulation du %s au %s (sondage toutes les %d min)", f"{start:%d/%m/%Y}", f"{end:%d/%m/%Y %H:%M}", poll_minutes)
         day = start
