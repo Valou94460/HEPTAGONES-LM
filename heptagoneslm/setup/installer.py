@@ -156,7 +156,9 @@ def step_schema(ctx: Context) -> str:
         ctx.log(line)
     if not r.ok:
         raise SetupError(f"Initialisation du schéma : {r.message}")
-    return "Schéma v3 initialisé"
+    from heptagoneslm.storage.schema import SCHEMA_VERSION
+
+    return f"Schéma v{SCHEMA_VERSION} initialisé"
 
 
 def step_collect(ctx: Context) -> str:
