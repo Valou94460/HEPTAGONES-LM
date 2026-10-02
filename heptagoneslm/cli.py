@@ -461,6 +461,10 @@ def cmd_setup(args) -> int:
     except SetupError as exc:
         print(exc, file=sys.stderr)
         return 1
+    if args.update:
+        from heptagoneslm.setup.unattended import run_update
+
+        return run_update(system, args.install_dir)
     if args.answers:
         from heptagoneslm.setup.unattended import run
 
@@ -554,6 +558,9 @@ def build_parser() -> argparse.ArgumentParser:
     st = sub.add_parser("setup", help="assistant d'installation sur un serveur Windows (IIS, base, tâches, vérification)")
     st.add_argument("--simulate", action="store_true", help="démonstration : aucune modification du système")
     st.add_argument("--answers", metavar="FICHIER.json", help="installation silencieuse à partir d'un fichier de réponses")
+    st.add_argument("--update", action="store_true",
+                    help="mise à jour silencieuse de l'installation existante (rien à ressaisir)")
+    st.add_argument("--install-dir", help="dossier de l'installation à mettre à jour (défaut : C:\\HeptagonesLM)")
     st.add_argument("--port", type=int, default=0, help="port local de l'assistant (défaut : libre)")
     st.add_argument("--no-open", action="store_true", help="ne pas ouvrir le navigateur")
     st.add_argument("--token", help=argparse.SUPPRESS)

@@ -140,6 +140,12 @@ jobs:
           for i in $(seq 1 30); do curl -s -o /dev/null localhost:8790/setup.css && break; sleep 1; done
           node tests/ui/setup_smoke.cjs http://127.0.0.1:8790 ci-token ui-captures
 
+      - name: Mise à jour en place depuis l'assistant (simulation)
+        run: |
+          python tests/ui/update_harness.py 8793 > update.log 2>&1 &
+          for i in $(seq 1 30); do grep -q prêt update.log && break; sleep 1; done
+          node tests/ui/setup_update.cjs ui-captures
+
       - name: PV de recette lisible par LibreOffice (conversion PDF)
         run: |
           sudo apt-get update -qq
@@ -176,10 +182,29 @@ jobs:
           pyinstaller --noconfirm --clean --onefile --console --name HeptagonesLM --icon packaging/heptagoneslm.ico \
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
-          # Assistant d'installation : élévation administrateur, HeptagonesLM.exe embarqué
+
+      # Signature Authenticode : certificat de l'éditeur (secrets SIGN_PFX_BASE64 / SIGN_PFX_PASSWORD) ou, à défaut,
+      # certificat de test pour valider la procédure. HeptagonesLM.exe est signé avant d'être embarqué dans le Setup.
+      - name: Signature de HeptagonesLM.exe
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: ./packaging/sign.ps1 dist/HeptagonesLM.exe
+
+      - name: Construction de HeptagonesLM-Setup.exe
+        run: |
+          # Assistant d'installation : élévation administrateur, HeptagonesLM.exe (signé) embarqué
           pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
+
+      - name: Signature de HeptagonesLM-Setup.exe
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: ./packaging/sign.ps1 dist/HeptagonesLM-Setup.exe
 
       - name: Vérification de l'exécutable
         run: |
@@ -273,6 +298,8 @@ jobs:
 
       - name: Relance de l'installation (idempotence)
         run: |
+          # Réglage ajouté à la main par l'exploitant : doit survivre à la réinstallation
+          Add-Content C:\HeptagonesLM\heptagoneslm.yaml "sites:`n- pattern: PC-LYO*`n  site: Lyon" -Encoding utf8
           $lines = & .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json 2>&1
           $code = $LASTEXITCODE
           $lines | ForEach-Object { Write-Host $_ }
@@ -283,6 +310,30 @@ jobs:
           $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://heptagoneslm.ci.local/api/me
           Write-Host "[$code] $(Get-Content me.json -Raw)"
           if ($code -ne "200" -or (Get-Content me.json -Raw | ConvertFrom-Json).user -ne "ci_lecteur") { throw "SSO après réinstallation" }
+          if (-not (Select-String -Path C:\HeptagonesLM\heptagoneslm.yaml -Pattern "site: Lyon" -Quiet)) { throw "réglage personnalisé (sites) perdu à la réinstallation" }
+          if (-not ($lines -match "Réglages personnalisés conservés")) { throw "conservation des réglages non signalée" }
+
+      - name: Mise à jour en place (HeptagonesLM-Setup.exe setup --update)
+        run: |
+          # Installation « plus ancienne » : version notée 26.3.0 dans les réponses enregistrées
+          $answersFile = "C:\HeptagonesLM\setup-reponses.json"
+          $saved = Get-Content $answersFile -Raw | ConvertFrom-Json
+          $saved._version = "26.3.0"
+          $saved | ConvertTo-Json -Depth 6 | Set-Content $answersFile -Encoding utf8
+          $before = (Get-FileHash C:\HeptagonesLM\heptagoneslm.yaml).Hash
+          $lines = & .\livrables\dist\HeptagonesLM-Setup.exe setup --update 2>&1
+          $code = $LASTEXITCODE
+          $lines | ForEach-Object { Write-Host $_ }
+          if ($code -ne 0) { throw "Mise à jour : code $code" }
+          if ((Get-FileHash C:\HeptagonesLM\heptagoneslm.yaml).Hash -ne $before) { throw "configuration modifiée par la mise à jour" }
+          $backup = Get-ChildItem C:\HeptagonesLM\backup -Recurse -Filter heptagoneslm.yaml | Select-Object -First 1
+          if (-not $backup) { throw "sauvegarde absente" }
+          Write-Host "Sauvegarde : $($backup.FullName)"
+          $version = (Get-Content $answersFile -Raw | ConvertFrom-Json)._version
+          if ($version -ne (& C:\HeptagonesLM\HeptagonesLM.exe --version).Split(" ")[-1]) { throw "version non enregistrée : $version" }
+          $code = curl.exe -sk --ntlm -u "ci_lecteur:$env:SVC_PWD" -o me.json -w "%{http_code}" https://heptagoneslm.ci.local/api/me
+          if ($code -ne "200") { throw "interface après mise à jour : $code" }
+          Write-Host "Mise à jour en place : OK (version $version, configuration intacte, interface opérationnelle)"
 
       - name: Journaux d'installation
         if: always()

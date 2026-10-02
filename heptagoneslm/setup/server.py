@@ -18,7 +18,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import parse_qs, urlparse
 
 from heptagoneslm import __version__
@@ -116,6 +116,35 @@ class SetupApp:
     # -- recette -------------------------------------------------------------------------------------
     def installed_config(self) -> str | None:
         return recette.find_installed(self.system, self.answers.install_dir)
+
+    def installed_version(self, config_path: str | None) -> str | None:
+        """Version notée à l'installation ou à la dernière mise à jour (26.3.1 et suivantes), sinon « antérieure »."""
+        if not config_path:
+            return None
+        from heptagoneslm.setup.installer import ANSWERS_FILE
+
+        raw = self.system.read_text(str(PureWindowsPath(config_path).parent / ANSWERS_FILE))
+        if not raw:
+            return "antérieure à 26.3.1"
+        try:
+            return str(json.loads(raw).get("_version") or "") or "antérieure à 26.3.1"
+        except ValueError:
+            return "inconnue"
+
+    def start_update(self, config_path: str | None = None) -> dict:
+        """Mise à jour en place de l'installation existante (configuration, secrets et tâches conservés)."""
+        path = config_path or self.installed_config()
+        if not path:
+            raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur")
+        with self.lock:
+            if self.installer and self.installer.status == "running":
+                raise SetupError("Une installation est déjà en cours")
+            installed = recette.load_installed(self.system, path)
+            self.answers = installed.answers
+            self.installer = Installer(self.system, installed.answers, update=True)
+            self.verification = None
+            self.installer.start()
+        return {"started": True, "install_dir": installed.install_dir}
 
     def recette_context(self, config_path: str | None = None) -> dict:
         path = config_path or self.installed_config()
@@ -236,7 +265,10 @@ class SetupApp:
             self._info = {"version": __version__, "simulated": s.simulated, "system": s.name,
                           "admin": s.is_admin(), "os": os_info, "domain": dom, "certificates": certs,
                           "odbc_drivers": drivers, "lmutil_found": lmutil, "defaults": defaults,
-                          "installed": installed}
+                          "installed": installed, "installed_version": self.installed_version(installed)}
+        else:   # installation faite depuis l'ouverture de l'assistant : état relu (lecture de fichier, immédiate)
+            installed = recette.find_installed(self.system, self._info["defaults"]["install_dir"])
+            self._info.update(installed=installed, installed_version=self.installed_version(installed))
         return self._info
 
     def plan(self, a: Answers) -> list[dict]:
@@ -398,6 +430,8 @@ class SetupHandler(BaseHTTPRequestHandler):
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"message": message, "checks": [c.to_dict() for c in checks],
                                    "blocking": len(blocking(checks))})
+            if path == "/api/update":
+                return self._json(app.start_update(body.get("config_path") or None))
             if path == "/api/autodesk/login":
                 return self._json(app.start_autodesk_login(a))
             if path == "/api/test":

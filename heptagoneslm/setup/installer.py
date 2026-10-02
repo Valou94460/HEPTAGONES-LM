@@ -6,14 +6,17 @@ depuis l'étape en échec (« Réessayer ») ou rejouée entièrement sans domma
 
 from __future__ import annotations
 
+import copy
 import json
 import threading
 import time
 import traceback
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import PureWindowsPath
 from typing import Callable
+
+import yaml
 
 from heptagoneslm import __version__
 from heptagoneslm.setup import iis
@@ -104,13 +107,89 @@ def step_config(ctx: Context) -> str:
     if previous is not None:
         system.write_text(a.config_path + f".{stamp}.bak", previous)
         ctx.log(f"Ancienne configuration sauvegardée : heptagoneslm.yaml.{stamp}.bak")
-    system.write_text(a.config_path, a.yaml_text(datetime.now().strftime("%d/%m/%Y %H:%M")))
+    text = a.yaml_text(datetime.now().strftime("%d/%m/%Y %H:%M"))
+    kept: list[str] = []
+    if previous is not None:
+        try:
+            old = yaml.safe_load(previous) or {}
+        except yaml.YAMLError:
+            old = {}
+        if isinstance(old, dict):
+            merged, kept = merge_user_settings(a.config_dict(), old)
+            if kept:
+                from heptagoneslm.config import ConfigError, parse_config
+
+                try:
+                    parse_config(merged)
+                    text = a.header_text(datetime.now().strftime("%d/%m/%Y %H:%M")) + a.dump_config(merged)
+                except ConfigError as exc:
+                    ctx.log(f"Réglages personnalisés non repris (invalides : {exc}) ; voir la sauvegarde .bak", "warning")
+                    kept = []
+    system.write_text(a.config_path, text)
     ctx.log(f"Configuration écrite : {a.config_path}")
+    if kept:
+        ctx.log("Réglages personnalisés conservés : " + ", ".join(kept))
     # Réponses de l'assistant sans les secrets : reprises par la recette et les mises à jour
     saved = {k: v for k, v in a.to_dict().items() if k not in SECRET_FIELDS}
     saved["_version"], saved["_written"] = __version__, datetime.now().isoformat(timespec="seconds")
     system.write_text(a.path(ANSWERS_FILE), json.dumps(saved, ensure_ascii=False, indent=2))
     return "heptagoneslm.yaml écrit"
+
+
+# Réglages saisis à la main dans heptagoneslm.yaml, que l'assistant ne gère pas : conservés quand il réécrit
+# la configuration (réinstallation, changement de réponses).
+KEEP_TOP = ("products", "sites", "retention")
+KEEP_NESTED = (("reporting", ("business_hours", "currency", "target_coverage", "top_n_chart")),
+               ("autodesk", ("annual_costs",)), ("web", ("roles", "session_hours")),
+               ("email", ("subscriptions",)), ("alerts", None))
+
+
+def merge_user_settings(new: dict, old: dict) -> tuple[dict, list[str]]:
+    """Configuration de l'assistant complétée des réglages personnalisés de l'ancienne : (fusion, clés gardées)."""
+    out, kept = copy.deepcopy(new), []
+    for key in KEEP_TOP:
+        if old.get(key) and old.get(key) != out.get(key):
+            out[key] = copy.deepcopy(old[key])
+            kept.append(key)
+    for section, keys in KEEP_NESTED:
+        before = old.get(section)
+        if not isinstance(before, dict) or section not in out:
+            continue
+        target = out[section]
+        for k, v in before.items():
+            if keys is None and k in ("recipients", "itsm"):
+                continue                 # destinataires et connecteurs : ceux de l'assistant
+            if (keys is None or k in keys) and v not in (None, {}, []) and target.get(k) != v:
+                if section == "email" and k == "subscriptions" and len(v) <= len(target.get(k) or []):
+                    continue             # abonnement unique de l'assistant : ses destinataires priment
+                target[k] = copy.deepcopy(v)
+                kept.append(f"{section}.{k}")
+    return out, kept
+
+
+def step_backup(ctx: Context) -> str:
+    """Mise à jour : copie de la configuration, des réponses, du site IIS et de la base SQLite."""
+    a, system = ctx.a, ctx.system
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    folder = a.path("backup", stamp)
+    system.makedirs(folder)
+    saved = []
+    for rel in ("heptagoneslm.yaml", ANSWERS_FILE, "iis\\web.config"):
+        text = system.read_text(a.path(*rel.split("\\")))
+        if text is not None:
+            system.write_text(str(PureWindowsPath(folder) / PureWindowsPath(rel).name), text)
+            saved.append(PureWindowsPath(rel).name)
+    if a.db_mode == "sqlite":
+        db = a.path("data", "heptagoneslm.db")
+        if system.exists(db):
+            system.stop_task(WEB_TASK)               # base non verrouillée par l'interface pendant la copie
+            system.copy_file(db, str(PureWindowsPath(folder) / "heptagoneslm.db"))
+            saved.append("heptagoneslm.db")
+    else:
+        ctx.log("Base SQL Server : sauvegarde à faire par le DBA avant la mise à jour (le schéma n'évolue que "
+                "par ajouts)", "warning")
+    ctx.log(f"Sauvegarde : {folder} ({', '.join(saved) or 'rien à copier'})")
+    return f"Sauvegarde dans backup\\{stamp}"
 
 
 def step_secrets(ctx: Context) -> str:
@@ -310,13 +389,24 @@ def build_plan(a: Answers) -> list[Step]:
     return steps
 
 
+def build_update_plan(a: Answers) -> list[Step]:
+    """Mise à jour en place : configuration, secrets, tâches et site IIS conservés, aucun mot de passe demandé."""
+    return [
+        Step("backup", "Sauvegarde", 1, step_backup),
+        Step("binaries", "Remplacement de HeptagonesLM", 2, step_binaries),
+        Step("schema", "Mise à jour du schéma", 2, step_schema),
+        Step("start", "Redémarrage de l'interface web", 2, step_start),
+        Step("collect", "Collecte de contrôle", 2, step_collect),
+    ]
+
+
 # ------------------------------------------------------------------------------ exécution
 
 
 class Installer:
-    def __init__(self, system: System, a: Answers):
-        self.system, self.a = system, a
-        self.steps = build_plan(a)
+    def __init__(self, system: System, a: Answers, update: bool = False):
+        self.system, self.a, self.update = system, a, update
+        self.steps = build_update_plan(a) if update else build_plan(a)
         self.status = "idle"               # idle | running | done | failed
         self.current = -1
         self.fraction = 0.0                # avancement dans l'étape courante
@@ -365,7 +455,8 @@ class Installer:
                 s.status, s.message, s.started, s.ended = "pending", "", None, None
             self.logs.clear()
             self.started_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            self.log(f"Installation de HeptagonesLM {__version__} dans {self.a.install_dir} ({self.system.name})")
+            verb = "Mise à jour vers" if self.update else "Installation de"
+            self.log(f"{verb} HeptagonesLM {__version__} dans {self.a.install_dir} ({self.system.name})")
         self.status, self.error, self.ended_at = "running", None, None
         self._thread = threading.Thread(target=self._run, args=(first,), daemon=True, name="heptagoneslm-setup")
         self._thread.start()
@@ -396,8 +487,20 @@ class Installer:
                 step.ended = time.time()
         self.status = "done"
         self.ended_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        self.log("Installation terminée", "ok")
+        self.log("Mise à jour terminée" if self.update else "Installation terminée", "ok")
+        if self.update:
+            self._record_version()
         self._save_log()
+
+    def _record_version(self) -> None:
+        """Version installée notée dans le fichier des réponses (détection des mises à jour suivantes)."""
+        try:
+            raw = self.system.read_text(self.a.path(ANSWERS_FILE))
+            data = json.loads(raw) if raw else {k: v for k, v in self.a.to_dict().items() if k not in SECRET_FIELDS}
+            data["_version"], data["_updated"] = __version__, datetime.now().isoformat(timespec="seconds")
+            self.system.write_text(self.a.path(ANSWERS_FILE), json.dumps(data, ensure_ascii=False, indent=2))
+        except Exception as exc:                     # non bloquant : la mise à jour est faite
+            self.log(f"Version non enregistrée : {exc}", "warning")
 
     def _fail(self, step: Step, message: str) -> None:
         step.status, step.message = "failed", message

@@ -165,6 +165,7 @@
   const at = id => STEPS.findIndex(s => s.id === id);
   const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify"), RECETTE = at("recette");
   let recetteMode = false;            // recette d'une installation existante, ouverte depuis la page d'accueil
+  let updateMode = false;             // mise à jour en place d'une installation existante
 
   function renderStepper() {
     const locked = install.status === "running";
@@ -172,6 +173,7 @@
       const cls = i === step ? "current" : (i < maxStep || (i < step) ? "done" : "");
       let reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
       if (recetteMode) reachable = !locked && i !== step && (i === 0 || i === RECETTE);
+      if (updateMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
     }).join("");
@@ -181,8 +183,9 @@
   function render() {
     const s = STEPS[step];
     $("step-eyebrow").textContent = `Étape ${step + 1} sur ${STEPS.length}`;
-    $("step-title").textContent = s.title;
-    $("step-desc").textContent = s.desc;
+    $("step-title").textContent = updateMode && step === INSTALL ? "Mise à jour" : s.title;
+    $("step-desc").textContent = updateMode && step === INSTALL
+      ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés." : s.desc;
     const body = $("step-body");
     body.innerHTML = s.render();
     bind(body);
@@ -226,12 +229,15 @@
       ["clock", "Tâches planifiées", "Collecte toutes les 5 minutes, rapport mensuel, e-mails, purge, interface permanente."],
       ["check", "Vérification finale", "Chaque composant est testé de bout en bout, avec un rapport d'installation."],
     ];
-    const inst = info.installed;
+    const inst = info.installed, iv = info.installed_version, newer = inst && iv !== info.version;
     return `
-      ${inst ? `<div class="panel installed-panel"><div class="panel-head"><div><h2>${dot("ok")} HeptagonesLM est déjà installé sur ce serveur</h2>
-        <p class="muted">Configuration <code>${esc(inst)}</code>. Faites la recette de cette installation (comparaison avec les serveurs de licences, contrôles de bout en bout, PV), ou poursuivez pour la mettre à jour.</p></div></div>
-        <div class="actions"><button type="button" class="btn primary" id="go-recette">Faire la recette de cette installation</button>
-          <button type="button" class="btn" id="go-install">Mettre à jour ou réinstaller</button></div></div>` : ""}
+      ${inst ? `<div class="panel installed-panel"><div class="panel-head"><div><h2>${dot("ok")} HeptagonesLM ${esc(iv && /^\d/.test(iv) ? iv : "")} est déjà installé sur ce serveur</h2>
+        <p class="muted">Configuration <code>${esc(inst)}</code>${iv && !/^\d/.test(iv) ? ` · version ${esc(iv)}` : ""}.
+          ${newer ? `La <b>mise à jour vers ${esc(info.version)}</b> remplace le programme et met à jour la base, sans rien ressaisir : configuration, réglages personnalisés, mots de passe, tâches planifiées et site IIS sont conservés (sauvegarde préalable).` : "Cette installation est à jour."}
+          La recette compare HeptagonesLM aux serveurs de licences et produit un PV.</p></div></div>
+        <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>` : ""}
+          <button type="button" class="btn ${newer ? "" : "primary"}" id="go-recette">Faire la recette de cette installation</button>
+          <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div></div>` : ""}
       <div class="welcome-grid">${feats.map(([i, t, d]) => `<div class="feature"><span class="ico">${icon(i)}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div>
       <div class="recap">
         <div class="panel"><h2>Ce serveur</h2><dl class="kv">
@@ -253,7 +259,8 @@
 
   STEPS[0].after = () => {
     $("go-recette")?.addEventListener("click", () => { recetteMode = true; step = RECETTE; render(); window.scrollTo({ top: 0 }); loadRecette(); });
-    $("go-install")?.addEventListener("click", () => { recetteMode = false; go(1); });
+    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; go(1); });
+    $("go-update")?.addEventListener("click", startUpdate);
   };
 
   /* Commande à copier (SPN, zone Intranet, adresse de test…) */
@@ -699,16 +706,16 @@
     return `
       <div class="panel progress-card">
         <div class="progress-top"><span class="pct" id="pct">${pct} %</span>
-          <span class="cur" id="cur">${st.status === "done" ? "Installation terminée" : st.status === "failed" ? "Installation interrompue" : esc(st.current || "Démarrage…")}</span></div>
+          <span class="cur" id="cur">${st.status === "done" ? (updateMode ? "Mise à jour terminée" : "Installation terminée") : st.status === "failed" ? (updateMode ? "Mise à jour interrompue" : "Installation interrompue") : esc(st.current || "Démarrage…")}</span></div>
         <div class="bar ${cls}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
         <ul class="steps-list" id="steps">${(st.steps || []).map(s => `<li class="${s.status}"><span class="ico">${s.status === "running" ? '<span class="spinner"></span>' : icons[s.status]}</span>
           <span>${esc(s.label)}${s.status === "failed" ? `<br><small style="color:var(--critical)">${esc(s.message)}</small>` : ""}</span>
           <small>${s.duration != null ? s.duration + " s" : ""}</small></li>`).join("")}</ul>
       </div>
-      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>L'installation s'est arrêtée</h2>
+      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${updateMode ? "La mise à jour s'est arrêtée" : "L'installation s'est arrêtée"}</h2>
         <p>${esc(st.error || "")}</p></div></div>
         <div class="actions"><button type="button" class="btn primary" id="retry">Réessayer à partir de cette étape</button>
-          <button type="button" class="btn" id="back-summary">Modifier la configuration</button>
+          ${updateMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
           <a class="btn ghost" href="/api/report">Télécharger le journal</a></div></div>` : ""}
       <div class="panel"><details ${st.status === "failed" ? "open" : ""} id="log-details"><summary>Journal détaillé</summary>
         <div class="console" id="console" style="margin-top:12px"></div></details></div>`;
@@ -728,6 +735,16 @@
     $("retry")?.addEventListener("click", () => startInstall(true));
     $("back-summary")?.addEventListener("click", () => { install = { status: "idle" }; go(SUMMARY); });
   };
+  async function startUpdate() {
+    showError("");
+    try { await api("/api/update", {}); } catch (e) { showError(e.message); return; }
+    updateMode = true; recetteMode = false;
+    logCount = 0; consoleLines = []; poll.last = null;
+    install = { status: "running", steps: [] };
+    step = INSTALL; maxStep = INSTALL;
+    render(); window.scrollTo({ top: 0 });
+    poll();
+  }
   async function startInstall(resume = false) {
     showError("");
     try { await api("/api/install", { answers: A, resume }); }

@@ -70,10 +70,32 @@ jobs:
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" heptagoneslm/launcher.py
           ./dist/HeptagonesLM.exe --version
+
+      # Signature uniquement avec le certificat de l'éditeur (secrets SIGN_PFX_BASE64 / SIGN_PFX_PASSWORD) :
+      # une release n'est jamais signée avec le certificat de test.
+      - name: Signature de HeptagonesLM.exe
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          if ($env:SIGN_PFX_BASE64) { ./packaging/sign.ps1 dist/HeptagonesLM.exe }
+          else { Write-Warning "Aucun certificat de signature (secret SIGN_PFX_BASE64) : exécutables non signés" }
+
+      - name: Construction de HeptagonesLM-Setup.exe
+        run: |
           pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
           ./dist/HeptagonesLM-Setup.exe --version
+
+      - name: Signature de HeptagonesLM-Setup.exe
+        shell: pwsh
+        env:
+          SIGN_PFX_BASE64: ${{ secrets.SIGN_PFX_BASE64 }}
+          SIGN_PFX_PASSWORD: ${{ secrets.SIGN_PFX_PASSWORD }}
+        run: |
+          if ($env:SIGN_PFX_BASE64) { ./packaging/sign.ps1 dist/HeptagonesLM-Setup.exe }
 
       - name: Vérification rapide
         run: |

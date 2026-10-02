@@ -6,6 +6,15 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Mise à jour en place** : l'assistant reconnaît l'installation existante et sa version ; « Mettre à jour »
+  sauvegarde (configuration, réponses, web.config, base SQLite), remplace l'exécutable, met à jour le schéma,
+  redémarre l'interface, lance une collecte de contrôle puis la vérification — sans rien ressaisir
+  (configuration, mots de passe, tâches et site IIS conservés). Mode silencieux : `setup --update`.
+- **Réglages personnalisés conservés** quand l'assistant réécrit `heptagoneslm.yaml` (products, sites,
+  rétention, coûts Autodesk, rôles, abonnements e-mail, types d'alertes).
+- **Signature de code** de `HeptagonesLM-Setup.exe` et `HeptagonesLM.exe` (Authenticode horodaté) avec le
+  certificat de l'éditeur (secrets GitHub `SIGN_PFX_BASE64` / `SIGN_PFX_PASSWORD`) ; procédure validée en CI
+  avec un certificat de test.
 - **Connecteur API Autodesk (Business Success Plan Reporting)** : l'usage des licences Autodesk nommées est
   lu directement chez Autodesk (API Insights : équipes, requêtes d'usage asynchrones paginées, limite de débit
   respectée), sans export manuel. Connexion OAuth 3 étapes d'un administrateur (PKCE, ou Client Secret chiffré

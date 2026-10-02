@@ -205,6 +205,7 @@ Get-ADUser -Filter * -Properties DisplayName,Department |
 | `heptagoneslm purge` | Applique la politique de rétention |
 | `heptagoneslm test-server --server X` | Interroge un serveur sans rien écrire |
 | `heptagoneslm parse-lmstat fichier.txt` / `parse-log fichier.log` | Diagnostic des parsers (sans base) |
+| `HeptagonesLM-Setup.exe setup --update` | Mise à jour silencieuse d'une installation existante (rien à ressaisir, sauvegarde préalable) |
 | `heptagoneslm demo [--days N] [--connection-string …]` | Environnement de démonstration simulé |
 | `heptagoneslm ddl --dialect mssql` | Script SQL du schéma |
 

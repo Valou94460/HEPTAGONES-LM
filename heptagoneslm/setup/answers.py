@@ -515,16 +515,23 @@ class Answers:
         return cfg
 
     def yaml_text(self, generated_at: str = "") -> str:
-        header = ("# HeptagonesLM - configuration générée par l'assistant d'installation"
+        return self.header_text(generated_at) + self.dump_config(self.config_dict())
+
+    @staticmethod
+    def dump_config(cfg: dict) -> str:
+        body = yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False, default_flow_style=False, width=120)
+        return body.replace("products: []\n",
+                            "products: []   # règles feature -> produit (voir heptagoneslm.example.yaml)\n")
+
+    def header_text(self, generated_at: str = "") -> str:
+        return ("# HeptagonesLM - configuration générée par l'assistant d'installation"
                   + (f" le {generated_at}" if generated_at else "") + "\n"
                   "# Référence de tous les paramètres : heptagoneslm.example.yaml / dossier d'exploitation (DEX).\n"
                   "# Après modification des règles « products » : HeptagonesLM.exe apply-products\n"
                   "# Les mots de passe sont dans des variables d'environnement machine (${VAR}) ou chiffrés\n"
-                  "# par Windows (DPAPI) dans le dossier secrets (dpapi:) : jamais dans ce fichier.\n\n")
-        body = yaml.safe_dump(self.config_dict(), allow_unicode=True, sort_keys=False, default_flow_style=False,
-                              width=120)
-        body = body.replace("products: []\n", "products: []   # règles feature -> produit (voir heptagoneslm.example.yaml)\n")
-        return header + body
+                  "# par Windows (DPAPI) dans le dossier secrets (dpapi:) : jamais dans ce fichier.\n"
+                  "# Les réglages ajoutés à la main (products, sites, coûts Autodesk, rôles…) sont conservés\n"
+                  "# quand l'assistant réécrit ce fichier.\n\n")
 
     def check_config(self) -> str | None:
         """Valide la configuration générée avec le chargeur réel de HeptagonesLM."""
