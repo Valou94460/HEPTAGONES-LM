@@ -207,11 +207,30 @@ def state_script() -> str:
     modules = ",".join(f"@{{key={ps_quote(k)}; name={ps_quote(m['module'])}}}" for k, m in MODULES.items())
     return f"""
 $features = @{{}}
+$kind = $null
 if (-not (Get-Service -Name W3SVC -ErrorAction SilentlyContinue)) {{
     # IIS absent (pas de service W3SVC) : aucun rôle installé, réponse immédiate. Get-WindowsFeature
     # prend souvent plus d'une minute sur un serveur neuf ; il n'est utile que si IIS est présent.
     foreach ($n in @({server_names})) {{ $features[$n] = $false }}
     $kind = 'absent'
+}} else {{
+    # Interrogation CIM ciblée (quelques secondes) ; Get-WindowsFeature / Get-WindowsOptionalFeature énumèrent
+    # tout le magasin de composants (plus d'une minute et demie sur Windows Server 2025) : solution de repli.
+    $server = @({server_names}); $client = @({client_names})
+    $filter = ($client | ForEach-Object {{ "Name='$_'" }}) -join ' OR '
+    $found = @{{}}
+    try {{
+        foreach ($o in Get-CimInstance -ClassName Win32_OptionalFeature -Filter $filter -ErrorAction Stop) {{
+            $found[$o.Name] = ([int]$o.InstallState -eq 1)
+        }}
+    }} catch {{ }}
+    if ($found.Count -eq $client.Count) {{
+        for ($i = 0; $i -lt $client.Count; $i++) {{ $features[$server[$i]] = $found[$client[$i]] }}
+        $kind = 'cim'
+    }}
+}}
+if ($kind) {{
+    # état déjà connu
 }} elseif (Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue) {{
     foreach ($f in Get-WindowsFeature -Name @({server_names})) {{ $features[$f.Name] = [bool]$f.Installed }}
     $kind = 'server'

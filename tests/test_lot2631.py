@@ -91,6 +91,22 @@ class ParallelChecksTest(unittest.TestCase):
         script = iis.state_script()
         self.assertLess(script.index("W3SVC"), script.index("Get-WindowsFeature"))
         self.assertIn("$kind = 'absent'", script)
+        # IIS présent : requête CIM ciblée avant Get-WindowsFeature (plus d'une minute et demie sur Server 2025)
+        self.assertLess(script.index("Win32_OptionalFeature"), script.index("Get-WindowsFeature -Name"))
+
+    def test_http_auth_status_script(self):
+        from heptagoneslm.setup.system import WindowsSystem
+
+        seen = {}
+        w = WindowsSystem.__new__(WindowsSystem)
+        w.ps_json = lambda script, **kw: seen.update(script=script, **kw) or {"code": 401}
+        self.assertEqual(w.http_auth_status("https://h/acces", "DOM\\bob", "s3cret"), 401)
+        script = seen["script"]
+        self.assertNotIn("ConvertTo-SecureString", script)   # module Security parfois impossible à charger
+        self.assertIn("$user = 'DOM\\bob'", script)
+        self.assertIn("IndexOf([char]92)", script)
+        self.assertNotIn("s3cret", script)                   # secret transmis par variable d'environnement
+        self.assertEqual(seen["secret"], "s3cret")
 
 
 class ChecksJobTest(unittest.TestCase):

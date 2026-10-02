@@ -499,11 +499,22 @@ foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome'
         data = self.ps_json(f"""
 [System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{ $true }}
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
-$sec = ConvertTo-SecureString $env:{SECRET_ENV} -AsPlainText -Force
-$cred = New-Object System.Management.Automation.PSCredential({ps_quote(user)}, $sec)
+# NetworkCredential (.NET) plutôt qu'une applet du module Microsoft.PowerShell.Security, qui peut
+# être impossible à charger quand l'assistant est lancé depuis PowerShell 7.
+$user = {ps_quote(user)}; $domain = ''
+$i = $user.IndexOf([char]92)   # DOMAINE\\compte
+if ($i -ge 0) {{ $domain = $user.Substring(0, $i); $user = $user.Substring($i + 1) }}
+$req = [System.Net.HttpWebRequest]::Create({ps_quote(url)})
+$req.Credentials = New-Object System.Net.NetworkCredential($user, $env:{SECRET_ENV}, $domain)
+$req.Timeout = 30000
+$req.AllowAutoRedirect = $false
 $code = $null
-try {{ $r = Invoke-WebRequest -Uri {ps_quote(url)} -Credential $cred -UseBasicParsing -TimeoutSec 30; $code = [int]$r.StatusCode }}
-catch {{ if ($_.Exception.Response) {{ $code = [int]$_.Exception.Response.StatusCode }} else {{ throw }} }}
+try {{ $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $resp.Close() }}
+catch {{
+    $e = $_.Exception
+    while ($e -and -not ($e -is [System.Net.WebException])) {{ $e = $e.InnerException }}
+    if ($e -and $e.Response) {{ $code = [int]$e.Response.StatusCode; $e.Response.Close() }} else {{ throw }}
+}}
 [pscustomobject]@{{ code = $code }} | ConvertTo-Json -Compress
 """, secret=password, timeout=90)
         code = (data or {}).get("code")
