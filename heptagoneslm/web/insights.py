@@ -772,8 +772,15 @@ def report_named(db: Database, p) -> dict:
     notes = [f"Licences nommées du rapport Autodesk du {report_date:%d/%m/%Y} : une licence est inactive lorsque "
              f"l'utilisateur ne l'a pas lancée depuis {p.named_inactive_days} jours (autodesk.inactive_days). "
              "La réaffecter dans Autodesk Account ou ne pas la renouveler à l'échéance."]
+    sources = [r[0] for r in db.query("SELECT DISTINCT source_file FROM named_seat WHERE vendor = ? AND report_date = ?",
+                                      [autodesk.VENDOR, report_date]) if r[0]]
+    if sources:
+        notes.append("Source : " + ", ".join(sources) + (" — usage lu par l'API Autodesk, licences sans usage sur la "
+                                                         "période reprises du dernier état connu"
+                                                         if any(x.startswith("API Autodesk") for x in sources) else ""))
     if age > 45:
-        notes.append(f"Dernier export importé il y a {age} jours : en importer un plus récent. " + how)
+        notes.append(f"Dernier export importé il y a {age} jours : en importer un plus récent ou configurer la "
+                     "synchronisation par l'API Autodesk (autodesk.api). " + how)
     if rows and not has_costs:
         notes.append("Renseignez autodesk.annual_costs (produit ou motif → coût annuel) pour chiffrer les économies.")
     description = f"Rapport Autodesk du {report_date:%d/%m/%Y}" + (f" — produits : {', '.join(p.products)}"

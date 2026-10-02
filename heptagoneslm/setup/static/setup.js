@@ -4,7 +4,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const SECRETS = ["service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token"];
+  const SECRETS = ["service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token", "autodesk_client_secret"];
   const BASE = {
     install_dir: "C:\\HeptagonesLM", service_account: "", service_password: "", collect_interval: 5,
     db_mode: "sqlserver", db_server: "", db_name: "HeptagonesLM", db_driver: "ODBC Driver 18 for SQL Server", db_auth: "windows",
@@ -16,6 +16,8 @@
     sender: "", recipients: [], email_alerts: true,
     itsm_enabled: false, itsm_type: "servicenow", itsm_url: "", itsm_user: "", itsm_password: "", itsm_app_token: "",
     itsm_project: "", itsm_issue_type: "Incident", itsm_assignment_group: "", itsm_format: "teams", itsm_min_severity: "serious", itsm_ca_file: "",
+    autodesk_enabled: false, autodesk_import_dir: "", autodesk_inactive_days: 30, autodesk_api_enabled: false,
+    autodesk_client_id: "", autodesk_client_secret: "", autodesk_context_id: "", autodesk_callback_port: 8770,
   };
   let info = null;
   let A = {};
@@ -154,6 +156,7 @@
     { id: "web", title: "Interface web et IIS", desc: "Mode d'accès des utilisateurs à l'interface.", render: renderWeb, validate: "web" },
     { id: "email", title: "Rapport par e-mail", desc: "Envoi automatique du rapport mensuel (optionnel, modifiable plus tard).", render: renderEmail, validate: "email" },
     { id: "itsm", title: "Tickets ITSM", desc: "Ouverture automatique d'un ticket pour chaque alerte (optionnel, modifiable plus tard).", render: renderItsm, validate: "itsm" },
+    { id: "autodesk", title: "Licences Autodesk nommées", desc: "Abonnements Autodesk nominatifs (sans serveur de licences) : exports du portail et / ou API Autodesk (optionnel).", render: renderAutodesk, validate: "autodesk" },
     { id: "summary", title: "Récapitulatif", desc: "Vérifiez la configuration avant de lancer l'installation.", render: renderSummary, enter: () => loadSummary(), next: "Installer" },
     { id: "install", title: "Installation", desc: "Ne fermez pas cette page pendant l'installation.", render: renderInstall },
     { id: "verify", title: "Vérification de l'installation", desc: "Contrôle de bout en bout de chaque composant installé.", render: renderVerify, enter: () => { fixResult = null; runVerify(); } },
@@ -591,7 +594,61 @@
       <p class="muted" style="margin-top:10px">Le test ouvre un vrai ticket « Test de connexion HeptagonesLM », le commente puis le résout, avec les identifiants saisis.</p></div>` : ""}`;
   }
 
-  /* 9. Récapitulatif */
+  /* 9. Licences Autodesk nommées */
+  let adesk = null;                    // connexion Autodesk : {busy} | {status, teams, error}
+  function renderAutodesk() {
+    const dir = A.autodesk_import_dir || ((A.install_dir || "C:\\HeptagonesLM").replace(/\\$/, "") + "\\autodesk");
+    const callback = `http://localhost:${A.autodesk_callback_port || 8770}/autodesk/callback`;
+    const teams = (adesk && adesk.teams) || [];
+    let login = "";
+    if (adesk && adesk.busy) login = `<span class="spinner"></span><span>${esc(adesk.busy)}</span>`;
+    else if (adesk && adesk.error) login = `${dot("error")}<div><b>${esc(adesk.error)}</b></div>`;
+    else if (adesk && adesk.status === "done") login = `${dot("ok")}<div><b>Connecté à Autodesk : ${teams.length} équipe(s)</b><ul><li>Jeton de renouvellement chiffré par Windows (DPAPI) dans le dossier data, renouvelé à chaque synchronisation.</li></ul></div>`;
+    return `
+      <div class="panel">${toggle("autodesk_enabled", "Suivre les licences Autodesk nommées", "Licences affectées à un utilisateur (Autodesk Account) : actives, inactives ou jamais utilisées, et coût récupérable, dans le rapport « Autodesk · utilisateurs nommés ».", { rerender: true })}</div>
+      ${A.autodesk_enabled ? `
+      <div class="panel"><h2>Exports du portail Autodesk Account</h2><div class="form-grid">
+        ${input("autodesk_import_dir", "Dossier surveillé", { placeholder: dir, hint: "Chaque export « Usage report » (manage.autodesk.com › Reporting › Usage report › Export, CSV ou Excel) déposé ici est importé à la collecte suivante.", full: true })}
+        ${input("autodesk_inactive_days", "Licence inactive après (jours)", { type: "number", min: 1, max: 365 })}
+      </div></div>
+      <div class="panel">${toggle("autodesk_api_enabled", "Lire l'usage par l'API Autodesk", "Abonnement Business Success Plan avec l'API de reporting : l'usage est lu chaque jour chez Autodesk, sans export manuel.", { rerender: true })}
+      ${A.autodesk_api_enabled ? `<div class="form-grid" style="margin-top:12px">
+        ${input("autodesk_client_id", "Client ID de l'application Autodesk", { placeholder: "aps.autodesk.com › Applications › Client ID", full: true })}
+        ${input("autodesk_client_secret", "Client Secret (optionnel)", { type: "password", hint: "Uniquement pour une application « Traditional Web App » ; vide pour une application « Desktop, Mobile, Single-Page App » (PKCE). " + SECRET_HINT })}
+        ${input("autodesk_callback_port", "Port de retour de connexion", { type: "number", min: 1024, max: 65535, rerender: true, hint: `URL de rappel à déclarer dans l'application : <code>${esc(callback)}</code>` })}
+        ${teams.length ? select("autodesk_context_id", "Équipe Autodesk", [["", "— choisir —"], ...teams.map(t => [t.id, t.name + (t.reporting ? "" : " (sans API de reporting)")])], { full: true }) : ""}
+      </div>
+      <div class="test-row"><button type="button" class="btn" id="autodesk-login" ${adesk && adesk.busy ? "disabled" : ""}>Se connecter à Autodesk</button>
+        <div class="result" id="res-autodesk">${login}</div></div>
+      <p class="muted" style="margin-top:10px">Un administrateur de l'équipe Autodesk se connecte dans l'onglet qui s'ouvre. Synchronisation ensuite chaque jour par la collecte ; à défaut d'usage pendant 15 jours, relancer « HeptagonesLM.exe autodesk-login ».</p>` : ""}</div>` : ""}`;
+  }
+  async function autodeskLogin() {
+    const w = window.open("about:blank", "_blank");       // ouvert au clic : non bloqué par le navigateur
+    adesk = { busy: "Connexion à Autodesk en cours : se connecter dans l'onglet ouvert…" }; render();
+    try {
+      let st = await api("/api/autodesk/login", { answers: A });
+      let opened = false;
+      const open = () => { if (st.url && w && !opened) { w.location = st.url; opened = true; } };
+      open();
+      while (st.status === "running") {
+        await sleep(1200);
+        st = await api("/api/autodesk/state");
+        open();
+      }
+      if (!opened && w) w.close();
+      if (st.status === "error") adesk = { error: st.error };
+      else {
+        adesk = { status: "done", teams: st.teams || [] };
+        const usable = adesk.teams.filter(t => t.reporting);
+        if (!A.autodesk_context_id && usable.length === 1) { A.autodesk_context_id = usable[0].id; save(); }
+      }
+    } catch (e) { adesk = { error: e.message }; if (w) w.close(); }
+    render();
+  }
+
+  STEPS[at("autodesk")].after = () => $("autodesk-login")?.addEventListener("click", autodeskLogin);
+
+  /* 10. Récapitulatif */
   async function loadSummary() {
     preview = null; render();
     try { preview = await api("/api/preview", { answers: A }); } catch (e) { showError(e.message); }
@@ -621,6 +678,7 @@
         ${block("Serveurs de licences", 4, [...(a.servers.some(s => s.license_type !== "rlm") ? [["lmutil", esc(a.lmutil_path)]] : []), ...(a.servers.some(s => s.license_type === "rlm") ? [["rlmutil", esc(a.rlmutil_path)]] : []), ...a.servers.map(s => [s.name, (s.license_type === "rlm" ? "RLM · " : "") + esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
         ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
         ${block("Tickets ITSM", at("itsm"), a.itsm_enabled ? [["Outil", esc((ITSM[a.itsm_type] || {}).label || a.itsm_type)], ["Adresse", esc(a.itsm_url)], a.itsm_user ? ["Compte", esc(a.itsm_user)] : null, a.itsm_type === "jira" ? ["Projet", esc(a.itsm_project)] : null, ["Secrets", a.itsm_type === "webhook" ? "Aucun" : "Chiffrés par Windows (DPAPI)"], ["Ticket de test", results.itsm && results.itsm.status === "ok" ? `${dot("ok")} réussi` : "non effectué"]] : [["Tickets automatiques", "Désactivés"]])}
+        ${block("Licences Autodesk nommées", at("autodesk"), a.autodesk_enabled ? [["Exports du portail", esc(a.autodesk_import_dir || (a.install_dir + "\\autodesk"))], ["Inactive après", `${esc(a.autodesk_inactive_days)} jours`], ["API Autodesk", a.autodesk_api_enabled ? (a.autodesk_context_id ? `équipe ${esc(a.autodesk_context_id)}` : "connexion à faire") : "Non"]] : [["Suivi", "Désactivé"]])}
         ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))], ["Alertes immédiates", a.email_alerts ? "Activées" : "Désactivées"]] : [["Rapport par e-mail", "Désactivé"]])}
         <div class="panel"><h2>Tâches planifiées</h2><dl class="kv">${preview.plan.tasks.map(t => `<dt>${esc(t.name.replace("HeptagonesLM - ", ""))}</dt><dd>${esc(t.schedule)}</dd>`).join("")}</dl></div>
       </div>

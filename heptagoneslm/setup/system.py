@@ -137,6 +137,20 @@ class System:
     def local_path(self, path: str) -> str: raise NotImplementedError       # chemin réel sur ce poste
     def machine_env(self) -> dict[str, str]: raise NotImplementedError       # variables d'environnement machine
     def http_auth_status(self, url: str, user: str, password: str) -> int | None: raise NotImplementedError
+
+    def autodesk_login(self, api_entry: dict, on_url) -> list[dict]:
+        """Connexion OAuth d'un administrateur Autodesk ; renvoie les équipes (contextes) accessibles."""
+        from heptagoneslm.autodesk_api import ApiError, TokenStore, login
+        from heptagoneslm.config import ConfigError, _parse_autodesk_api
+
+        try:
+            cfg = _parse_autodesk_api(api_entry)
+        except ConfigError as exc:
+            raise SetupError(str(exc)) from None
+        try:
+            return login(cfg, TokenStore(cfg.token_file), open_browser=False, timeout=600, on_url=on_url)
+        except ApiError as exc:
+            raise SetupError(str(exc)) from None
     def copy_file(self, src: str, dst: str) -> None: raise NotImplementedError
     def exists(self, path: str) -> bool: raise NotImplementedError
     def grant(self, path: str, account: str, rights: str) -> None: raise NotImplementedError
@@ -957,6 +971,12 @@ class SimulatedSystem(System):
 
     def machine_env(self) -> dict[str, str]:
         return {}
+
+    def autodesk_login(self, api_entry: dict, on_url) -> list[dict]:
+        self._step("autodesk_login", 1)
+        return [{"contextId": "SIM-TEAM-1", "alias": "Bureau d'études (simulation)",
+                 "reportingBenefits": ["ReportingAPIAccess"]},
+                {"contextId": "SIM-TEAM-2", "alias": "Équipe sans reporting (simulation)", "reportingBenefits": []}]
 
     def http_auth_status(self, url: str, user: str, password: str) -> int | None:
         """Simulation : les comptes « lecteur » sont membres du groupe autorisé, les autres sont refusés."""

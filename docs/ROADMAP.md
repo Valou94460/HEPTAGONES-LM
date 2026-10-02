@@ -38,7 +38,7 @@ selon les priorités des premiers clients.
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
-| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account, licences inactives / jamais utilisées et coût récupérable (26.3.1) · API Autodesk : ❌ | 27.2 |
+| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1) et API Autodesk Business Success Plan (26.3.2, à valider sur un compte réel) : licences inactives / jamais utilisées, coût récupérable | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
 | Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.10, environ 72 pages), plan de test, guide d'installation | — |
@@ -113,9 +113,8 @@ Chaque collecteur est validé sur une sortie réelle fournie par un client (test
 
 ### 27.2.0 — Cloud et SAM (cible : T2 2027, à cadrer)
 - Offre hébergée (instance par client, collecteur local relayant vers le cloud).
-- Licences SaaS / nominatives des éditeurs selon les API disponibles : API Autodesk (insights, réservée aux
-  clients Business Success Plan, à valider sur un compte réel) en complément de l'import des exports du
-  portail livré en 26.3.1 ; autres portails (Adobe, Microsoft…) à la demande.
+- Licences SaaS / nominatives d'autres éditeurs selon les API disponibles (Adobe, Microsoft…), sur le modèle
+  du connecteur API Autodesk.
 - Inventaire logiciel des postes (via l'agent 27.1) : premier niveau de SAM.
 
 ## 3. Hors logiciel : l'offre de service

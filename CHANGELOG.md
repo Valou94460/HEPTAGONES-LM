@@ -6,6 +6,17 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Connecteur API Autodesk (Business Success Plan Reporting)** : l'usage des licences Autodesk nommées est
+  lu directement chez Autodesk (API Insights : équipes, requêtes d'usage asynchrones paginées, limite de débit
+  respectée), sans export manuel. Connexion OAuth 3 étapes d'un administrateur (PKCE, ou Client Secret chiffré
+  par DPAPI), jeton de renouvellement chiffré et renouvelé à chaque synchronisation. Synchronisation par la
+  collecte au plus toutes les 24 h, ou `autodesk-sync [--dry-run]` ; reconnexion par `autodesk-login`. Les
+  licences affectées sans usage sur la période sont reprises du dernier export ou de la dernière
+  synchronisation (inactives, jamais utilisées). Identifiants hachés pris en charge. Guide : `docs/AUTODESK_API.md`.
+- **Assistant d'installation : étape « Licences Autodesk nommées »** (dossier surveillé des exports du portail,
+  seuil d'inactivité, API Autodesk avec bouton « Se connecter à Autodesk » et choix de l'équipe).
+
+### Ajouté
 - **Licences Autodesk « utilisateur nommé »** : import des exports « Usage report » du portail Autodesk
   Account (CSV ou Excel, colonnes en anglais ou en français, présentation 2026 comprise) par
   `heptagoneslm import-autodesk export.csv` ou par dépôt dans un dossier surveillé (`autodesk.import_dir`,

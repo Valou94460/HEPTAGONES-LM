@@ -57,10 +57,11 @@ avec Python : `heptagoneslm setup --simulate`).
 | 6 | Interface web et IIS | IIS avec connexion Windows automatique (recommandé), HTTPS intégré avec identifiants AD, ou poste local ; pare-feu | Certificat (nom, validité), groupe AD, connexion LDAP |
 | 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires, alertes immédiates (optionnel) | Envoi d'un message de test |
 | 8 | Tickets ITSM | Activation (désactivé par défaut) ; ServiceNow, Jira, GLPI ou Teams / Slack : adresse, compte technique et mot de passe ou jetons, projet ou groupe d'affectation, gravité minimale, AC interne facultative | « Ouvrir un ticket de test » : vrai ticket ouvert, commenté puis résolu |
-| 9 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
-| 10 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
-| 11 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
-| 12 | Recette | Sur l'installation en place (aussi depuis l'accueil quand HeptagonesLM est déjà installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé à la base feature par feature, collecte planifiée sur N heures, vérification, connexion depuis les postes, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test confirmés par l'opérateur | PV de recette Word à signer, archive des preuves (sorties anonymisables, résumés attendus) |
+| 9 | Licences Autodesk nommées | Optionnel : dossier surveillé des exports du portail Autodesk Account, seuil d'inactivité ; API Autodesk Business Success Plan (Client ID, Client Secret facultatif chiffré par DPAPI) — [guide](AUTODESK_API.md) | « Se connecter à Autodesk » : connexion d'un administrateur, choix de l'équipe |
+| 10 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
+| 11 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
+| 12 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
+| 13 | Recette | Sur l'installation en place (aussi depuis l'accueil quand HeptagonesLM est déjà installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé à la base feature par feature, collecte planifiée sur N heures, vérification, connexion depuis les postes, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test confirmés par l'opérateur | PV de recette Word à signer, archive des preuves (sorties anonymisables, résumés attendus) |
 
 <table>
 <tr>

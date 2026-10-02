@@ -66,9 +66,12 @@ class Context:
 
 def step_prepare(ctx: Context) -> str:
     a = ctx.a
-    folders = ["", "logs", "reports"] + (["data"] if a.db_mode == "sqlite" else []) + (["iis"] if a.web_mode == "iis" else [])
+    data = a.db_mode == "sqlite" or a.autodesk_api_on
+    folders = ["", "logs", "reports"] + (["data"] if data else []) + (["iis"] if a.web_mode == "iis" else [])
+    if a.autodesk_enabled:
+        folders.append(a.autodesk_dir)
     for i, sub in enumerate(folders):
-        path = a.path(sub) if sub else a.install_dir
+        path = a.install_dir if not sub else sub if ":" in sub else a.path(sub)
         ctx.system.makedirs(path)
         ctx.log(f"Dossier {path}")
         ctx.progress((i + 1) / len(folders))
@@ -131,10 +134,14 @@ def step_acl(ctx: Context) -> str:
     a = ctx.a
     ctx.system.grant(a.install_dir, a.service_account, "RX")
     ctx.log(f"{a.service_account} : lecture et exécution sur {a.install_dir}")
-    writable = ["logs", "reports"] + (["data"] if a.db_mode == "sqlite" else [])
+    # data : base SQLite et jeton Autodesk renouvelé à chaque synchronisation
+    writable = ["logs", "reports"] + (["data"] if a.db_mode == "sqlite" or a.autodesk_api_on else [])
     for sub in writable:
         ctx.system.grant(a.path(sub), a.service_account, "M")
         ctx.log(f"{a.service_account} : modification sur {a.path(sub)}")
+    if a.autodesk_enabled and not a.autodesk_dir.lower().startswith(a.install_dir.lower().rstrip("\\") + "\\"):
+        ctx.system.grant(a.autodesk_dir, a.service_account, "RX")
+        ctx.log(f"{a.service_account} : lecture sur {a.autodesk_dir} (exports Autodesk)")
     return "Droits accordés au compte de service"
 
 

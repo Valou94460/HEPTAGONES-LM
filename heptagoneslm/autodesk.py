@@ -258,14 +258,7 @@ def import_report(db: Database, path: str | Path, data: bytes | None = None, tod
     parsed = parse_report(path, data, today)
     now = datetime.now().replace(microsecond=0)
     with db.transaction():
-        db.execute("DELETE FROM named_seat WHERE vendor = ? AND report_date = ?", [VENDOR, parsed.report_date])
-        db.executemany(
-            "INSERT INTO named_seat (vendor, product, email, display_name, assigned_date, unassigned_date, days_used, "
-            "days_inactive, last_used, version, activity, report_date, imported_at, source_file) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            [(VENDOR, r.product[:255], r.email[:255], (r.name or None) and r.name[:255], r.assigned_date,
-              r.unassigned_date, r.days_used, r.days_inactive, r.last_used, r.version and r.version[:50],
-              r.activity and r.activity[:50], parsed.report_date, now, path.name[:255]) for r in _dedupe(parsed.rows)])
+        store_rows(db, parsed.rows, parsed.report_date, path.name, now)
         db.execute("DELETE FROM named_import WHERE file_hash = ?", [digest])   # réimport forcé
         db.execute("INSERT INTO named_import (vendor, file_name, file_hash, report_date, rows_count, imported_at) "
                    "VALUES (?, ?, ?, ?, ?, ?)", [VENDOR, path.name[:255], digest, parsed.report_date, len(parsed.rows), now])
@@ -273,6 +266,38 @@ def import_report(db: Database, path: str | Path, data: bytes | None = None, tod
              parsed.report_date.strftime("%d/%m/%Y"))
     return {"file": path.name, "status": "importé", "rows": len(parsed.rows), "skipped": parsed.skipped,
             "report_date": parsed.report_date.isoformat(), "columns": parsed.columns}
+
+
+def store_rows(db: Database, rows: list[SeatRow], report_date: date, source: str,
+               now: datetime | None = None) -> int:
+    """Remplace l'état des licences nommées à ``report_date`` (à appeler dans une transaction)."""
+    now = now or datetime.now().replace(microsecond=0)
+    kept = _dedupe(rows)
+    db.execute("DELETE FROM named_seat WHERE vendor = ? AND report_date = ?", [VENDOR, report_date])
+    db.executemany(
+        "INSERT INTO named_seat (vendor, product, email, display_name, assigned_date, unassigned_date, days_used, "
+        "days_inactive, last_used, version, activity, report_date, imported_at, source_file) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [(VENDOR, r.product[:255], r.email[:255], (r.name or None) and r.name[:255], r.assigned_date,
+          r.unassigned_date, r.days_used, r.days_inactive, r.last_used, r.version and r.version[:50],
+          r.activity and r.activity[:50], report_date, now, source[:255]) for r in kept])
+    return len(kept)
+
+
+def previous_rows(db: Database, before: date) -> list[SeatRow]:
+    """Licences du dernier état enregistré avant ``before`` (export du portail ou synchronisation API)."""
+    last = db.scalar("SELECT MAX(report_date) FROM named_seat WHERE vendor = ? AND report_date < ?", [VENDOR, before])
+    if not last:
+        return []
+    out = []
+    for r in db.query_dicts(
+            "SELECT product, email, display_name, assigned_date, unassigned_date, days_used, days_inactive, last_used, "
+            "version, activity FROM named_seat WHERE vendor = ? AND report_date = ?", [VENDOR, last]):
+        out.append(SeatRow(product=r["product"], email=r["email"], name=r["display_name"],
+                           assigned_date=parse_date(r["assigned_date"]), unassigned_date=parse_date(r["unassigned_date"]),
+                           days_used=r["days_used"], days_inactive=r["days_inactive"],
+                           last_used=parse_date(r["last_used"]), version=r["version"], activity=r["activity"]))
+    return out
 
 
 def _dedupe(rows: list[SeatRow]) -> list[SeatRow]:

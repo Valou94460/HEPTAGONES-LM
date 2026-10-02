@@ -44,7 +44,7 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
 | **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
-| **Autodesk nominatif** | Licences Autodesk « utilisateur nommé » (sans serveur de licences) : import des exports « Usage report » du portail Autodesk Account, licences inactives ou jamais utilisées à réaffecter, coût annuel récupérable. |
+| **Autodesk nominatif** | Licences Autodesk « utilisateur nommé » (sans serveur de licences) : usage lu par l'API Autodesk (Business Success Plan) ou import des exports « Usage report » du portail Autodesk Account, licences inactives ou jamais utilisées à réaffecter, coût annuel récupérable. |
 | **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
 | **Rapports** | 16 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
@@ -199,6 +199,7 @@ Get-ADUser -Filter * -Properties DisplayName,Department |
 | `heptagoneslm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
 | `heptagoneslm import-users users.csv` | Noms complets et services (export AD/RH) |
 | `heptagoneslm import-autodesk export.csv… [--force]` | Licences Autodesk nommées : export « Usage report » du portail Autodesk Account (CSV ou Excel) |
+| `heptagoneslm autodesk-login` / `autodesk-sync [--dry-run]` | API Autodesk (Business Success Plan) : connexion d'un administrateur, synchronisation de l'usage ([guide](docs/AUTODESK_API.md)) |
 | `heptagoneslm send-report [--skip-sent] [--dry-run DOSSIER] [--to adresse]` | Envoi du rapport aux abonnés e-mail (aperçu `.eml` avec `--dry-run`) |
 | `heptagoneslm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
 | `heptagoneslm purge` | Applique la politique de rétention |
@@ -399,6 +400,7 @@ Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md)
 | Document | Contenu |
 |---|---|
 | [docs/INSTALLATION.md](docs/INSTALLATION.md) | **Installation assistée** (HeptagonesLM-Setup.exe), installation silencieuse, serveur hors ligne, dépannage |
+| [docs/AUTODESK_API.md](docs/AUTODESK_API.md) | **Connecteur API Autodesk** : application Autodesk, connexion, synchronisation, validation sur un compte réel |
 | [docs/DEX_HeptagonesLM.docx](docs/DEX_HeptagonesLM.docx) | **Dossier d'exploitation (Word)** : architecture, installation, exploitation, supervision, guide de l'interface illustré, sauvegarde, sécurité, incidents, maintenance, PRA |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
