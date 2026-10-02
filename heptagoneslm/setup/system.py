@@ -72,6 +72,9 @@ class Result:
         return text.splitlines()[-1][:500] if text else f"code {self.code}"
 
 
+_CACHE_INIT = threading.Lock()
+
+
 @dataclass
 class TaskSpec:
     name: str
@@ -88,6 +91,20 @@ class TaskSpec:
 class System:
     simulated = False
     name = "abstrait"
+
+    def cached(self, key: str, compute):
+        """Valeur calculée une seule fois par session (informations stables : système d'exploitation…),
+        y compris quand plusieurs contrôles parallèles la demandent en même temps."""
+        if not hasattr(self, "_cache"):
+            with _CACHE_INIT:
+                if not hasattr(self, "_cache"):
+                    self._cache, self._cache_locks = {}, {}
+        with _CACHE_INIT:
+            lock = self._cache_locks.setdefault(key, threading.Lock())
+        with lock:
+            if key not in self._cache:
+                self._cache[key] = compute()
+            return self._cache[key]
 
     # -- informations -----------------------------------------------------------------
     def os_info(self) -> dict: raise NotImplementedError
@@ -115,6 +132,11 @@ class System:
     def makedirs(self, path: str) -> None: raise NotImplementedError
     def write_text(self, path: str, text: str) -> None: raise NotImplementedError
     def read_text(self, path: str) -> str | None: raise NotImplementedError
+    def write_bytes(self, path: str, data: bytes) -> None: raise NotImplementedError
+    def read_bytes(self, path: str) -> bytes | None: raise NotImplementedError
+    def local_path(self, path: str) -> str: raise NotImplementedError       # chemin réel sur ce poste
+    def machine_env(self) -> dict[str, str]: raise NotImplementedError       # variables d'environnement machine
+    def http_auth_status(self, url: str, user: str, password: str) -> int | None: raise NotImplementedError
     def copy_file(self, src: str, dst: str) -> None: raise NotImplementedError
     def exists(self, path: str) -> bool: raise NotImplementedError
     def grant(self, path: str, account: str, rights: str) -> None: raise NotImplementedError
@@ -235,6 +257,9 @@ class WindowsSystem(System):
 
     # -- informations -------------------------------------------------------------------
     def os_info(self) -> dict:
+        return self.cached("os_info", self._os_info)
+
+    def _os_info(self) -> dict:
         return self.ps_json("""
 $os = Get-CimInstance Win32_OperatingSystem; $cs = Get-CimInstance Win32_ComputerSystem
 $fqdn = try { [System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName } catch { $env:COMPUTERNAME }
@@ -435,6 +460,66 @@ foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome'
         except OSError:
             return None
 
+    def write_bytes(self, path: str, data: bytes) -> None:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def read_bytes(self, path: str) -> bytes | None:
+        try:
+            with open(path, "rb") as f:
+                return f.read()
+        except OSError:
+            return None
+
+    def local_path(self, path: str) -> str:
+        return path
+
+    def machine_env(self) -> dict[str, str]:
+        """Variables d'environnement machine (secrets définis à l'installation), même si ce processus
+        a été lancé avant leur création."""
+        try:
+            import winreg
+            out, i = {}, 0
+            with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                r"SYSTEM\CurrentControlSet\Control\Session Manager\Environment") as k:
+                while True:
+                    try:
+                        name, value, _kind = winreg.EnumValue(k, i)
+                    except OSError:
+                        return out
+                    out[name] = str(value)
+                    i += 1
+        except OSError:
+            return {}
+
+    def http_auth_status(self, url: str, user: str, password: str) -> int | None:
+        """Code HTTP d'une page protégée par l'authentification Windows (NTLM / Kerberos) pour ce compte.
+        Certificat non vérifié : contrôle d'accès local, pas de donnée échangée."""
+        data = self.ps_json(f"""
+[System.Net.ServicePointManager]::ServerCertificateValidationCallback = {{ $true }}
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
+# NetworkCredential (.NET) plutôt qu'une applet du module Microsoft.PowerShell.Security, qui peut
+# être impossible à charger quand l'assistant est lancé depuis PowerShell 7.
+$user = {ps_quote(user)}; $domain = ''
+$i = $user.IndexOf([char]92)   # DOMAINE\\compte
+if ($i -ge 0) {{ $domain = $user.Substring(0, $i); $user = $user.Substring($i + 1) }}
+$req = [System.Net.HttpWebRequest]::Create({ps_quote(url)})
+$req.Credentials = New-Object System.Net.NetworkCredential($user, $env:{SECRET_ENV}, $domain)
+$req.Timeout = 30000
+$req.AllowAutoRedirect = $false
+$code = $null
+try {{ $resp = $req.GetResponse(); $code = [int]$resp.StatusCode; $resp.Close() }}
+catch {{
+    $e = $_.Exception
+    while ($e -and -not ($e -is [System.Net.WebException])) {{ $e = $e.InnerException }}
+    if ($e -and $e.Response) {{ $code = [int]$e.Response.StatusCode; $e.Response.Close() }} else {{ throw }}
+}}
+[pscustomobject]@{{ code = $code }} | ConvertTo-Json -Compress
+""", secret=password, timeout=90)
+        code = (data or {}).get("code")
+        return int(code) if code is not None else None
+
     def copy_file(self, src: str, dst: str) -> None:
         if os.path.abspath(src).lower() == os.path.abspath(dst).lower():
             return
@@ -565,7 +650,16 @@ $procs | Wait-Process -Timeout 30 -ErrorAction SilentlyContinue
         return int(data.get("stopped") or 0)
 
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict:
-        return self.ps_json(iis.configure_site_script(a, physical_path), timeout=600) or {}
+        script = iis.configure_site_script(a, physical_path)
+        try:
+            return self.ps_json(script, timeout=600) or {}
+        except SetupError as exc:
+            # Juste après l'installation des rôles ou d'ARR, la configuration IIS peut être encore en cours
+            # de rechargement (NullReferenceException du fournisseur IIS:\) : une seconde tentative suffit.
+            if "Object reference" not in str(exc) and "Référence d'objet" not in str(exc):
+                raise
+            time.sleep(10)
+            return self.ps_json(script, timeout=600) or {}
 
     def firewall_rule(self, name: str, port: int) -> None:
         r = self.ps(f"""
@@ -848,6 +942,26 @@ class SimulatedSystem(System):
         real = self._real(path)
         real.parent.mkdir(parents=True, exist_ok=True)
         real.write_text(text, encoding="utf-8")
+
+    def write_bytes(self, path: str, data: bytes) -> None:
+        real = self._real(path)
+        real.parent.mkdir(parents=True, exist_ok=True)
+        real.write_bytes(data)
+
+    def read_bytes(self, path: str) -> bytes | None:
+        real = self._real(path)
+        return real.read_bytes() if real.is_file() else None
+
+    def local_path(self, path: str) -> str:
+        return str(self._real(path))
+
+    def machine_env(self) -> dict[str, str]:
+        return {}
+
+    def http_auth_status(self, url: str, user: str, password: str) -> int | None:
+        """Simulation : les comptes « lecteur » sont membres du groupe autorisé, les autres sont refusés."""
+        self._step("http_auth_status", 0.5)
+        return 200 if "lecteur" in user.lower() else 401
 
     def read_text(self, path: str) -> str | None:
         real = self._real(path)

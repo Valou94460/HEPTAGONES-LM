@@ -1,0 +1,28 @@
+{
+  "source": "rlmstat",
+  "license_type": "rlm",
+  "server": "EXEMPLE_RLM",
+  "port_at_host": "5053@licsrv3",
+  "captured_at": "2026-09-29T10:00:00",
+  "anonymized": false,
+  "heptagoneslm_version": "26.3.0",
+  "comparison": "ok",
+  "features": {
+    "nuke_i": {
+      "issued": 12,
+      "in_use": 3,
+      "sessions": 3
+    },
+    "nuke_r": {
+      "issued": null,
+      "in_use": 0,
+      "sessions": 0
+    },
+    "nukex_i": {
+      "issued": 5,
+      "in_use": 5,
+      "sessions": 5
+    }
+  },
+  "users": 4
+}

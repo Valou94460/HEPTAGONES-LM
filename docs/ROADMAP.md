@@ -19,7 +19,7 @@ selon les priorités des premiers clients.
 | Licences sous-utilisées | Oui | ✅ Alerte « sous-utilisé », efficacité des jetons, recommandation | — |
 | Licences **inutilisées** (aucun usage sur la période) | Oui | ✅ Vue dédiée avec coût annuel (26.3) | — |
 | Alertes | Oui | ✅ Tableau de bord + e-mail immédiat (collecte, refus, saturation, échéances) | — |
-| Reporting, tableaux de bord, exports | Oui | ✅ 13 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
+| Reporting, tableaux de bord, exports | Oui | ✅ 16 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
 | Heatmaps | Oui | ✅ Profil horaire (jour × heure) | — |
 | Analytics avancées : **prévision** | Oui | ❌ | 26.4 |
 | Optimisation des achats / renouvellements | Oui | 🟡 Jetons recommandés, coûts, économies · pas de rapport de renouvellement | 26.4 |
@@ -38,9 +38,10 @@ selon les priorités des premiers clients.
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
+| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account, licences inactives / jamais utilisées et coût récupérable (26.3.1) · API Autodesk : ❌ | 27.2 |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
-| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX 69 pages, plan de test, guide d'installation | — |
+| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.10, environ 72 pages), plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
 > Le comparatif corrigé (version 26.3.0) reprend ce tableau : les intégrations ITSM, les rôles
@@ -68,17 +69,17 @@ et mode silencieux : IIS, connexion Windows, tâches planifiées, collecte par l
 | Multi-sites | Site par poste (règles sur le nom ou import CSV) et par serveur ; filtre et répartition par site. | 1 j |
 | Licences inutilisées | Vue dédiée : features sans aucun usage sur la période, coût associé. | ½ j |
 
-### 26.3.1 — Recette sur le site client (prochaine version, ~3 j)
+### 26.3.1 — Recette sur le site client (prochaine version, développée)
 
 Version de validation avant production, sans nouvelle fonction de suivi.
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
-| Étape « Recette » dans l'assistant | Sur le serveur installé : `lmstat` / `rlmstat` lancé en direct sur chaque vrai serveur de licences et comparé à ce que HeptagonesLM a enregistré (features, jetons, utilisateurs), écarts signalés ; collecte planifiée sans erreur depuis N heures ; connexion Windows depuis un poste, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test. | 2 j |
-| PV de recette | Document (PDF ou Word) horodaté : chaque point vert / orange / rouge, à signer pour le passage en production. | ½ j |
-| Sorties réelles en tests de non-régression | Sorties brutes des serveurs du client (anonymisables) enregistrées par la recette et rejouées par les tests automatiques. | ½ j |
+| Étape « Recette » dans l'assistant ✅ | Sur le serveur installé : `lmstat` / `rlmstat` lancé en direct sur chaque vrai serveur de licences et comparé à ce que HeptagonesLM a enregistré (features, jetons, utilisateurs), écarts signalés ; collecte planifiée sans erreur depuis N heures ; connexion Windows depuis un poste, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test. | 2 j |
+| PV de recette ✅ | Document Word horodaté : chaque point vert / orange / rouge, à signer pour le passage en production. | ½ j |
+| Sorties réelles en tests de non-régression ✅ | Sorties brutes des serveurs du client (anonymisables) enregistrées par la recette et rejouées par les tests automatiques. | ½ j |
 | Étape « Tickets ITSM » dans l'assistant ✅ | Activation au choix, ServiceNow / Jira / GLPI / Teams-Slack, bouton « Ouvrir un ticket de test », mot de passe ou jetons chiffrés par Windows (DPAPI) dans `secrets\` (fait, branche de développement). | 1 j |
-| Vérification du serveur plus rapide | L'étape « Vérification du serveur » de l'assistant prend plus de 2 minutes sur un Windows Server réel : contrôles regroupés et progression affichée. | ½ j |
+| Vérification du serveur plus rapide ✅ | L'étape « Vérification du serveur » prenait plus de 2 minutes sur un Windows Server neuf : lectures en parallèle, IIS absent détecté immédiatement, progression affichée. | ½ j |
 
 ### 26.4.0 — Analytics et achats (cible : fin novembre 2026, ~8 j)
 
@@ -112,7 +113,9 @@ Chaque collecteur est validé sur une sortie réelle fournie par un client (test
 
 ### 27.2.0 — Cloud et SAM (cible : T2 2027, à cadrer)
 - Offre hébergée (instance par client, collecteur local relayant vers le cloud).
-- Licences SaaS / nominatives des éditeurs (portails Autodesk, etc.) selon les API disponibles.
+- Licences SaaS / nominatives des éditeurs selon les API disponibles : API Autodesk (insights, réservée aux
+  clients Business Success Plan, à valider sur un compte réel) en complément de l'import des exports du
+  portail livré en 26.3.1 ; autres portails (Adobe, Microsoft…) à la demande.
 - Inventaire logiciel des postes (via l'agent 27.1) : premier niveau de SAM.
 
 ## 3. Hors logiciel : l'offre de service

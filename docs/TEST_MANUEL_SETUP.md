@@ -82,6 +82,7 @@ c'est une installation réelle.
 | 9. Récapitulatif | Relire, **Installer** | Tickets ITSM : « Secrets chiffrés par Windows (DPAPI) ». |
 | 10. Installation | Attendre | Toutes les étapes vertes. |
 | 11. Vérification | Lire | « HeptagonesLM est installé et opérationnel » (les avertissements orange sont acceptables) ; si l'ITSM est activé, « Secret chiffré itsm_password.dpapi » vert. |
+| 12. Recette | **Passer à la recette** (ou, le lendemain, relancer `HeptagonesLM-Setup.exe` › **Faire la recette de cette installation**) ; période 24 h ; facultatif : un compte hors du groupe et un compte membre ; **Lancer la recette**, répondre aux confirmations, puis **Télécharger le PV de recette (Word)** et **Télécharger les preuves (.zip)** | Comparaison « identique » pour chaque serveur de licences ; collectes réussies ; refus hors du groupe ; PV et archive à me renvoyer. |
 
 Ensuite, vérifier les **vraies données** :
 

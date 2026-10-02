@@ -15,6 +15,7 @@ Vue d'ensemble ::
     alert_state       (alertes e-mail envoyées : anti-répétition, curseur des refus)
     itsm_ticket       (tickets ouverts dans ServiceNow, Jira, GLPI… pour chaque alerte)
     feature_reservation (jetons réservés par le fichier d'options : utilisateur, poste, groupe…)
+    named_seat / named_import (licences « utilisateur nommé » Autodesk importées du portail)
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -191,6 +192,33 @@ TABLES: dict[str, str] = {
         updated_at {DT} NOT NULL,
         resolved_at {DT} NULL
     """,
+    # v7 : licences « utilisateur nommé » (exports « Usage report » du portail Autodesk Account)
+    "named_seat": """
+        id {BIGID},
+        vendor NVARCHAR(30) NOT NULL,
+        product NVARCHAR(255) NOT NULL,
+        email NVARCHAR(255) NOT NULL,
+        display_name NVARCHAR(255) NULL,
+        assigned_date DATE NULL,
+        unassigned_date DATE NULL,
+        days_used INT NULL,
+        days_inactive INT NULL,
+        last_used DATE NULL,
+        version NVARCHAR(50) NULL,
+        activity NVARCHAR(50) NULL,
+        report_date DATE NOT NULL,
+        imported_at {DT} NOT NULL,
+        source_file NVARCHAR(255) NULL
+    """,
+    "named_import": """
+        id {ID},
+        vendor NVARCHAR(30) NOT NULL,
+        file_name NVARCHAR(255) NOT NULL,
+        file_hash NVARCHAR(64) NOT NULL UNIQUE,
+        report_date DATE NOT NULL,
+        rows_count INT NOT NULL,
+        imported_at {DT} NOT NULL
+    """,
 }
 
 INDEXES: dict[str, str] = {
@@ -204,6 +232,7 @@ INDEXES: dict[str, str] = {
     "ix_run_server_time": "collection_run (server_id, started_at)",
     "ix_delivery_sub_period": "report_delivery (subscription, period_start)",
     "ix_itsm_open": "itsm_ticket (status, connector, alert_key)",
+    "ix_named_seat_report": "named_seat (vendor, report_date)",
 }
 
 VIEWS: dict[str, str] = {

@@ -140,6 +140,17 @@ jobs:
           for i in $(seq 1 30); do curl -s -o /dev/null localhost:8790/setup.css && break; sleep 1; done
           node tests/ui/setup_smoke.cjs http://127.0.0.1:8790 ci-token ui-captures
 
+      - name: PV de recette lisible par LibreOffice (conversion PDF)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends libreoffice-writer poppler-utils > /dev/null
+          pv=$(ls ui-captures/PV_recette_*.docx | head -1)
+          soffice --headless --convert-to pdf --outdir ui-captures "$pv"
+          pdf="${pv%.docx}.pdf"
+          test -s "$pdf" || { echo "PV non converti par LibreOffice"; exit 1; }
+          pdfinfo "$pdf" | grep -E "Pages|Title"
+          pdftoppm -r 60 -png "$pdf" ui-captures/pv_page
+
       - name: Captures d'écran
         if: always()
         uses: actions/upload-artifact@v4

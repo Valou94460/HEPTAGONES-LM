@@ -21,6 +21,7 @@
   let A = {};
   let step = 0, maxStep = 0;
   let checks = null, blockingCount = 0, checksBusy = false, fixResult = null;
+  let checksProgress = null;            // vérification en cours : {elapsed, steps: [{label, state, seconds}]}
   let preview = null, verification = null;
   let pollTimer = null, logCount = 0, install = { status: "idle" };
   const results = {};
@@ -156,15 +157,18 @@
     { id: "summary", title: "Récapitulatif", desc: "Vérifiez la configuration avant de lancer l'installation.", render: renderSummary, enter: () => loadSummary(), next: "Installer" },
     { id: "install", title: "Installation", desc: "Ne fermez pas cette page pendant l'installation.", render: renderInstall },
     { id: "verify", title: "Vérification de l'installation", desc: "Contrôle de bout en bout de chaque composant installé.", render: renderVerify, enter: () => { fixResult = null; runVerify(); } },
+    { id: "recette", title: "Recette", desc: "HeptagonesLM comparé aux serveurs de licences réels et contrôlé de bout en bout, puis PV de recette à signer.", render: renderRecette, enter: () => loadRecette() },
   ];
   const at = id => STEPS.findIndex(s => s.id === id);
-  const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify");
+  const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify"), RECETTE = at("recette");
+  let recetteMode = false;            // recette d'une installation existante, ouverte depuis la page d'accueil
 
   function renderStepper() {
     const locked = install.status === "running";
     $("stepper").innerHTML = STEPS.map((s, i) => {
       const cls = i === step ? "current" : (i < maxStep || (i < step) ? "done" : "");
-      const reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
+      let reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
+      if (recetteMode) reachable = !locked && i !== step && (i === 0 || i === RECETTE);
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
     }).join("");
@@ -187,6 +191,8 @@
     next.textContent = s.next || "Suivant";
     next.disabled = step === SUMMARY && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
     $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${blockingCount} prérequis bloquant(s) à corriger` : "";
+    // dernières étapes : boutons propres à la page, barre du bas inutile (elle masquait la fin de la page)
+    document.querySelector(".setup-foot").hidden = prev.hidden && next.hidden;
     document.title = `${s.title} — Installation de HeptagonesLM`;
   }
 
@@ -217,7 +223,12 @@
       ["clock", "Tâches planifiées", "Collecte toutes les 5 minutes, rapport mensuel, e-mails, purge, interface permanente."],
       ["check", "Vérification finale", "Chaque composant est testé de bout en bout, avec un rapport d'installation."],
     ];
+    const inst = info.installed;
     return `
+      ${inst ? `<div class="panel installed-panel"><div class="panel-head"><div><h2>${dot("ok")} HeptagonesLM est déjà installé sur ce serveur</h2>
+        <p class="muted">Configuration <code>${esc(inst)}</code>. Faites la recette de cette installation (comparaison avec les serveurs de licences, contrôles de bout en bout, PV), ou poursuivez pour la mettre à jour.</p></div></div>
+        <div class="actions"><button type="button" class="btn primary" id="go-recette">Faire la recette de cette installation</button>
+          <button type="button" class="btn" id="go-install">Mettre à jour ou réinstaller</button></div></div>` : ""}
       <div class="welcome-grid">${feats.map(([i, t, d]) => `<div class="feature"><span class="ico">${icon(i)}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div>
       <div class="recap">
         <div class="panel"><h2>Ce serveur</h2><dl class="kv">
@@ -237,6 +248,11 @@
       </div>`;
   }
 
+  STEPS[0].after = () => {
+    $("go-recette")?.addEventListener("click", () => { recetteMode = true; step = RECETTE; render(); window.scrollTo({ top: 0 }); loadRecette(); });
+    $("go-install")?.addEventListener("click", () => { recetteMode = false; go(1); });
+  };
+
   /* Commande à copier (SPN, zone Intranet, adresse de test…) */
   function cmdHtml(c) {
     return c.command ? `<div class="cmd"><code>${esc(c.command)}</code><button type="button" class="btn small ghost" data-copy="${esc(c.command)}">Copier</button></div>` : "";
@@ -254,8 +270,20 @@
   }
 
   /* 2. Vérification du serveur */
+  function progressHtml(p) {
+    const steps = (p && p.steps) || [];
+    const mark = st => st.state === "running" ? '<span class="spinner"></span>' : dot(st.state === "error" ? "warning" : "ok");
+    return `<div class="panel" id="checks-progress"><div class="panel-head"><div><h2><span class="spinner"></span> Vérification en cours</h2>
+      <p class="muted">Lectures du serveur menées en parallèle${p && p.elapsed != null ? ` · ${Math.round(p.elapsed)} s` : ""}.</p></div></div>
+      <ul class="probe-list">${steps.map(st => `<li class="${esc(st.state)}">${mark(st)}<span>${esc(st.label)}</span>
+        <small>${st.seconds != null ? `${String(st.seconds).replace(".", ",")} s` : "en cours…"}</small></li>`).join("")}</ul></div>`;
+  }
+  function updateProgress() {
+    const el = $("checks-progress");
+    if (el && checksProgress) el.outerHTML = progressHtml(checksProgress);
+  }
   function checksHtml(list) {
-    if (!list) return `<div class="panel"><span class="spinner"></span> Vérification en cours…</div>`;
+    if (!list) return progressHtml(checksProgress);
     const groups = {};
     list.forEach(c => (groups[c.category] = groups[c.category] || []).push(c));
     const count = k => list.filter(c => c.status === k).length;
@@ -276,20 +304,29 @@
         ${items.map(checkRow).join("")}
       </div></div>`).join("")}</div>`;
   }
-  function renderChecks() { return checksHtml(checks); }
+  function renderChecks() { return (checksBusy && checks ? progressHtml(checksProgress) : "") + checksHtml(checks); }
   function bindChecks(root = document) {
     bindCopy(root);
     root.querySelector("#recheck")?.addEventListener("click", () => runChecks());
     root.querySelectorAll("[data-fix]").forEach(b => b.addEventListener("click", () => runFix(b.dataset.fix)));
   }
   STEPS[1].after = () => bindChecks();
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
   async function runChecks() {
     checksBusy = true;
+    checksProgress = { steps: [], elapsed: 0 };
+    if (step === 1) render();
     try {
-      const res = await api("/api/checks", { answers: A, final: step >= SUMMARY });
-      checks = res.checks; blockingCount = res.blocking;
+      let st = await api("/api/checks/start", { answers: A, final: step >= SUMMARY });
+      while (st.status === "running") {
+        checksProgress = st; updateProgress();
+        await sleep(400);
+        st = await api("/api/checks/state");
+      }
+      if (st.status === "error") throw new Error(st.error || "Vérification impossible");
+      checks = st.checks; blockingCount = st.blocking;
     } catch (e) { showError(e.message); }
-    checksBusy = false;
+    checksBusy = false; checksProgress = null;
     if (step === 1 || step === SUMMARY) render();
   }
   async function runFix(fix) {
@@ -691,6 +728,7 @@
           ${v.url ? `<a class="btn primary" href="${esc(v.url)}" target="_blank" rel="noopener">Ouvrir HeptagonesLM</a>` : ""}
           <a class="btn" href="/api/report">Télécharger le rapport d'installation</a>
           <button type="button" class="btn" id="reverify">Relancer la vérification</button>
+          <button type="button" class="btn primary" id="to-recette">Passer à la recette</button>
           <button type="button" class="btn ghost" id="close">Fermer l'assistant</button>
         </div></div>
       ${v.access_url ? `<div class="panel"><h2>Test depuis un poste utilisateur</h2>
@@ -705,6 +743,7 @@
   STEPS[VERIFY].after = () => {
     bindCopy();
     $("reverify")?.addEventListener("click", () => runVerify());
+    $("to-recette")?.addEventListener("click", () => { maxStep = Math.max(maxStep, RECETTE); go(RECETTE); });
     document.querySelectorAll("[data-vfix]").forEach(b => b.addEventListener("click", async () => {
       fixResult = { busy: "Correction en cours…" }; render();
       try {
@@ -719,6 +758,137 @@
       try { await api("/api/shutdown", {}); } catch (e) { /* déjà arrêté */ }
       try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }
       $("step-body").innerHTML = `<div class="panel"><h2>Assistant fermé</h2><p class="muted">Vous pouvez fermer cet onglet. Pour modifier la configuration plus tard, relancez HeptagonesLM-Setup.exe.</p></div>`;
+    });
+  };
+
+  /* 12. Recette */
+  let rctx = null, rjob = null, rpv = null;
+  const ropt = { hours: 24, anonymize: true, email_to: "", itsm: true, outsider_user: "", outsider_password: "", member_user: "", member_password: "" };
+  const pvMeta = { client: "", redacteur: "", valideur: "", comment: "" };
+  async function loadRecette() {
+    rctx = null; render();
+    try {
+      rctx = await api("/api/recette/context", {});
+      const st = await api("/api/recette/state");
+      if (st.status !== "idle") rjob = st;
+      if (rjob && rjob.status === "running") pollRecette();
+    } catch (e) { rctx = { installed: null, error: e.message }; }
+    render();
+  }
+  async function startRecette() {
+    showError(""); rpv = null;
+    try { rjob = await api("/api/recette/start", { options: ropt }); } catch (e) { showError(e.message); return; }
+    render(); pollRecette();
+  }
+  async function pollRecette() {
+    while (rjob && rjob.status === "running") {
+      await sleep(600);
+      try { rjob = await api("/api/recette/state"); } catch (e) { showError(e.message); break; }
+      const el = $("recette-progress");
+      if (el && rjob.status === "running") el.outerHTML = recetteProgress(rjob); else render();
+    }
+  }
+  function recetteProgress(j) {
+    const mark = st => st.state === "running" ? '<span class="spinner"></span>' : dot(st.state === "error" ? "error" : "ok");
+    return `<div class="panel" id="recette-progress"><div class="panel-head"><div><h2><span class="spinner"></span> Recette en cours</h2>
+      <p class="muted">La collecte planifiée est déclenchée puis chaque serveur de licences est interrogé en direct${j.elapsed != null ? ` · ${Math.round(j.elapsed)} s` : ""}.</p></div></div>
+      <ul class="probe-list">${(j.steps || []).map(st => `<li class="${esc(st.state)}">${mark(st)}<span>${esc(st.label)}</span>
+        <small>${st.seconds != null ? `${String(st.seconds).replace(".", ",")} s` : "en cours…"}</small></li>`).join("")}</ul></div>`;
+  }
+  const SEVTXT = { ok: "Conforme", warning: "Réserve", error: "Non conforme", info: "Information" };
+  function rtable(t) {
+    const verdictCol = t.columns[t.columns.length - 1] === "Résultat" ? t.columns.length - 1 : -1;
+    const cls = (v, i) => i !== verdictCol ? "" : v === "identique" ? "same" : "diff";
+    return `<div class="table-wrap"><table class="rtable"><thead><tr>${t.columns.map(c => `<th>${esc(c)}</th>`).join("")}</tr></thead>
+      <tbody>${t.rows.map(r => `<tr>${r.map((v, i) => `<td class="${cls(v, i)}">${esc(v)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
+  }
+  function itemHtml(it) {
+    const conf = it.confirm && (it.auto_status === "ok" || it.auto_status === "warning") ? `<div class="confirm-row"><span>${esc(it.confirm)}</span>
+      <button type="button" class="btn small ${it.confirmed === true ? "primary" : ""}" data-rconfirm="${esc(it.id)}" data-val="1">Oui</button>
+      <button type="button" class="btn small ${it.confirmed === false ? "danger" : ""}" data-rconfirm="${esc(it.id)}" data-val="0">Non</button></div>` : "";
+    const files = (it.files || []).filter(f => (rjob.recette.files || []).includes(f));
+    return `<div class="ritem">${dot(it.status)}<div class="rbody"><div class="lbl">${esc(it.label)} <span class="tag sev-${({ ok: "good", warning: "warning", error: "critical", info: "info" })[it.status]}">${SEVTXT[it.status] || it.status}</span></div>
+      <div class="det">${esc(it.detail)}</div>
+      ${it.details && it.details.length ? `<ul>${it.details.map(d => `<li>${esc(d)}</li>`).join("")}</ul>` : ""}
+      ${it.table ? (it.id.startsWith("srv:") ? rtable(it.table) : `<details><summary>Détail (${it.table.rows.length} lignes)</summary>${rtable(it.table)}</details>`) : ""}
+      ${files.length ? `<div class="files">${files.map(f => `<a href="/api/recette/file?name=${encodeURIComponent(f)}">${esc(f)}</a>`).join(" · ")}</div>` : ""}
+      ${conf}</div></div>`;
+  }
+  function renderRecette() {
+    if (!rctx) return `<div class="panel"><span class="spinner"></span> Lecture de l'installation…</div>`;
+    if (!rctx.installed) return `<div class="panel"><h2>Aucune installation trouvée</h2><p class="muted">${esc(rctx.error || "La recette porte sur une installation existante (heptagoneslm.yaml dans le dossier d'installation). Installez d'abord HeptagonesLM.")}</p></div>`;
+    const I = rctx.installed, web = I.web_mode !== "local";
+    const running = rjob && rjob.status === "running", res = rjob && rjob.status === "done" ? rjob.recette : null;
+    let html = `<div class="panel"><h2>Installation contrôlée</h2><dl class="kv">
+      <dt>Configuration</dt><dd>${esc(I.config_path)}</dd>
+      <dt>Serveurs de licences</dt><dd>${I.servers.map(s => esc(`${s.name} (${s.port_at_host})`)).join(", ") || "—"}</dd>
+      <dt>Interface</dt><dd>${esc(I.public_url || "poste local")}${I.access_group ? ` · groupe ${esc(I.access_group)}` : ""}</dd>
+      <dt>E-mail</dt><dd>${I.email.configured ? "configuré" : "non configuré"}</dd>
+      <dt>Tickets ITSM</dt><dd>${I.itsm.length ? I.itsm.map(c => esc(c.name)).join(", ") : "aucun"}</dd></dl></div>`;
+    if (!running && !res) {
+      html += `<div class="panel"><h2>Paramètres de la recette</h2><div class="form-grid">
+        <label class="f"><span>Collecte planifiée à contrôler</span><select data-ropt="hours">${[[1, "1 heure"], [4, "4 heures"], [24, "24 heures (recommandé)"], [72, "3 jours"], [168, "7 jours"]].map(([v, l]) => `<option value="${v}" ${+ropt.hours === v ? "selected" : ""}>${l}</option>`).join("")}</select>
+          <span class="hint">Collectes réussies et interruptions sur la période ; faire la recette après au moins une journée de fonctionnement.</span></label>
+        ${I.email.configured ? `<label class="f"><span>Destinataire de l'e-mail de test</span><input type="text" data-ropt="email_to" value="${esc(ropt.email_to)}" placeholder="${esc((I.email.recipients || [])[0] || "dsi@entreprise.local")}"></label>` : ""}
+        <div class="full" style="display:flex;flex-direction:column;gap:12px">
+          <label class="toggle"><input type="checkbox" data-ropt="anonymize" ${ropt.anonymize ? "checked" : ""}><span>Anonymiser les sorties enregistrées<small>Noms d'utilisateurs et de postes remplacés (utilisateur001, poste001…) dans les sorties lmstat conservées comme preuves et transmissibles pour les tests de non-régression.</small></span></label>
+          ${I.itsm.length ? `<label class="toggle"><input type="checkbox" data-ropt="itsm" ${ropt.itsm ? "checked" : ""}><span>Ouvrir un ticket de test dans ${esc(I.itsm.map(c => c.name).join(", "))}<small>Ticket ouvert, commenté puis résolu automatiquement.</small></span></label>` : ""}
+        </div>
+        ${web ? `<div class="full"><h3 class="sub">Contrôle de la restriction d'accès (facultatif)</h3><p class="muted">Un compte authentifié mais <b>hors</b> du groupe ${esc(I.access_group || "autorisé")} doit être refusé. Le compte membre permet d'écarter un faux positif. Sans comptes, le refus sera à confirmer manuellement.</p></div>
+          <label class="f"><span>Compte hors du groupe</span><input type="text" data-ropt="outsider_user" value="${esc(ropt.outsider_user)}" placeholder="ENTREPRISE\\compte" autocomplete="off"></label>
+          <label class="f"><span>Mot de passe</span><input type="password" data-ropt="outsider_password" value="${esc(ropt.outsider_password)}" autocomplete="new-password"></label>
+          <label class="f"><span>Compte membre du groupe</span><input type="text" data-ropt="member_user" value="${esc(ropt.member_user)}" placeholder="ENTREPRISE\\utilisateur" autocomplete="off"></label>
+          <label class="f"><span>Mot de passe</span><input type="password" data-ropt="member_password" value="${esc(ropt.member_password)}" autocomplete="new-password"></label>` : ""}
+        </div><div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="start-recette">Lancer la recette</button></div></div>`;
+    }
+    if (running) html += recetteProgress(rjob);
+    if (rjob && rjob.status === "error") html += `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>Recette interrompue</h2><p>${esc(rjob.error)}</p></div></div>
+      <div class="actions"><button type="button" class="btn primary" id="start-recette">Relancer la recette</button></div></div>`;
+    if (res) {
+      const v = res.verdict, cls = { ok: "sev-good", warning: "sev-warning", error: "sev-critical" }[v.level];
+      const groups = {};
+      res.items.forEach(it => (groups[it.category] = groups[it.category] || []).push(it));
+      html += `<div class="panel"><div class="hero-result ${cls}"><span class="big">${v.level === "ok" ? "✓" : "!"}</span><div><h2>${esc(v.label)}</h2>
+        <p>${v.counts.ok} conforme(s), ${v.counts.warning} réserve(s), ${v.counts.error} non-conformité(s)${v.pending ? ` · <b>${v.pending} point(s) à confirmer ci-dessous</b>` : ""} · recette du ${esc(new Date(res.started).toLocaleString("fr-FR"))}</p>
+        <p class="muted">Preuves : <code>${esc(res.folder)}</code></p></div></div></div>
+        ${Object.entries(groups).map(([g, items]) => `<div class="panel"><h2>${esc(g)}</h2><div class="ritems">${items.map(itemHtml).join("")}</div></div>`).join("")}
+        <div class="panel"><h2>PV de recette</h2><p class="muted">Document Word reprenant chaque point, les comparaisons et un cadre de signature (rédacteur et client).</p>
+          <div class="form-grid">
+            <label class="f"><span>Client / site</span><input type="text" data-pv="client" value="${esc(pvMeta.client)}" placeholder="Entreprise — site"></label>
+            <label class="f"><span>Rédigé par (intégrateur)</span><input type="text" data-pv="redacteur" value="${esc(pvMeta.redacteur)}"></label>
+            <label class="f"><span>Validé par (client)</span><input type="text" data-pv="valideur" value="${esc(pvMeta.valideur)}"></label>
+            <label class="f full"><span>Commentaire (facultatif)</span><input type="text" data-pv="comment" value="${esc(pvMeta.comment)}"></label>
+          </div>
+          <div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="make-pv">Télécharger le PV de recette (Word)</button>
+            <a class="btn" href="/api/recette/preuves.zip">Télécharger les preuves (.zip)</a>
+            <button type="button" class="btn ghost" id="start-recette">Relancer la recette</button></div>
+          <div class="result" id="pv-result">${rpv ? `${dot("ok")}<div><b>PV généré : <a href="${esc(rpv.url)}">${esc(rpv.file)}</a></b></div>` : ""}</div></div>`;
+    }
+    return html;
+  }
+  STEPS[RECETTE].after = () => {
+    const root = $("step-body");
+    root.querySelectorAll("[data-ropt]").forEach(el => el.addEventListener(el.type === "checkbox" || el.tagName === "SELECT" ? "change" : "input", () => {
+      ropt[el.dataset.ropt] = el.type === "checkbox" ? el.checked : el.tagName === "SELECT" ? +el.value : el.value;
+    }));
+    root.querySelectorAll("[data-pv]").forEach(el => el.addEventListener("input", () => { pvMeta[el.dataset.pv] = el.value; }));
+    root.querySelectorAll("#start-recette").forEach(b => b.addEventListener("click", startRecette));
+    root.querySelectorAll("[data-rconfirm]").forEach(b => b.addEventListener("click", async () => {
+      try {
+        const r = await api("/api/recette/confirm", { id: b.dataset.rconfirm, confirmed: b.dataset.val === "1" });
+        const items = rjob.recette.items;
+        items[items.findIndex(i => i.id === r.item.id)] = r.item;
+        rjob.recette.verdict = r.verdict;
+        render();
+      } catch (e) { showError(e.message); }
+    }));
+    $("make-pv")?.addEventListener("click", async () => {
+      try {
+        rpv = await api("/api/recette/pv", pvMeta);
+        rjob.recette.files = [...new Set([...(rjob.recette.files || []), rpv.file])];
+        render();
+        window.location.href = rpv.url;
+      } catch (e) { showError(e.message); }
     });
   };
 

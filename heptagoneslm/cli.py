@@ -96,6 +96,8 @@ def cmd_collect(cfg: AppConfig, args) -> int:
             print("Une collecte est déjà en cours : exécution ignorée")
             return 0
         results = CollectionService(cfg, db).collect_all(only=args.server)
+        if cfg.autodesk.import_dir and not args.server:
+            _import_autodesk_folder(cfg, db)
         if cfg.alerts:
             _notify_alerts(cfg, db)
     failed = [r for r in results if r.status != "OK"]
@@ -104,6 +106,20 @@ def cmd_collect(cfg: AppConfig, args) -> int:
     if not results:
         log.warning("Aucun serveur collecté (vérifier la configuration / --server)")
     return 2 if failed else 0
+
+
+def _import_autodesk_folder(cfg: AppConfig, db) -> None:
+    """Exports du portail Autodesk déposés dans le dossier surveillé : une erreur ne fait pas échouer la collecte."""
+    from heptagoneslm.autodesk import import_folder
+
+    try:
+        results = import_folder(db, cfg.autodesk.import_dir)
+    except Exception as exc:
+        log.error("Import Autodesk impossible : %s (exécuter « init-db » après une mise à jour)", exc)
+        return
+    for r in results:
+        if r["status"] != "déjà importé":
+            print(f"Autodesk : {r['file']} {r['status']} {r.get('rows', 0)} licence(s) {r.get('error', '')}".rstrip())
 
 
 def _notify_alerts(cfg: AppConfig, db) -> None:
@@ -200,6 +216,26 @@ def cmd_import_log(cfg: AppConfig, args) -> int:
             log.warning("%d évènement(s) sans date ignoré(s)", parser.skipped_undated)
     print(f"{total} enregistrements importés")
     return 0
+
+
+def cmd_import_autodesk(cfg: AppConfig, args) -> int:
+    from heptagoneslm.autodesk import ImportError_, import_report
+
+    failed = 0
+    with _open_db(cfg) as db:
+        for file in args.files:
+            try:
+                r = import_report(db, file, force=args.force)
+            except (ImportError_, OSError) as exc:
+                failed += 1
+                print(f"{file} : non importé : {exc}", file=sys.stderr)
+                continue
+            if r["status"] == "déjà importé":
+                print(f"{r['file']} : déjà importé (--force pour réimporter)")
+            else:
+                print(f"{r['file']} : {r['rows']} licence(s) nommée(s), rapport du {r['report_date']}"
+                      + (f", {r['skipped']} ligne(s) ignorée(s)" if r.get("skipped") else ""))
+    return 2 if failed else 0
 
 
 def cmd_parse_lmstat(args) -> int:
@@ -410,6 +446,11 @@ def build_parser() -> argparse.ArgumentParser:
     iu = sub.add_parser("import-users", help="importe nom complet et service des utilisateurs (CSV AD/RH)")
     iu.add_argument("file", help="CSV avec colonnes username;display_name;department (ou utilisateur;nom;service)")
 
+    ia = sub.add_parser("import-autodesk",
+                        help="importe un export « Usage report » du portail Autodesk Account (licences nommées)")
+    ia.add_argument("files", nargs="+", help="export CSV ou Excel (manage.autodesk.com › Reporting › Usage report)")
+    ia.add_argument("--force", action="store_true", help="réimporter un fichier déjà importé")
+
     sr = sub.add_parser("send-report", help="envoie le rapport par e-mail aux abonnés (à planifier)")
     sr.add_argument("--subscription", action="append", help="limiter à cet abonnement (répétable)")
     sr.add_argument("--period", choices=["last-month", "this-month", "last-week", "last-7d", "last-year"],
@@ -462,6 +503,7 @@ WITH_CONFIG = {
     "import-log": cmd_import_log,
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
+    "import-autodesk": cmd_import_autodesk,
     "send-report": cmd_send_report,
     "check-alerts": cmd_check_alerts,
     "test-itsm": cmd_test_itsm,

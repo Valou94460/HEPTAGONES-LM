@@ -13,16 +13,18 @@ import json
 import logging
 import secrets
 import threading
+import time
 import webbrowser
+from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from heptagoneslm import __version__
-from heptagoneslm.setup import probes, toolscan
+from heptagoneslm.setup import probes, recette, toolscan
 from heptagoneslm.setup.answers import Answers
-from heptagoneslm.setup.checks import apply_fix, blocking, run_checks
+from heptagoneslm.setup.checks import PROBES, apply_fix, blocking, run_checks
 from heptagoneslm.setup.installer import Installer, build_plan, schedule_label, _tasks, Context
 from heptagoneslm.setup.system import SetupError, System
 from heptagoneslm.setup.verify import verify
@@ -43,6 +45,57 @@ SIM_SERVERS = [{"name": "AUTODESK", "port_at_host": "27000@licsrv-adsk", "collec
                {"name": "MATLAB", "port_at_host": "27000@licsrv-mlm", "collectors": ["lmstat"]}]
 
 
+class Job:
+    """Traitement long exécuté en arrière-plan, dont l'interface suit l'avancement (vérifications…)."""
+
+    def __init__(self, target, steps: dict[str, str] | None = None):
+        self.lock = threading.Lock()
+        self.status = "running"            # running | done | error
+        self.started = time.monotonic()
+        self.elapsed: float | None = None
+        self.steps: dict[str, dict] = {}   # clé -> {label, state, seconds}
+        self.order = list(steps or {})
+        self.result: dict | None = None
+        self.error: str | None = None
+        threading.Thread(target=self._run, args=(target,), daemon=True).start()
+
+    def step(self, key: str, label: str, state: str, seconds: float | None = None) -> None:
+        with self.lock:
+            if key not in self.order:
+                self.order.append(key)
+            self.steps[key] = {"key": key, "label": label, "state": state, "seconds": seconds}
+
+    def _run(self, target) -> None:
+        try:
+            result = target(self)
+            with self.lock:
+                self.result, self.status = result, "done"
+        except SetupError as exc:
+            with self.lock:
+                self.error, self.status = str(exc), "error"
+        except Exception as exc:              # pragma: no cover - défaut inattendu, détaillé dans la console
+            log.exception("Traitement en arrière-plan")
+            with self.lock:
+                self.error, self.status = f"Erreur interne de l'assistant ({type(exc).__name__})", "error"
+        finally:
+            self.elapsed = round(time.monotonic() - self.started, 1)
+
+    @property
+    def running(self) -> bool:
+        return self.status == "running"
+
+    def state(self) -> dict:
+        with self.lock:
+            out = {"status": self.status, "elapsed": self.elapsed if self.elapsed is not None
+                   else round(time.monotonic() - self.started, 1),
+                   "steps": [self.steps[k] for k in self.order if k in self.steps]}
+            if self.result is not None:
+                out.update(self.result)
+            if self.error:
+                out["error"] = self.error
+            return out
+
+
 class SetupApp:
     def __init__(self, system: System, token: str | None = None):
         self.system = system
@@ -53,24 +106,76 @@ class SetupApp:
         self.verification: dict | None = None
         self.lock = threading.Lock()
         self._info: dict | None = None
+        self.check_job: Job | None = None
+        self.recette_job: Job | None = None
+        self.recette_run: recette.RecetteRun | None = None
+        self.recette_installed: recette.Installed | None = None
+
+    # -- recette -------------------------------------------------------------------------------------
+    def installed_config(self) -> str | None:
+        return recette.find_installed(self.system, self.answers.install_dir)
+
+    def recette_context(self, config_path: str | None = None) -> dict:
+        path = config_path or self.installed_config()
+        if not path:
+            return {"installed": None}
+        self.recette_installed = recette.load_installed(self.system, path)
+        return {"installed": self.recette_installed.summary()}
+
+    def start_recette(self, options: dict, config_path: str | None = None) -> Job:
+        with self.lock:
+            if self.recette_job and self.recette_job.running:
+                return self.recette_job
+            path = config_path or self.installed_config()
+            if not path:
+                raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur (heptagoneslm.yaml)")
+            installed = recette.load_installed(self.system, path)
+            opt = recette.Options.from_dict(options)
+
+            def work(job: Job) -> dict:
+                run = recette.RecetteRun(self.system, installed, opt, progress=job.step)
+                self.recette_run = run
+                return {"recette": run.run()}
+
+            self.recette_job = Job(work)
+            return self.recette_job
+
+    def start_checks(self, a: Answers, final: bool) -> Job:
+        """Vérification des prérequis en arrière-plan (une seule à la fois)."""
+        with self.lock:
+            if self.check_job and self.check_job.running:
+                return self.check_job
+
+            def work(job: Job) -> dict:
+                timings: dict = {}
+                checks = run_checks(self.system, a, final=final, progress=job.step, timings=timings)
+                log.info("Vérification du serveur : %s", ", ".join(f"{k} {v} s" for k, v in timings.items()))
+                return {"checks": [c.to_dict() for c in checks], "blocking": len(blocking(checks)),
+                        "timings": timings}
+
+            self.check_job = Job(work, PROBES)
+            return self.check_job
 
     def info(self) -> dict:
         if self._info is None:
             s = self.system
-            try:
-                os_info = s.os_info()
-            except SetupError:
-                os_info = {}
-            try:
-                dom = s.domain_info()
-            except SetupError:
-                dom = {"domain": "", "netbios": "", "dcs": [], "base_dn": ""}
-            try:
-                certs = s.certificates()
-            except SetupError:
-                certs = []
-            drivers = [d for d in s.odbc_drivers() if d.startswith("ODBC Driver")]
-            lmutil = s.find_lmutil()
+
+            def safe(fn, default):
+                try:
+                    return fn()
+                except SetupError:
+                    return default
+
+            # Lectures indépendantes en parallèle (chacune lance PowerShell sous Windows)
+            with ThreadPoolExecutor(max_workers=5) as pool:
+                f_os = pool.submit(safe, s.os_info, {})
+                f_dom = pool.submit(safe, s.domain_info, {"domain": "", "netbios": "", "dcs": [], "base_dn": ""})
+                f_certs = pool.submit(safe, s.certificates, [])
+                f_drivers = pool.submit(s.odbc_drivers)
+                f_lmutil = pool.submit(s.find_lmutil)
+                os_info, dom, certs = f_os.result(), f_dom.result(), f_certs.result()
+                drivers = [d for d in f_drivers.result() if d.startswith("ODBC Driver")]
+                lmutil = f_lmutil.result()
             domain, netbios = dom.get("domain") or "", dom.get("netbios") or os_info.get("hostname") or ""
             defaults = {
                 "install_dir": r"C:\HeptagonesLM",
@@ -86,6 +191,7 @@ class SetupApp:
                 "sender": f"HeptagonesLM <heptagoneslm@{domain}>" if domain else "",
                 "servers": SIM_SERVERS if s.simulated else [{"name": "", "port_at_host": "", "collectors": ["lmstat"]}],
             }
+            installed = recette.find_installed(s, defaults["install_dir"])
             if s.simulated:
                 defaults.update(db_server="SQLSRV01", recipients=["dsi@entreprise.local"], smtp_host="smtp.entreprise.local")
             if certs:
@@ -93,7 +199,8 @@ class SetupApp:
                 defaults["iis_cert_thumbprint"] = (match or certs)[0]["thumbprint"]
             self._info = {"version": __version__, "simulated": s.simulated, "system": s.name,
                           "admin": s.is_admin(), "os": os_info, "domain": dom, "certificates": certs,
-                          "odbc_drivers": drivers, "lmutil_found": lmutil, "defaults": defaults}
+                          "odbc_drivers": drivers, "lmutil_found": lmutil, "defaults": defaults,
+                          "installed": installed}
         return self._info
 
     def plan(self, a: Answers) -> list[dict]:
@@ -180,6 +287,25 @@ class SetupHandler(BaseHTTPRequestHandler):
         app = self.app
         if url.path == "/api/info":
             return self._json(app.info())
+        if url.path == "/api/recette/state":
+            if not app.recette_job:
+                return self._json({"status": "idle", "steps": []})
+            st = app.recette_job.state()
+            if app.recette_run and st.get("status") == "done":
+                st["recette"] = app.recette_run.state()          # confirmations à jour
+            return self._json(st)
+        if url.path == "/api/recette/file":
+            return self._recette_file((parse_qs(url.query).get("name") or [""])[0])
+        if url.path == "/api/recette/preuves.zip":
+            run = app.recette_run
+            if not run:
+                return self._json({"error": "Aucune recette"}, HTTPStatus.NOT_FOUND)
+            return self._send(200, run.evidence_zip(), "application/zip",
+                              {"Content-Disposition": f'attachment; filename="HeptagonesLM_recette_{run.stamp}.zip"'})
+        if url.path == "/api/checks/state":
+            if not app.check_job:
+                return self._json({"status": "idle", "steps": []})
+            return self._json(app.check_job.state())
         if url.path == "/api/progress":
             since = int((parse_qs(url.query).get("since") or ["0"])[0] or 0)
             if not app.installer:
@@ -215,6 +341,20 @@ class SetupHandler(BaseHTTPRequestHandler):
             if path == "/api/checks":
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"checks": [c.to_dict() for c in checks], "blocking": len(blocking(checks))})
+            if path == "/api/checks/start":
+                return self._json(app.start_checks(a, bool(body.get("final"))).state())
+            if path == "/api/recette/context":
+                return self._json(app.recette_context(body.get("config_path") or None))
+            if path == "/api/recette/start":
+                return self._json(app.start_recette(body.get("options") or {}, body.get("config_path") or None).state())
+            if path == "/api/recette/confirm":
+                if not app.recette_run:
+                    raise SetupError("Aucune recette en cours")
+                value = body.get("confirmed")
+                item = app.recette_run.confirm(str(body.get("id", "")), value if isinstance(value, bool) else None)
+                return self._json({"item": item.to_dict(), "verdict": recette.verdict(app.recette_run.items)})
+            if path == "/api/recette/pv":
+                return self._json(self._recette_pv(body))
             if path == "/api/fix":
                 message = apply_fix(app.system, str(body.get("fix", "")), a)
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
@@ -263,6 +403,32 @@ class SetupHandler(BaseHTTPRequestHandler):
             return self._json({"error": "Erreur interne de l'assistant (détail dans la console)"},
                               HTTPStatus.INTERNAL_SERVER_ERROR)
         return self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)
+
+    def _recette_pv(self, body: dict) -> dict:
+        from heptagoneslm.setup.pv import build_pv
+
+        run = self.app.recette_run
+        if not run:
+            raise SetupError("Lancer d'abord la recette")
+        meta = {k: str(body.get(k) or "").strip()[:200] for k in ("client", "redacteur", "valideur")}
+        meta["comment"] = str(body.get("comment") or "").strip()[:2000]
+        name = f"PV_recette_HeptagonesLM_{run.stamp}.docx"
+        run.save_bytes(name, build_pv(run.state(), meta))
+        run.save_results()
+        return {"file": name, "url": f"/api/recette/file?name={name}"}
+
+    def _recette_file(self, name: str):
+        run = self.app.recette_run
+        if not run or name not in run.files or "/" in name or "\\" in name:
+            return self._json({"error": "Fichier inconnu"}, HTTPStatus.NOT_FOUND)
+        data = run.system.read_bytes(run.folder + "\\" + name)
+        if data is None:
+            return self._json({"error": "Fichier introuvable"}, HTTPStatus.NOT_FOUND)
+        types = {".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                 ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                 ".json": "application/json; charset=utf-8", ".txt": "text/plain; charset=utf-8"}
+        ctype = types.get(Path(name).suffix.lower(), "application/octet-stream")
+        return self._send(200, data, ctype, {"Content-Disposition": f'attachment; filename="{name}"'})
 
     def _use_tool(self, a: Answers, path: str) -> dict:
         """Retient un outil trouvé par la recherche ; copié dans <installation>\\bin s'il est distant."""

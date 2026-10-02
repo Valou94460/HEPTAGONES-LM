@@ -6,6 +6,22 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Licences Autodesk « utilisateur nommé »** : import des exports « Usage report » du portail Autodesk
+  Account (CSV ou Excel, colonnes en anglais ou en français, présentation 2026 comprise) par
+  `heptagoneslm import-autodesk export.csv` ou par dépôt dans un dossier surveillé (`autodesk.import_dir`,
+  importé à la collecte suivante, une seule fois par fichier). Nouveau rapport « Autodesk · utilisateurs
+  nommés » : licences actives, inactives (au-delà de `autodesk.inactive_days`, 30 jours par défaut) et jamais
+  utilisées, coût annuel récupérable (`autodesk.annual_costs`), exportable comme les autres vues.
+  Schéma v7 (tables `named_seat`, `named_import`) : exécuter `init-db` après la mise à jour.
+- **Recette sur le site client** (étape 12 de l'assistant, ou depuis l'accueil quand HeptagonesLM est déjà
+  installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé feature par feature à la
+  base (lecture indépendante de la sortie brute), collecte planifiée sur N heures, vérification de bout en
+  bout, connexion depuis les postes, refus d'un compte hors du groupe, e-mail, ticket ITSM et rapport Excel de
+  test confirmés par l'opérateur. **PV de recette** Word à signer et archive des preuves.
+- Sorties réelles des serveurs de licences (anonymisables) enregistrées par la recette et rejouées par les
+  tests de non-régression (`tests/fixtures/reel`).
+- **Vérification du serveur accélérée** : lectures en parallèle, IIS absent détecté sans `Get-WindowsFeature`,
+  progression affichée.
 - **Assistant d'installation : étape « Tickets ITSM »** (désactivée par défaut) : ServiceNow, Jira,
   GLPI ou Teams / Slack, gravité minimale, autorité de certification interne facultative ; bouton
   « Ouvrir un ticket de test » qui ouvre, commente puis résout un vrai ticket avec les identifiants
@@ -16,7 +32,14 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
   service ; la configuration n'en contient qu'une référence `dpapi:`, déchiffrée en mémoire au moment
   de l'appel. Vérification finale : secret présent et déchiffrable sur le serveur.
 
+- Dossier d'exploitation 1.10 : recette et PV (§ 5.1, 5.3), section `autodesk` (§ 6.2), licences Autodesk
+  nommées (§ 8.15).
+
 ### Corrigé
+- Installation sur Windows Server 2025 : test de refus hors du groupe sans `ConvertTo-SecureString` (module
+  parfois impossible à charger depuis PowerShell 7) ; état des rôles IIS lu par une requête CIM ciblée
+  (vérification du serveur : 98,7 s → 10 s) ; création du site IIS fiabilisée (identifiant explicite, seconde
+  tentative) ; version réelle du schéma dans le résumé de l'installation.
 - Assistant : le message d'erreur d'un champ disparaît dès que le champ est corrigé.
 
 ## [26.3.0] — 2026-10-01

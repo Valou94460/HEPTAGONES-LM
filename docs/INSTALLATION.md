@@ -60,6 +60,7 @@ avec Python : `heptagoneslm setup --simulate`).
 | 9 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
 | 10 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
 | 11 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
+| 12 | Recette | Sur l'installation en place (aussi depuis l'accueil quand HeptagonesLM est déjà installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé à la base feature par feature, collecte planifiée sur N heures, vérification, connexion depuis les postes, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test confirmés par l'opérateur | PV de recette Word à signer, archive des preuves (sorties anonymisables, résumés attendus) |
 
 <table>
 <tr>
@@ -85,6 +86,14 @@ avec Python : `heptagoneslm setup --simulate`).
 <tr>
 <td align="center"><em>Tickets ITSM : ticket de test ServiceNow</em></td>
 <td align="center"><em>Vérification finale de bout en bout</em></td>
+</tr>
+<tr>
+<td><img src="images/recette-comparaison.png" alt="Recette : comparaison"></td>
+<td><img src="images/recette-pv.png" alt="Recette : PV"></td>
+</tr>
+<tr>
+<td align="center"><em>Recette : comparaison feature par feature avec lmstat</em></td>
+<td align="center"><em>Recette : PV de recette Word et preuves</em></td>
 </tr>
 </table>
 

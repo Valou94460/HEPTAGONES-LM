@@ -44,8 +44,9 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
 | **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
+| **Autodesk nominatif** | Licences Autodesk « utilisateur nommé » (sans serveur de licences) : import des exports « Usage report » du portail Autodesk Account, licences inactives ou jamais utilisées à réaffecter, coût annuel récupérable. |
 | **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
-| **Rapports** | 13 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
+| **Rapports** | 16 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **HeptagonesLM-Setup.exe** | **Seul fichier à télécharger.** Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. Il installe l'application (`HeptagonesLM.exe` : collecte, interface, rapports) dans `C:\HeptagonesLM`. Aucun Python requis ; rien à installer sur les postes utilisateurs (navigateur). |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
@@ -72,6 +73,14 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 <tr>
 <td align="center"><em>Optimisation : coûts et économies potentielles</em></td>
 <td align="center"><em>Taux d'occupation dans le temps</em></td>
+</tr>
+<tr>
+<td><img src="docs/images/autodesk-nommes.png" alt="Autodesk utilisateurs nommés"></td>
+<td><img src="docs/images/recette-comparaison.png" alt="Recette : comparaison avec lmstat"></td>
+</tr>
+<tr>
+<td align="center"><em>Autodesk nominatif : licences à récupérer</em></td>
+<td align="center"><em>Recette : HeptagonesLM comparé à lmstat en direct</em></td>
 </tr>
 </table>
 
@@ -189,6 +198,7 @@ Get-ADUser -Filter * -Properties DisplayName,Department |
 | `heptagoneslm report --from 2026-09-01 --to 2026-10-01 --server ANSYS -o rapport.xlsx` | Période et serveurs au choix (fin exclue) |
 | `heptagoneslm import-log --server X fichier.log…` | Reprise d'historique depuis des logs archivés |
 | `heptagoneslm import-users users.csv` | Noms complets et services (export AD/RH) |
+| `heptagoneslm import-autodesk export.csv… [--force]` | Licences Autodesk nommées : export « Usage report » du portail Autodesk Account (CSV ou Excel) |
 | `heptagoneslm send-report [--skip-sent] [--dry-run DOSSIER] [--to adresse]` | Envoi du rapport aux abonnés e-mail (aperçu `.eml` avec `--dry-run`) |
 | `heptagoneslm apply-products` | Réapplique le mapping feature → produit à tout l'historique |
 | `heptagoneslm purge` | Applique la politique de rétention |

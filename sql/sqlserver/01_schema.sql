@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 6
+-- Version du schéma : 7
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -186,6 +186,38 @@ CREATE TABLE dbo.itsm_ticket (
 )
 GO
 
+IF OBJECT_ID(N'dbo.named_seat', N'U') IS NULL
+CREATE TABLE dbo.named_seat (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    vendor NVARCHAR(30) NOT NULL,
+    product NVARCHAR(255) NOT NULL,
+    email NVARCHAR(255) NOT NULL,
+    display_name NVARCHAR(255) NULL,
+    assigned_date DATE NULL,
+    unassigned_date DATE NULL,
+    days_used INT NULL,
+    days_inactive INT NULL,
+    last_used DATE NULL,
+    version NVARCHAR(50) NULL,
+    activity NVARCHAR(50) NULL,
+    report_date DATE NOT NULL,
+    imported_at DATETIME2(0) NOT NULL,
+    source_file NVARCHAR(255) NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.named_import', N'U') IS NULL
+CREATE TABLE dbo.named_import (
+    id INT IDENTITY(1,1) PRIMARY KEY,
+    vendor NVARCHAR(30) NOT NULL,
+    file_name NVARCHAR(255) NOT NULL,
+    file_hash NVARCHAR(64) NOT NULL UNIQUE,
+    report_date DATE NOT NULL,
+    rows_count INT NOT NULL,
+    imported_at DATETIME2(0) NOT NULL
+)
+GO
+
 IF COL_LENGTH(N'dbo.feature', N'expires_on') IS NULL
 ALTER TABLE dbo.feature ADD expires_on DATE NULL
 GO
@@ -232,6 +264,10 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_itsm_open')
 CREATE INDEX ix_itsm_open ON dbo.itsm_ticket (status, connector, alert_key)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_named_seat_report')
+CREATE INDEX ix_named_seat_report ON dbo.named_seat (vendor, report_date)
 GO
 
 CREATE OR ALTER VIEW dbo.v_session_detail AS

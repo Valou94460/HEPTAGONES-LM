@@ -1,0 +1,33 @@
+{
+  "source": "lmstat",
+  "license_type": "flexlm",
+  "server": "EXEMPLE_FLEXLM",
+  "port_at_host": "27000@licsrv1",
+  "captured_at": "2026-09-29T10:00:00",
+  "anonymized": false,
+  "heptagoneslm_version": "26.3.0",
+  "comparison": "ok",
+  "features": {
+    "87048INVPROSA_2024_0F": {
+      "issued": 1,
+      "in_use": 1,
+      "sessions": 1
+    },
+    "87545ACD_2024_0F": {
+      "issued": 10,
+      "in_use": 3,
+      "sessions": 3
+    },
+    "MATLAB": {
+      "issued": 5,
+      "in_use": 0,
+      "sessions": 0
+    },
+    "Simulink": {
+      "issued": null,
+      "in_use": 0,
+      "sessions": 0
+    }
+  },
+  "users": 3
+}

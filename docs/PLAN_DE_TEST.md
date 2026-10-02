@@ -100,7 +100,8 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/ui/login_smoke.cjs` | — | Navigateur réel : redirection vers la connexion, mauvais mot de passe, connexion `DOMAINE\identifiant`, retour au rapport demandé, nom affiché, export, déconnexion |
 | `tests/test_setup.py` | 21 | Assistant d'installation : réponses et `heptagoneslm.yaml` généré (3 modes, validé par le chargeur réel), secrets jamais écrits, `web.config` IIS, échappement PowerShell, scripts sans mot de passe, prérequis et corrections, installation complète, échec puis reprise, plan selon le mode, vérification, serveur local (jeton, Host, anti-CSRF), mode silencieux |
 | `tests/ui/setup_smoke.cjs` | — | Navigateur réel : parcours complet de l'assistant (simulation) : corrections automatiques, validation des champs, tous les tests de connexion, installation jusqu'à 100 %, vérification verte, rapport sans mot de passe, mobile |
-| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 11 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
+| `tests/test_autodesk.py` | 16 | Licences Autodesk nommées : exports du portail (présentation 2026, français, `;`, Windows-1252, lignes de titre, Excel), dates jj/mm ou mm/jj déduites de l'export, import idempotent et forcé, doublons, statuts (active, inactive, jamais utilisée, désaffectée), coûts, dossier surveillé, rapport web et export CSV, base non migrée, configuration, commandes `import-autodesk` et `collect` |
+| `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 12 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
 
@@ -198,7 +199,7 @@ Lancer `HeptagonesLM.exe` (double-clic) ou `heptagoneslm web --demo --open`.
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
 | WEB-01 🔴 | Ouverture | Lancer l'interface | Tableau de bord affiché, badge « Collectes OK », plage des données affichée (barre latérale) | ☐ |
-| WEB-02 🔴 | 13 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
+| WEB-02 🔴 | 16 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
 | WEB-03 | Préréglages de période | Tester 7 j, 30 j, mois en cours, mois précédent, année, toutes les données | Dates « Du / Au » cohérentes, données rechargées | ☐ |
 | WEB-04 | Dates personnalisées | Saisir des dates | Préréglage passe à « Personnalisée », données de la période | ☐ |
 | WEB-05 | Début après la fin | Du > Au | Message « La date de début doit précéder la date de fin » | ☐ |
@@ -352,6 +353,9 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | OPT-03 [E3] | Réservation retirée | Supprimer une ligne `RESERVE`, relire les options (`lmreread`), collecter | Réservation disparue de la vue | ☐ |
 | OPT-04 🔴 [E3] | Sites | Règles `sites` ; `apply-products` | Filtre « Sites » proposé ; Répartition par site ; sessions filtrées sur un site | ☐ |
 | OPT-05 🔴 | Licences inutilisées | Période où une feature émise n'a jamais été utilisée | Présente dans « Licences inutilisées » avec son coût annuel ; absente dès la première utilisation | ☐ |
+| OPT-06 🔴 | Autodesk nominatif : import | Exporter « Usage report » depuis Autodesk Account (CSV puis Excel) ; `import-autodesk export.csv` | Nombre de licences affiché = lignes de l'export ; 2ᵉ import du même fichier : « déjà importé » | ☐ |
+| OPT-07 🔴 | Autodesk nominatif : rapport | Rapport « Autodesk · utilisateurs nommés » ; comparer 5 utilisateurs avec le portail | Statut (active, inactive, jamais utilisée), dernière utilisation et coût identiques au portail ; seuil `inactive_days` respecté | ☐ |
+| OPT-08 | Autodesk nominatif : dossier surveillé | Déposer un export dans `autodesk.import_dir`, attendre la collecte suivante | Importé une seule fois ; un fichier illisible est journalisé sans faire échouer la collecte | ☐ |
 
 ### 5.10 ter Serveurs RLM (RLM)
 
@@ -388,6 +392,12 @@ Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 | INST-15 🔴 | SPN / zone Intranet | Vérification finale avec un nom DNS alias ; « Déclarer le SPN » (compte administrateur du domaine) | SPN déclaré sur le compte ordinateur, puis contrôle vert ; zone Intranet signalée si la GPO est absente, avec la commande | ☐ |
 | INST-17 | Démonstration signalée | Double-clic sur HeptagonesLM.exe sans installation ; choisir « Voir une démonstration » | Menu Installer / Démonstration / Quitter ; interface avec le bandeau « Démonstration » et le titre « [Démonstration] » ; jamais de bandeau sur une installation réelle | ☐ |
 | INST-18 🔴 | Tickets ITSM | Étape 8 : activer, choisir l'outil, saisir l'adresse et le compte technique ; « Ouvrir un ticket de test » avec un mauvais mot de passe, puis le bon | Refus expliqué (401) ; puis ticket de test ouvert, commenté et résolu, visible dans l'outil ; désactivé par défaut | ☐ |
+| INST-20 | Vérification rapide | Étape 2 sur un serveur neuf sans IIS | Résultat en moins d'une minute, progression affichée lecture par lecture | ☐ |
+| REC-01 🔴 | Comparaison en direct | Recette : chaque serveur de licences | Collecte déclenchée (compte de service, résultat 0) ; tableau feature par feature « identique » (jetons émis, utilisés, sessions) ; écart d'émission signalé en rouge | ☐ |
+| REC-02 | Collecte planifiée | Recette sur 24 h après une journée de fonctionnement | Collectes réussies, aucune interruption ; serveur arrêté une heure : interruption signalée | ☐ |
+| REC-03 🔴 | Refus hors du groupe | Recette avec un compte hors du groupe et un compte membre | 401 pour le premier, 200 pour le second : « restriction effective » | ☐ |
+| REC-04 | Notifications et rapport | Recette : e-mail, ticket ITSM, rapport Excel | Messages et ticket reçus, rapport ouvert ; confirmations « Oui » : points verts | ☐ |
+| REC-05 🔴 | PV et preuves | Télécharger le PV (Word) et les preuves (.zip) | PV ouvrable dans Word et LibreOffice, verdict, points, comparaisons, signatures ; archive avec sorties anonymisées et résumés attendus | ☐ |
 | INST-19 🔴 | Secret ITSM chiffré | Après installation : `secrets\itsm_password.dpapi`, `icacls secrets`, `heptagoneslm.yaml`, puis `test-itsm` en administrateur et par la collecte planifiée | Fichier illisible (aucun mot de passe en clair), héritage coupé, accès : SYSTEM, Administrateurs, compte de service seulement ; YAML avec `dpapi:` ; tickets ouverts sous les deux comptes | ☐ |
 | INST-16 🔴 | Test depuis un poste | Depuis 2 postes (membre du groupe, poste hors GPO), ouvrir `/acces`, répondre, puis « Relancer la vérification » | Utilisateur reconnu avec la méthode (Kerberos / NTLM) ; poste sans GPO signalé « mot de passe demandé » ; non-membre refusé | ☐ |
 

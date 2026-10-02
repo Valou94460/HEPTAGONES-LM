@@ -6,6 +6,7 @@ import os
 import re
 import socket
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 
 import yaml
@@ -21,8 +22,9 @@ NEVER_RUN = 267011        # SCHED_S_TASK_HAS_NOT_RUN
 RUNNING = 267009          # SCHED_S_TASK_RUNNING
 
 
-def db_status(system: System, a: Answers) -> dict:
-    """Version du schéma et dernières collectes par serveur."""
+def db_status(system: System, a: Answers, connection_string: str | None = None) -> dict:
+    """Version du schéma et dernières collectes par serveur (``connection_string`` : celle d'une
+    installation existante, déjà résolue ; sinon déduite des réponses de l'assistant)."""
     if system.simulated:
         collected = system.db.get("collected")
         return {"schema": system.db.get("schema"),
@@ -30,7 +32,7 @@ def db_status(system: System, a: Answers) -> dict:
                             for s in a.servers} if collected else {}}
     from heptagoneslm.storage import Database
 
-    cs = a.connection_string()
+    cs = connection_string or a.connection_string()
     for var, value in a.machine_secrets().items():
         cs = cs.replace("${" + var + "}", value)
     db = Database(cs)
@@ -52,7 +54,7 @@ def db_status(system: System, a: Answers) -> dict:
     return {"schema": schema, "servers": servers}
 
 
-def verify(system: System, a: Answers) -> dict:
+def verify(system: System, a: Answers, connection_string: str | None = None) -> dict:
     out: list[Check] = []
 
     def add(*args, **kw):
@@ -81,7 +83,7 @@ def verify(system: System, a: Answers) -> dict:
 
     # -- Base de données et collecte ----------------------------------------------------------
     try:
-        st = db_status(system, a)
+        st = db_status(system, a, connection_string)
         schema = st.get("schema")
         add("schema", "Base de données", "Schéma de la base", "ok" if schema and schema >= SCHEMA_VERSION else "error",
             f"version {schema}" if schema else "schéma absent : relancer l'initialisation")
@@ -99,11 +101,17 @@ def verify(system: System, a: Answers) -> dict:
 
     # -- Tâches planifiées -----------------------------------------------------------------
     ctx = Context(system, a, lambda *x: None, lambda f: None)
-    for spec in _tasks(ctx):
+    specs = _tasks(ctx)
+
+    def task_info(name):
         try:
-            info = system.task_info(spec.name)
-        except SetupError as exc:
-            info, detail = None, str(exc)
+            return system.task_info(name)
+        except SetupError:
+            return None
+
+    with ThreadPoolExecutor(max_workers=max(1, len(specs))) as pool:   # un PowerShell par tâche : en parallèle
+        infos = list(pool.map(task_info, [spec.name for spec in specs]))
+    for spec, info in zip(specs, infos):
         if not info:
             add(f"task:{spec.name}", "Tâches planifiées", spec.name, "error", "Tâche absente")
             continue

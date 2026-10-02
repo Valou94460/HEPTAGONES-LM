@@ -66,6 +66,8 @@ class ReportParams:
     costs: dict[str, float] = field(default_factory=dict)   # coût annuel d'un jeton par produit
     currency: str = "€"
     target_coverage: float = 0.95
+    named_inactive_days: int = 30      # licences nommées Autodesk : seuil d'inactivité
+    named_costs: dict[str, float] = field(default_factory=dict)   # coût annuel d'une licence nommée
     scoped: bool = False               # périmètre imposé par le rôle (responsable de service)
 
     def describe(self) -> str:
@@ -83,6 +85,8 @@ def params_from_config(query: dict[str, list[str]], config, today: date | None =
     p.costs = config.product_costs()
     p.currency = config.reporting.currency
     p.target_coverage = config.reporting.target_coverage
+    p.named_inactive_days = config.autodesk.inactive_days
+    p.named_costs = dict(config.autodesk.annual_costs)
     return p
 
 
@@ -604,6 +608,7 @@ REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
     "optimization": ("Optimisation & coûts", _insight("report_optimization")),
     "unused": ("Licences inutilisées", _insight("report_unused")),
     "reservations": ("Réservations", _insight("report_reservations")),
+    "named": ("Autodesk · utilisateurs nommés", _insight("report_named")),
     "sessions": ("Sessions", report_sessions),
     "collections": ("Collectes", report_collections),
 }
