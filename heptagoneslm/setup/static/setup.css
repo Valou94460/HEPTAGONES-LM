@@ -95,6 +95,11 @@ body.setup { min-height: 100vh; }
 /* Contrôles */
 .check-group h3 { margin: 4px 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); }
 .check-list { display: flex; flex-direction: column; }
+.probe-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; }
+.probe-list li { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 8px 2px; border-bottom: 1px solid var(--grid); font-size: 13.5px; }
+.probe-list li:last-child { border-bottom: 0; }
+.probe-list li small { color: var(--text-2); font-variant-numeric: tabular-nums; }
+.probe-list li.running span:not(.spinner) { color: var(--text-2); }
 .check-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 10px 2px; border-bottom: 1px solid var(--grid); }
 .check-row:last-child { border-bottom: 0; }
 .check-row .lbl { font-size: 13.5px; }
@@ -214,3 +219,31 @@ table.tools-found th { text-align: left; font-weight: 600; color: var(--text-2);
 table.tools-found td { padding: 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
 table.tools-found code { word-break: break-all; white-space: normal; }
 table.tools-found td:last-child { text-align: right; white-space: nowrap; }
+
+/* Recette */
+.installed-panel { border-color: color-mix(in srgb, var(--good) 45%, var(--border)); }
+h3.sub { font-size: 13.5px; margin: 6px 0 4px; }
+.ritems { display: flex; flex-direction: column; }
+.ritem { display: grid; grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--grid); }
+.ritem:last-child { border-bottom: 0; }
+.ritem .lbl { font-size: 13.5px; font-weight: 600; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.ritem .det { font-size: 12.5px; color: var(--text-2); margin-top: 2px; overflow-wrap: anywhere; }
+.ritem ul { margin: 6px 0 0; padding-left: 18px; font-size: 12.5px; color: var(--text-2); }
+.ritem .files { margin-top: 6px; font-size: 12.5px; }
+.ritem details { margin-top: 8px; font-size: 12.5px; }
+.ritem .tag { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 99px; }
+.tag.sev-good { color: var(--good-text, var(--good)); background: color-mix(in srgb, var(--good) 14%, transparent); }
+.tag.sev-warning { color: var(--warning-text, #8a5a00); background: color-mix(in srgb, var(--warning) 20%, transparent); }
+.tag.sev-critical { color: var(--critical); background: color-mix(in srgb, var(--critical) 14%, transparent); }
+.tag.sev-info { color: var(--text-2); background: color-mix(in srgb, var(--text-2) 12%, transparent); }
+.confirm-row { margin-top: 10px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 8px; background: color-mix(in srgb, var(--warning) 10%, var(--surface)); font-size: 13px; }
+.confirm-row span { flex: 1; min-width: 220px; }
+.btn.danger { background: var(--critical); border-color: var(--critical); color: #fff; }
+.table-wrap { overflow-x: auto; margin-top: 8px; }
+.rtable { border-collapse: collapse; font-size: 12px; width: 100%; }
+.rtable th { white-space: normal; }
+.rtable td:not(:first-child):not(:last-child) { font-variant-numeric: tabular-nums; }
+.rtable th, .rtable td { border: 1px solid var(--grid); padding: 4px 8px; text-align: left; vertical-align: top; }
+.rtable th { background: color-mix(in srgb, var(--text-2) 8%, var(--surface)); font-weight: 600; }
+.rtable td.same { color: var(--good-text, var(--good)); }
+.rtable td.diff { color: var(--critical); font-weight: 600; }

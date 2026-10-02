@@ -6,6 +6,7 @@ depuis l'étape en échec (« Réessayer ») ou rejouée entièrement sans domma
 
 from __future__ import annotations
 
+import json
 import threading
 import time
 import traceback
@@ -16,10 +17,11 @@ from typing import Callable
 
 from heptagoneslm import __version__
 from heptagoneslm.setup import iis
-from heptagoneslm.setup.answers import Answers
+from heptagoneslm.setup.answers import SECRET_FIELDS, Answers
 from heptagoneslm.setup.system import SetupError, System, TaskSpec
 
 WEB_TASK = "HeptagonesLM - Interface web"
+ANSWERS_FILE = "setup-reponses.json"      # réponses de l'assistant sans les secrets (recette, mise à jour)
 
 
 @dataclass
@@ -101,6 +103,10 @@ def step_config(ctx: Context) -> str:
         ctx.log(f"Ancienne configuration sauvegardée : heptagoneslm.yaml.{stamp}.bak")
     system.write_text(a.config_path, a.yaml_text(datetime.now().strftime("%d/%m/%Y %H:%M")))
     ctx.log(f"Configuration écrite : {a.config_path}")
+    # Réponses de l'assistant sans les secrets : reprises par la recette et les mises à jour
+    saved = {k: v for k, v in a.to_dict().items() if k not in SECRET_FIELDS}
+    saved["_version"], saved["_written"] = __version__, datetime.now().isoformat(timespec="seconds")
+    system.write_text(a.path(ANSWERS_FILE), json.dumps(saved, ensure_ascii=False, indent=2))
     return "heptagoneslm.yaml écrit"
 
 

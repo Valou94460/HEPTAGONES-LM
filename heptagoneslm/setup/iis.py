@@ -207,7 +207,12 @@ def state_script() -> str:
     modules = ",".join(f"@{{key={ps_quote(k)}; name={ps_quote(m['module'])}}}" for k, m in MODULES.items())
     return f"""
 $features = @{{}}
-if (Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue) {{
+if (-not (Get-Service -Name W3SVC -ErrorAction SilentlyContinue)) {{
+    # IIS absent (pas de service W3SVC) : aucun rôle installé, réponse immédiate. Get-WindowsFeature
+    # prend souvent plus d'une minute sur un serveur neuf ; il n'est utile que si IIS est présent.
+    foreach ($n in @({server_names})) {{ $features[$n] = $false }}
+    $kind = 'absent'
+}} elseif (Get-Command Get-WindowsFeature -ErrorAction SilentlyContinue) {{
     foreach ($f in Get-WindowsFeature -Name @({server_names})) {{ $features[$f.Name] = [bool]$f.Installed }}
     $kind = 'server'
 }} else {{

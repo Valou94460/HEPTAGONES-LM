@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
+from typing import Callable
 
 from heptagoneslm.setup import iis
 from heptagoneslm.setup.answers import Answers
@@ -31,18 +34,84 @@ def blocking(checks: list[Check]) -> list[Check]:
     return [c for c in checks if c.status == "error"]
 
 
-def run_checks(system: System, a: Answers | None = None, final: bool = False) -> list[Check]:
+# Lectures du serveur, lancées en parallèle (chacune démarre PowerShell : les enchaîner prenait
+# plus de deux minutes sur un Windows Server neuf). Ordre d'affichage de la progression.
+PROBES = {
+    "os": "Système et domaine",
+    "odbc": "Pilote ODBC SQL Server",
+    "lmutil": "Outil lmutil",
+    "account": "Compte de service",
+    "iis": "Rôles et modules IIS",
+    "certs": "Certificats HTTPS",
+    "sso": "Authentification unique (SPN, zone Intranet)",
+}
+
+Progress = Callable[[str, str, str, float | None], None]     # (clé, libellé, état, secondes)
+
+
+def gather(system: System, a: Answers, final: bool = False, progress: Progress | None = None,
+           timings: dict | None = None) -> dict:
+    """Exécute les lectures en parallèle ; renvoie {clé: (valeur, exception)}."""
+    jobs: dict[str, Callable] = {"os": system.os_info, "lmutil": system.find_lmutil}
+    if a.db_mode == "sqlserver":
+        jobs["odbc"] = system.odbc_drivers
+    if final and a.service_account:
+        jobs["account"] = lambda: system.resolve_account(a.service_account)
+    if a.web_mode == "iis":
+        jobs["iis"] = system.iis_state
+        jobs["certs"] = system.certificates
+        if final and a.public_host:
+            from heptagoneslm.setup import sso
+
+            # os_info est mis en cache : le contrôle du SPN réutilise la lecture du système
+            jobs["sso"] = lambda: (sso.spn_check(system, a, system.os_info()), sso.zone_check(system, a))
+    results: dict = {}
+    t0 = time.monotonic()
+    started = {k: t0 for k in jobs}
+    for key in jobs:
+        if progress:
+            progress(key, PROBES[key], "running", None)
+    with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
+        futures = {pool.submit(fn): key for key, fn in jobs.items()}
+        for fut in as_completed(futures):
+            key = futures[fut]
+            secs = round(time.monotonic() - started[key], 1)
+            try:
+                results[key] = (fut.result(), None)
+                state = "done"
+            except Exception as exc:          # remonté au contrôle concerné (message d'erreur affiché)
+                results[key] = (None, exc)
+                state = "error"
+            if timings is not None:
+                timings[key] = secs
+            if progress:
+                progress(key, PROBES[key], state, secs)
+    return results
+
+
+def run_checks(system: System, a: Answers | None = None, final: bool = False,
+               progress: Progress | None = None, timings: dict | None = None) -> list[Check]:
     """Prérequis du serveur. ``final`` : contrôles complémentaires sur les réponses saisies
-    (compte de service), juste avant l'installation."""
+    (compte de service), juste avant l'installation. ``progress`` : avancement des lectures."""
     a = a or Answers()
     out: list[Check] = []
+    got = gather(system, a, final, progress, timings)
 
     def add(*args, **kw):
         out.append(Check(*args, **kw))
 
+    def value(key, default=None):
+        """Résultat d'une lecture ; une erreur de lecture (SetupError) est relancée pour le contrôle."""
+        val, exc = got.get(key, (default, None))
+        if exc is not None:
+            if isinstance(exc, SetupError):
+                raise exc
+            raise SetupError(f"{type(exc).__name__} : {exc}") from exc
+        return val
+
     # -- Système --------------------------------------------------------------------
     try:
-        info = system.os_info()
+        info = value("os") or {}
     except SetupError as exc:
         info = {}
         add("os", "Système", "Système d'exploitation", "error", f"Lecture impossible : {exc}")
@@ -81,7 +150,7 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
     # -- Compte de service (avant installation) ------------------------------------------------
     if final and a.service_account:
         try:
-            sid = system.resolve_account(a.service_account)
+            sid = value("account")
         except SetupError as exc:
             sid, err = None, str(exc)
         else:
@@ -94,7 +163,7 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
 
     # -- Base de données ----------------------------------------------------------------
     if a.db_mode == "sqlserver":
-        drivers = [d for d in system.odbc_drivers() if "SQL Server" in d]
+        drivers = [d for d in (value("odbc") or []) if "SQL Server" in d]
         if "ODBC Driver 18 for SQL Server" in drivers:
             add("odbc", "Base de données", "Pilote ODBC SQL Server", "ok", "ODBC Driver 18 for SQL Server")
         elif "ODBC Driver 17 for SQL Server" in drivers:
@@ -107,7 +176,10 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
         add("odbc", "Base de données", "Pilote ODBC SQL Server", "info", "Non requis (base SQLite locale)")
 
     # -- Licences ---------------------------------------------------------------------
-    found = system.find_lmutil()
+    try:
+        found = value("lmutil") or []
+    except SetupError:
+        found = []
     if a.lmutil_path and (system.exists(a.lmutil_path) or a.lmutil_path in found):
         add("lmutil", "Licences", "lmutil.exe (outil FlexLM)", "ok", a.lmutil_path)
     elif found:
@@ -136,7 +208,7 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
             "Non requis pour le mode d'interface choisi")
         return out
     try:
-        state = system.iis_state() or {}
+        state = value("iis") or {}
     except SetupError as exc:
         add("iis", "IIS", "État d'IIS", "error", f"Lecture impossible : {exc}")
         return out
@@ -156,7 +228,7 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
             fix=None if ok else f"install_{key}", fix_label=None if ok else "Installer",
             help=None if ok else mod["url"])
     try:
-        certs = [c for c in system.certificates() if not c.get("expired")]
+        certs = [c for c in (value("certs") or []) if not c.get("expired")]
     except SetupError as exc:
         add("certs", "IIS", "Certificat HTTPS (magasin de l'ordinateur)", "warning", f"Lecture du magasin impossible : {exc}")
         certs = None
@@ -168,13 +240,15 @@ def run_checks(system: System, a: Answers | None = None, final: bool = False) ->
 
     # -- Authentification unique (nom public connu : juste avant l'installation) ------------------
     if final and a.public_host:
-        from heptagoneslm.setup import sso
-        spn = sso.spn_check(system, a, info)
+        try:
+            spn, zone = value("sso") or (None, None)
+        except SetupError as exc:
+            spn, zone = Check("spn", "Authentification unique", "SPN et zone Intranet", "warning",
+                              f"Contrôle impossible : {exc}"), None
         if spn:
             if spn.status == "error":        # à corriger dans l'annuaire : ne bloque pas l'installation
                 spn.status = "warning"
             out.append(spn)
-        zone = sso.zone_check(system, a)
         if zone:
             out.append(zone)
     return out

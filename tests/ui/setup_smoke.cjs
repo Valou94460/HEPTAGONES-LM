@@ -236,9 +236,63 @@ const { spawn } = require("child_process");
   check(text.includes("Statut : done") && text.includes("Vérification"), "rapport d'installation incomplet");
   check(!/Secret-1/.test(text), "le mot de passe apparaît dans le rapport");
 
-  // Mode sombre et affichage étroit
+  // Mode sombre (vérification), puis retour au mode clair
   await page.emulateMedia({ colorScheme: "dark" });
   await shot("12_verification_sombre");
+  await page.emulateMedia({ colorScheme: "light" });
+
+  // 12. Recette : comparaison en direct, collecte planifiée, accès, notifications, rapport, PV
+  await page.click("#to-recette");
+  await page.waitForFunction(() => document.getElementById("step-title").textContent === "Recette", null, { timeout: 15000 })
+    .catch(() => failures.push("étape « Recette » non atteinte"));
+  await page.waitForSelector("#start-recette", { timeout: 30000 });
+  await page.fill('[data-ropt="outsider_user"]', "ENTREPRISE\\jmartin");
+  await page.fill('[data-ropt="outsider_password"]', "Hors-groupe-1");
+  await page.fill('[data-ropt="member_user"]', "ENTREPRISE\\hlm_lecteur");
+  await page.fill('[data-ropt="member_password"]', "Membre-1");
+  await shot("13_recette_parametres");
+  const t0 = Date.now();
+  await page.click("#start-recette");
+  await page.waitForSelector("#recette-progress", { timeout: 10000 }).catch(() => {});
+  await shot("13b_recette_en_cours");
+  await page.waitForSelector("#make-pv", { timeout: 180000 }).catch(async () => failures.push(`recette non terminée : ${await page.textContent("#step-body")}`));
+  console.log(`recette -> ${Math.round((Date.now() - t0) / 1000)} s :`, (await page.textContent(".hero-result h2")).trim());
+  const rstate = await page.evaluate(() => fetch("/api/recette/state").then(r => r.json()));
+  const ritems = Object.fromEntries((rstate.recette?.items || []).map(i => [i.id, i]));
+  for (const id of ["collecte", "srv:AUTODESK", "srv:ANSYS", "historique:AUTODESK", "acces", "refus"]) {
+    console.log(`  ${id} -> ${ritems[id]?.status} · ${ritems[id]?.detail}`);
+    check(ritems[id]?.status === "ok", `recette ${id} : ${ritems[id]?.status} (${ritems[id]?.detail})`);
+  }
+  check((ritems["srv:AUTODESK"]?.table?.rows || []).every(r => r[r.length - 1] === "identique"), "comparaison AUTODESK non identique");
+  check((rstate.recette?.files || []).some(f => f.startsWith("lmstat_AUTODESK") && f.endsWith(".attendu.json")), "résumé attendu non enregistré");
+  check(await page.$$eval(".rtable", t => t.length) >= 2, "tableaux de comparaison absents");
+  await shot("14_recette_resultats");
+  // Confirmations de l'opérateur (e-mail reçu, rapport ouvert…)
+  for (let i = 0; i < 6; i++) {
+    const pending = await page.$('[data-rconfirm][data-val="1"]:not(.primary)');
+    if (!pending) break;
+    await pending.click();
+    await page.waitForTimeout(300);
+  }
+  const after = await page.evaluate(() => fetch("/api/recette/state").then(r => r.json()));
+  check(after.recette.verdict.pending === 0, `confirmations en attente : ${after.recette.verdict.pending}`);
+  check(after.recette.items.find(i => i.id === "email")?.status === "ok", "e-mail confirmé non conforme");
+  await page.fill('[data-pv="client"]', "Entreprise Démo — site de Lyon");
+  await page.fill('[data-pv="redacteur"]', "Intégrateur Heptagones");
+  await page.fill('[data-pv="valideur"]', "Responsable des licences");
+  const [pvdl] = await Promise.all([page.waitForEvent("download", { timeout: 30000 }), page.click("#make-pv")]);
+  const pvPath = `${out}/${pvdl.suggestedFilename()}`;
+  await pvdl.saveAs(pvPath);
+  const pvBytes = fs.readFileSync(pvPath);
+  check(pvPath.endsWith(".docx") && pvBytes.slice(0, 2).toString() === "PK" && pvBytes.length > 3000, `PV invalide : ${pvPath}`);
+  console.log("PV ->", pvPath, pvBytes.length, "octets");
+  const zip = await page.request.get(page.url().replace(/\/$/, "") + "/api/recette/preuves.zip");
+  check(zip.ok() && (await zip.body()).slice(0, 2).toString() === "PK", "archive des preuves invalide");
+  fs.writeFileSync(`${out}/preuves_recette.zip`, await zip.body());
+  await page.waitForTimeout(300);
+  await shot("15_recette_pv");
+
+  // Affichage étroit
   await page.setViewportSize({ width: 390, height: 900 });
   await page.waitForTimeout(200);
   check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "débordement horizontal sur mobile");

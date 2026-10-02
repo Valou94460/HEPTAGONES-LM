@@ -69,7 +69,11 @@ const path = require("path");
 
     // 2. Prérequis réels ; corrections automatiques (installation des rôles et modules IIS manquants)
     await next("Vérification du serveur");
-    await page.waitForSelector(".check-row", { timeout: 10 * 60000 });   // contrôles réels : plusieurs minutes (IIS, certificats, domaine)
+    await page.waitForSelector(".check-row", { timeout: 10 * 60000 });
+    const chk = await page.evaluate(() => fetch("/api/checks/state").then(r => r.json()));
+    log(`Vérification du serveur : ${chk.elapsed} s (lectures en parallèle :`,
+        Object.entries(chk.timings || {}).map(([k, v]) => `${k} ${v} s`).join(", ") + ")");
+    check(chk.elapsed < 60, `vérification du serveur trop lente : ${chk.elapsed} s (objectif : moins d'une minute)`);
     await shot("prerequis");
     for (let i = 0; i < 8; i++) {
       const fix = await page.$("[data-fix]");
@@ -212,6 +216,61 @@ const path = require("path");
     await shot("verification_finale");
     const report = await page.evaluate(() => fetch("/api/report").then(r => r.text()));
     fs.writeFileSync(path.join(out, "rapport_installation.txt"), report);
+
+    // 11. Recette : collecte déclenchée (compte de service), lmstat en direct comparé à la base, contrôles, PV
+    await page.click("#to-recette");
+    await page.waitForFunction(() => document.getElementById("step-title").textContent === "Recette", null, { timeout: 60000 });
+    log("Étape : Recette");
+    await page.waitForSelector("#start-recette", { timeout: 120000 });
+    await page.selectOption('[data-ropt="hours"]', "1");
+    await page.fill('[data-ropt="outsider_user"]', env("SVC_ACCOUNT"));        // authentifié, hors du groupe
+    await page.fill('[data-ropt="outsider_password"]', env("SVC_PWD"));
+    if (process.env.TOUR_USER) {
+      await page.fill('[data-ropt="member_user"]', process.env.TOUR_USER);    // membre du groupe autorisé
+      await page.fill('[data-ropt="member_password"]', env("SVC_PWD"));
+    }
+    await shot("recette_parametres");
+    const r0 = Date.now();
+    await page.click("#start-recette");
+    await page.waitForSelector("#make-pv", { timeout: 15 * 60000 })
+      .catch(async () => check(false, `recette non terminée : ${(await page.textContent("#step-body")).slice(0, 400)}`));
+    let rs = await page.evaluate(() => fetch("/api/recette/state").then(r => r.json()));
+    log(`Recette terminée en ${Math.round((Date.now() - r0) / 1000)} s :`, rs.recette?.verdict?.label);
+    (rs.recette?.items || []).forEach(i => log("  recette", i.status, "—", i.label, "·", (i.detail || "").slice(0, 160)));
+    const ri = Object.fromEntries((rs.recette?.items || []).map(i => [i.id, i]));
+    check(!(rs.recette?.items || []).some(i => i.status === "error"), "point(s) de recette en erreur");
+    check(ri.collecte?.status === "ok", "collecte déclenchée par la recette en échec");
+    for (const s of (rs.recette?.items || []).filter(i => i.id.startsWith("srv:"))) {
+      check(s.status !== "error", `comparaison ${s.label} : ${s.detail}`);
+      (s.table?.rows || []).forEach(r => log("    ", r.join(" | ")));
+    }
+    check(ri.refus?.status === "ok", `refus hors du groupe : ${ri.refus?.detail}`);
+    await shot("recette_resultats");
+    // Confirmations vérifiées par le script : ticket présent dans l'outil, rapport Excel valide
+    if (process.env.ITSM_URL && ri["itsm:servicenow"]?.confirm) {
+      const inc = await context.request.get(`${process.env.ITSM_URL}/incidents.json`, { ignoreHTTPSErrors: true });
+      const list = inc.ok() ? await inc.json() : [];
+      log(`  incidents reçus par l'outil ITSM : ${list.length}`);
+      if (list.some(x => x.state === "6")) await page.click('[data-rconfirm="itsm:servicenow"][data-val="1"]');
+    }
+    if (ri.rapport?.confirm) {
+      const x = await context.request.get(`${base}/api/recette/file?name=rapport_recette.xlsx`);
+      const body = x.ok() ? await x.body() : Buffer.alloc(0);
+      fs.writeFileSync(path.join(out, "rapport_recette.xlsx"), body);
+      log(`  rapport Excel : ${body.length} octets`);
+      if (body.slice(0, 2).toString() === "PK") await page.click('[data-rconfirm="rapport"][data-val="1"]');
+    }
+    await page.waitForTimeout(500);
+    await page.fill('[data-pv="client"]', "CI GitHub — Windows Server 2025");
+    await page.fill('[data-pv="redacteur"]', "Parcours automatisé de la CI");
+    const [pvdl] = await Promise.all([page.waitForEvent("download", { timeout: 60000 }), page.click("#make-pv")]);
+    await pvdl.saveAs(path.join(out, pvdl.suggestedFilename()));
+    log("  PV :", pvdl.suggestedFilename());
+    const zip = await context.request.get(`${base}/api/recette/preuves.zip`);
+    if (zip.ok()) fs.writeFileSync(path.join(out, "preuves_recette.zip"), await zip.body());
+    rs = await page.evaluate(() => fetch("/api/recette/state").then(r => r.json()));
+    log("Recette (après confirmations) :", rs.recette?.verdict?.label);
+    await shot("recette_pv");
   } catch (e) {
     check(false, `arrêt du parcours : ${e.message}`);
     await shot("arret").catch(() => {});
