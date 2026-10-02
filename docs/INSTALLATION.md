@@ -87,6 +87,14 @@ avec Python : `heptagoneslm setup --simulate`).
 <td align="center"><em>Tickets ITSM : ticket de test ServiceNow</em></td>
 <td align="center"><em>Vérification finale de bout en bout</em></td>
 </tr>
+<tr>
+<td><img src="images/recette-comparaison.png" alt="Recette : comparaison"></td>
+<td><img src="images/recette-pv.png" alt="Recette : PV"></td>
+</tr>
+<tr>
+<td align="center"><em>Recette : comparaison feature par feature avec lmstat</em></td>
+<td align="center"><em>Recette : PV de recette Word et preuves</em></td>
+</tr>
 </table>
 
 ![Installation en cours](images/installation-progression.png)

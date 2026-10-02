@@ -267,6 +267,10 @@ const { spawn } = require("child_process");
   check((rstate.recette?.files || []).some(f => f.startsWith("lmstat_AUTODESK") && f.endsWith(".attendu.json")), "résumé attendu non enregistré");
   check(await page.$$eval(".rtable", t => t.length) >= 2, "tableaux de comparaison absents");
   await shot("14_recette_resultats");
+  if (docShots) {   // captures de la documentation : comparaison feature par feature
+    await page.locator(".panel", { hasText: "Comparaison avec les serveurs de licences" }).first()
+      .screenshot({ path: `${out}/setup_14b_recette_comparaison.png` });
+  }
   // Confirmations de l'opérateur (e-mail reçu, rapport ouvert…)
   for (let i = 0; i < 6; i++) {
     const pending = await page.$('[data-rconfirm][data-val="1"]:not(.primary)');
@@ -291,6 +295,9 @@ const { spawn } = require("child_process");
   fs.writeFileSync(`${out}/preuves_recette.zip`, await zip.body());
   await page.waitForTimeout(300);
   await shot("15_recette_pv");
+  if (docShots) {
+    await page.locator(".panel", { hasText: "PV de recette" }).last().screenshot({ path: `${out}/setup_15b_recette_pv.png` });
+  }
 
   // Affichage étroit
   await page.setViewportSize({ width: 390, height: 900 });

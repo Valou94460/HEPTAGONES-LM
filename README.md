@@ -74,6 +74,14 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 <td align="center"><em>Optimisation : coûts et économies potentielles</em></td>
 <td align="center"><em>Taux d'occupation dans le temps</em></td>
 </tr>
+<tr>
+<td><img src="docs/images/autodesk-nommes.png" alt="Autodesk utilisateurs nommés"></td>
+<td><img src="docs/images/recette-comparaison.png" alt="Recette : comparaison avec lmstat"></td>
+</tr>
+<tr>
+<td align="center"><em>Autodesk nominatif : licences à récupérer</em></td>
+<td align="center"><em>Recette : HeptagonesLM comparé à lmstat en direct</em></td>
+</tr>
 </table>
 
 ## Démarrage rapide
