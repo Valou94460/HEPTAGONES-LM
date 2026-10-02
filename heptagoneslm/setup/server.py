@@ -300,6 +300,8 @@ class SetupHandler(BaseHTTPRequestHandler):
             return probes.test_ldap(s, a, str(body.get("username", "")), str(body.get("password", "")))
         if kind == "smtp":
             return probes.test_smtp(s, a, body.get("to"))
+        if kind == "itsm":
+            return probes.test_itsm(s, a)
         raise SetupError(f"Test inconnu : {kind}")
 
 

@@ -4,7 +4,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const SECRETS = ["service_password", "db_password", "smtp_password"];
+  const SECRETS = ["service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token"];
   const BASE = {
     install_dir: "C:\\HeptagonesLM", service_account: "", service_password: "", collect_interval: 5,
     db_mode: "sqlserver", db_server: "", db_name: "HeptagonesLM", db_driver: "ODBC Driver 18 for SQL Server", db_auth: "windows",
@@ -14,6 +14,8 @@
     iis_cert_thumbprint: "", tls_cert: "", tls_key: "", ldap_servers: [], base_dn: "", upn_suffix: "", open_firewall: true,
     email_enabled: false, smtp_host: "", smtp_port: 25, smtp_security: "starttls", smtp_user: "", smtp_password: "",
     sender: "", recipients: [], email_alerts: true,
+    itsm_enabled: false, itsm_type: "servicenow", itsm_url: "", itsm_user: "", itsm_password: "", itsm_app_token: "",
+    itsm_project: "", itsm_issue_type: "Incident", itsm_assignment_group: "", itsm_format: "teams", itsm_min_severity: "serious", itsm_ca_file: "",
   };
   let info = null;
   let A = {};
@@ -39,7 +41,7 @@
   function save() {
     try {
       const safe = { ...A }; SECRETS.forEach(k => delete safe[k]);
-      sessionStorage.setItem("heptagoneslm_setup", JSON.stringify({ A: safe, step: Math.min(step, 7), maxStep: Math.min(maxStep, 7) }));
+      sessionStorage.setItem("heptagoneslm_setup", JSON.stringify({ A: safe, step: Math.min(step, SUMMARY), maxStep: Math.min(maxStep, SUMMARY) }));
     } catch (e) { /* stockage indisponible */ }
   }
   function restore() {
@@ -54,6 +56,8 @@
     clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>', globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
     lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>', monitor: '<rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/>',
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/>',
+    ticket: '<path d="M4 7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v3a2 2 0 0 0 0 4v3a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-3a2 2 0 0 0 0-4z"/><path d="M14 5v14" stroke-dasharray="2 2"/>',
+    chat: '<path d="M4 5h16v11H9l-5 4z"/>',
   };
   const icon = k => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
 
@@ -107,7 +111,8 @@
         else if (el.type === "number") A[name] = el.value === "" ? "" : Number(el.value);
         else if (el.dataset.list) A[name] = el.value.split(/[,;\s]+/).map(s => s.trim()).filter(Boolean);
         else A[name] = el.value;
-        el.closest(".f")?.classList.remove("invalid");
+        const f = el.closest(".f");
+        if (f) { f.classList.remove("invalid"); const fe = f.querySelector(".ferr"); if (fe) fe.textContent = ""; }
         save();
         if (el.dataset.rerender) render();
       };
@@ -147,16 +152,19 @@
     { id: "licenses", title: "Serveurs de licences", desc: "Serveurs FlexLM ou RLM à surveiller. Testez chacun : l'assistant interroge lmstat ou rlmstat comme le fera la collecte.", render: renderLicenses, validate: "licenses" },
     { id: "web", title: "Interface web et IIS", desc: "Mode d'accès des utilisateurs à l'interface.", render: renderWeb, validate: "web" },
     { id: "email", title: "Rapport par e-mail", desc: "Envoi automatique du rapport mensuel (optionnel, modifiable plus tard).", render: renderEmail, validate: "email" },
+    { id: "itsm", title: "Tickets ITSM", desc: "Ouverture automatique d'un ticket pour chaque alerte (optionnel, modifiable plus tard).", render: renderItsm, validate: "itsm" },
     { id: "summary", title: "Récapitulatif", desc: "Vérifiez la configuration avant de lancer l'installation.", render: renderSummary, enter: () => loadSummary(), next: "Installer" },
     { id: "install", title: "Installation", desc: "Ne fermez pas cette page pendant l'installation.", render: renderInstall },
     { id: "verify", title: "Vérification de l'installation", desc: "Contrôle de bout en bout de chaque composant installé.", render: renderVerify, enter: () => { fixResult = null; runVerify(); } },
   ];
+  const at = id => STEPS.findIndex(s => s.id === id);
+  const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify");
 
   function renderStepper() {
     const locked = install.status === "running";
     $("stepper").innerHTML = STEPS.map((s, i) => {
       const cls = i === step ? "current" : (i < maxStep || (i < step) ? "done" : "");
-      const reachable = !locked && i <= maxStep && i !== step && (i < 8 || install.status === "done") && !(step >= 8 && i < 8 && install.status === "done");
+      const reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
     }).join("");
@@ -174,11 +182,11 @@
     if (s.after) s.after();
     renderStepper();
     const prev = $("prev"), next = $("next");
-    prev.hidden = step === 0 || step >= 8;
-    next.hidden = step >= 8;
+    prev.hidden = step === 0 || step >= INSTALL;
+    next.hidden = step >= INSTALL;
     next.textContent = s.next || "Suivant";
-    next.disabled = step === 7 && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
-    $("foot-msg").textContent = step === 7 && blockingCount > 0 ? `${blockingCount} prérequis bloquant(s) à corriger` : "";
+    next.disabled = step === SUMMARY && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
+    $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${blockingCount} prérequis bloquant(s) à corriger` : "";
     document.title = `${s.title} — Installation de HeptagonesLM`;
   }
 
@@ -278,18 +286,18 @@
   async function runChecks() {
     checksBusy = true;
     try {
-      const res = await api("/api/checks", { answers: A, final: step >= 7 });
+      const res = await api("/api/checks", { answers: A, final: step >= SUMMARY });
       checks = res.checks; blockingCount = res.blocking;
     } catch (e) { showError(e.message); }
     checksBusy = false;
-    if (step === 1 || step === 7) render();
+    if (step === 1 || step === SUMMARY) render();
   }
   async function runFix(fix) {
     checksBusy = true;
     fixResult = { busy: "Installation en cours… cette opération peut prendre plusieurs minutes." };
     render();
     try {
-      const res = await api("/api/fix", { fix, answers: A, final: step >= 7 });
+      const res = await api("/api/fix", { fix, answers: A, final: step >= SUMMARY });
       checks = res.checks; blockingCount = res.blocking;
       fixResult = { status: "ok", message: res.message };
     } catch (e) {
@@ -501,7 +509,52 @@
       </div>${testBlock("smtp", "smtp", "Envoyer un message de test au premier destinataire")}</div>` : ""}`;
   }
 
-  /* 8. Récapitulatif */
+  /* 8. Tickets ITSM */
+  const ITSM = {
+    servicenow: { label: "ServiceNow", url: "https://entreprise.service-now.com", urlHint: "Adresse de l'instance. Incident créé par l'API Table (rôle itil requis)." },
+    jira: { label: "Jira", url: "https://entreprise.atlassian.net", urlHint: "Jira Cloud ou Data Center : ticket créé dans le projet choisi." },
+    glpi: { label: "GLPI", url: "https://glpi.entreprise.local/apirest.php", urlHint: "Adresse de l'API REST (Configuration › Générale › API), terminée par /apirest.php." },
+    webhook: { label: "Teams / Slack", url: "https://entreprise.webhook.office.com/…", urlHint: "Adresse du webhook entrant du canal (Workflows Teams, application Slack)." },
+  };
+  const SECRET_HINT = "Chiffré par Windows (DPAPI) à l'installation dans le dossier secrets, lisible seulement par le compte de service et les administrateurs ; jamais écrit dans heptagoneslm.yaml.";
+  function renderItsm() {
+    const t = A.itsm_type, d = ITSM[t] || ITSM.servicenow;
+    let fields = "";
+    if (t === "servicenow") {
+      fields = `${input("itsm_user", "Compte technique", { placeholder: "svc_heptagoneslm" })}
+        ${input("itsm_password", "Mot de passe du compte", { type: "password", hint: SECRET_HINT })}
+        ${input("itsm_assignment_group", "Groupe d'affectation (optionnel)", { placeholder: "Support licences", full: true })}`;
+    } else if (t === "jira") {
+      fields = `${input("itsm_user", "E-mail du compte technique (Jira Cloud)", { placeholder: "svc-heptagoneslm@entreprise.fr", hint: "Vide pour Jira Data Center (jeton personnel seul)." })}
+        ${input("itsm_password", "Jeton d'API (Cloud) ou jeton personnel (Data Center)", { type: "password", hint: SECRET_HINT })}
+        ${input("itsm_project", "Clé du projet", { placeholder: "LIC" })}
+        ${input("itsm_issue_type", "Type de ticket", { placeholder: "Incident" })}`;
+    } else if (t === "glpi") {
+      fields = `${input("itsm_app_token", "Jeton d'application", { type: "password", hint: "Configuration › Générale › API › client de l'API." })}
+        ${input("itsm_password", "Jeton d'API de l'utilisateur technique", { type: "password", hint: SECRET_HINT })}`;
+    } else {
+      fields = `${select("itsm_format", "Format", [["teams", "Microsoft Teams"], ["slack", "Slack"], ["json", "JSON (autre outil)"]])}`;
+    }
+    return `
+      <div class="panel">${toggle("itsm_enabled", "Ouvrir automatiquement des tickets", "Chaque alerte ouvre un ticket, le complète à chaque rappel et le résout quand la condition disparaît, sans doublon.", { rerender: true })}</div>
+      ${A.itsm_enabled ? `
+      ${choices("itsm_type", [
+        { value: "servicenow", title: "ServiceNow", text: "Incident, groupe d'affectation, résolution automatique.", icon: "ticket" },
+        { value: "jira", title: "Jira", text: "Ticket dans un projet, transition de résolution.", icon: "ticket" },
+        { value: "glpi", title: "GLPI", text: "Ticket d'incident, solution ajoutée à la résolution.", icon: "ticket" },
+        { value: "webhook", title: "Teams / Slack", text: "Message dans un canal à l'ouverture et à la résolution.", icon: "chat" },
+      ])}
+      <div class="panel"><h2>Connexion à ${esc(d.label)}</h2><div class="form-grid">
+        ${input("itsm_url", "Adresse", { placeholder: d.url, hint: d.urlHint, full: true })}
+        ${fields}
+        ${select("itsm_min_severity", "Alertes qui ouvrent un ticket", [["serious", "Graves : pannes de collecte, refus, échéance à moins de 7 jours (recommandé)"], ["warning", "Graves et avertissements : aussi saturation, échéance à 30 jours"], ["critical", "Critiques uniquement : collecte en échec, licence expirée ou à moins de 7 jours"]], { full: true })}
+        ${input("itsm_ca_file", "Autorité de certification interne (optionnel)", { placeholder: "C:\\HeptagonesLM\\certs\\ac-interne.pem", hint: "Uniquement si le certificat de l'outil n'est pas reconnu par Windows.", full: true })}
+      </div>
+      ${testBlock("itsm", "itsm", "Ouvrir un ticket de test")}
+      <p class="muted" style="margin-top:10px">Le test ouvre un vrai ticket « Test de connexion HeptagonesLM », le commente puis le résout, avec les identifiants saisis.</p></div>` : ""}`;
+  }
+
+  /* 9. Récapitulatif */
   async function loadSummary() {
     preview = null; render();
     try { preview = await api("/api/preview", { answers: A }); } catch (e) { showError(e.message); }
@@ -530,18 +583,19 @@
         ${block("Base de données", 3, a.db_mode === "sqlite" ? [["Mode", "SQLite local"]] : [["Instance", esc(a.db_server)], ["Base", esc(a.db_name) + (a.db_create ? " (créée si absente)" : "")], ["Authentification", a.db_auth === "sql" ? "SQL : " + esc(a.db_user) : "Windows (compte de service)"], ["Chiffrement", a.db_encrypt ? "Oui" : "Non"]])}
         ${block("Serveurs de licences", 4, [...(a.servers.some(s => s.license_type !== "rlm") ? [["lmutil", esc(a.lmutil_path)]] : []), ...(a.servers.some(s => s.license_type === "rlm") ? [["rlmutil", esc(a.rlmutil_path)]] : []), ...a.servers.map(s => [s.name, (s.license_type === "rlm" ? "RLM · " : "") + esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
         ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
+        ${block("Tickets ITSM", at("itsm"), a.itsm_enabled ? [["Outil", esc((ITSM[a.itsm_type] || {}).label || a.itsm_type)], ["Adresse", esc(a.itsm_url)], a.itsm_user ? ["Compte", esc(a.itsm_user)] : null, a.itsm_type === "jira" ? ["Projet", esc(a.itsm_project)] : null, ["Secrets", a.itsm_type === "webhook" ? "Aucun" : "Chiffrés par Windows (DPAPI)"], ["Ticket de test", results.itsm && results.itsm.status === "ok" ? `${dot("ok")} réussi` : "non effectué"]] : [["Tickets automatiques", "Désactivés"]])}
         ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))], ["Alertes immédiates", a.email_alerts ? "Activées" : "Désactivées"]] : [["Rapport par e-mail", "Désactivé"]])}
         <div class="panel"><h2>Tâches planifiées</h2><dl class="kv">${preview.plan.tasks.map(t => `<dt>${esc(t.name.replace("HeptagonesLM - ", ""))}</dt><dd>${esc(t.schedule)}</dd>`).join("")}</dl></div>
       </div>
       <div class="panel"><h2>Étapes de l'installation</h2><ol class="plan">${preview.plan.steps.map(s => `<li>${esc(s)}</li>`).join("")}</ol></div>
       <div class="panel"><details><summary>Configuration générée (heptagoneslm.yaml)</summary><pre class="yaml">${esc(preview.yaml)}</pre></details></div>`;
   }
-  STEPS[7].after = () => {
+  STEPS[SUMMARY].after = () => {
     bindChecks();
     document.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", () => go(+b.dataset.goto)));
   };
 
-  /* 9. Installation */
+  /* 10. Installation */
   function renderInstall() {
     const st = install;
     const pct = Math.round(st.percent || 0);
@@ -573,11 +627,11 @@
     c.insertAdjacentHTML("beforeend", lines.map(l => `<div class="${esc(l.level)}"><span class="t">${esc(l.t)}</span>${esc(l.msg)}</div>`).join(""));
     if (atBottom) c.scrollTop = c.scrollHeight;
   }
-  STEPS[8].after = () => {
+  STEPS[INSTALL].after = () => {
     const c = $("console");
     if (c && consoleLines.length) { c.innerHTML = consoleLines.map(l => `<div class="${esc(l.level)}"><span class="t">${esc(l.t)}</span>${esc(l.msg)}</div>`).join(""); c.scrollTop = c.scrollHeight; }
     $("retry")?.addEventListener("click", () => startInstall(true));
-    $("back-summary")?.addEventListener("click", () => { install = { status: "idle" }; go(7); });
+    $("back-summary")?.addEventListener("click", () => { install = { status: "idle" }; go(SUMMARY); });
   };
   async function startInstall(resume = false) {
     showError("");
@@ -585,7 +639,7 @@
     catch (e) { showError(e.message); return; }
     if (!resume) { logCount = 0; consoleLines = []; }
     install = { ...install, status: "running" };
-    if (step !== 8) { step = 8; maxStep = Math.max(maxStep, 8); }
+    if (step !== INSTALL) { step = INSTALL; maxStep = Math.max(maxStep, INSTALL); }
     render();
     poll();
   }
@@ -596,7 +650,7 @@
       logCount = st.log_count;
       const prevStatus = install.status;
       install = st;
-      if (step === 8) {
+      if (step === INSTALL) {
         const stepsChanged = JSON.stringify(st.steps.map(s => s.status)) !== JSON.stringify((poll.last || []));
         poll.last = st.steps.map(s => s.status);
         if (stepsChanged || st.status !== prevStatus) render();
@@ -610,12 +664,12 @@
         appendLogs(st.logs);
       }
       if (st.status === "running") pollTimer = setTimeout(poll, 700);
-      else if (st.status === "done") { maxStep = 9; setTimeout(() => go(9), 1200); }
+      else if (st.status === "done") { maxStep = VERIFY; setTimeout(() => go(VERIFY), 1200); }
       else render();
     } catch (e) { showError(e.message); pollTimer = setTimeout(poll, 2000); }
   }
 
-  /* 10. Vérification */
+  /* 11. Vérification */
   async function runVerify() {
     verification = null; render();
     try { verification = await api("/api/verify", {}); } catch (e) { showError(e.message); }
@@ -648,7 +702,7 @@
         ${items.map(checkRow).join("")}
       </div></div>`).join("")}</div>`;
   }
-  STEPS[9].after = () => {
+  STEPS[VERIFY].after = () => {
     bindCopy();
     $("reverify")?.addEventListener("click", () => runVerify());
     document.querySelectorAll("[data-vfix]").forEach(b => b.addEventListener("click", async () => {
@@ -671,7 +725,7 @@
   /* -- Démarrage ------------------------------------------------------------------------------ */
   $("prev").addEventListener("click", () => go(Math.max(0, step - 1)));
   $("next").addEventListener("click", () => {
-    if (step === 7) startInstall(false);
+    if (step === SUMMARY) startInstall(false);
     else go(step + 1);
   });
 
@@ -689,7 +743,7 @@
       const st = await api("/api/progress?since=0");
       if (st.status && st.status !== "idle") {
         install = st; logCount = st.log_count; consoleLines = st.logs;
-        step = st.status === "done" ? 9 : 8; maxStep = step;
+        step = st.status === "done" ? VERIFY : INSTALL; maxStep = step;
         if (st.status === "running") poll();
       }
     } catch (e) { /* pas d'installation en cours */ }

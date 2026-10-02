@@ -72,6 +72,13 @@ def verify(system: System, a: Answers) -> dict:
         except (ConfigError, yaml.YAMLError) as exc:
             add("config", "Fichiers", "Configuration heptagoneslm.yaml", "error", str(exc))
 
+    # -- Tickets ITSM : secrets chiffrés lisibles sur ce serveur ----------------------------------
+    if a.itsm_enabled:
+        for path in a.secret_files():
+            problem = system.secret_status(path)
+            add(f"secret:{path}", "Tickets ITSM", f"Secret chiffré {path.rsplit(chr(92), 1)[-1]}",
+                "error" if problem else "ok", problem or "Chiffré par Windows (DPAPI), déchiffrable sur ce serveur")
+
     # -- Base de données et collecte ----------------------------------------------------------
     try:
         st = db_status(system, a)

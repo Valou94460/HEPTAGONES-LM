@@ -312,7 +312,10 @@ le résout quand la condition disparaît (collecte rétablie, jetons disponibles
 renouvelée ; pour les refus, après `repeat_hours` sans nouveau refus) — sans doublon, avec
 rattrapage si l'outil était injoignable. Par défaut, seules les alertes graves
 (`min_severity: serious` : pannes, refus, échéances à moins de 7 jours) ouvrent un ticket.
-Vérification à l'installation : `HeptagonesLM.exe -c heptagoneslm.yaml test-itsm` (ticket de
+Le plus simple : l'étape **Tickets ITSM** de `HeptagonesLM-Setup.exe` (outil, adresse, compte
+technique, bouton « Ouvrir un ticket de test ») ; le mot de passe ou les jetons y sont chiffrés par
+Windows (DPAPI) dans `secrets\`, la configuration n'en garde qu'une référence `dpapi:`.
+Vérification après coup : `HeptagonesLM.exe -c heptagoneslm.yaml test-itsm` (ticket de
 test ouvert, commenté puis résolu). Exemples complets : `config/heptagoneslm.example.yaml`.
 
 <img src="docs/images/profil-horaire-sombre.png" alt="Profil horaire (mode sombre)" width="720">

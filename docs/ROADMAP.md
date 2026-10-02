@@ -53,7 +53,11 @@ selon les priorités des premiers clients.
 - Alertes immédiates par e-mail (collecte, refus, saturation, échéances).
 - Collecteur RLM (Foundry, Maxon, Chaos…).
 
-### 26.3.0 — ITSM et gouvernance (prête : PR #7, en attente de fusion et de publication)
+### 26.3.0 — ITSM et gouvernance (publiée le 01/10/2026)
+
+Release : https://github.com/Valou94460/HEPTAGONES-LM/releases/tag/v26.3.0 ; seul fichier livré :
+`HeptagonesLM-Setup.exe`. Installation réelle validée par la CI sur Windows Server 2025 (assistant graphique
+et mode silencieux : IIS, connexion Windows, tâches planifiées, collecte par le compte de service).
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
@@ -63,6 +67,18 @@ selon les priorités des premiers clients.
 | Réservations / named user | Réservations `RESERVE` lues dans lmstat : jetons réservés par utilisateur ou groupe, taux d'usage des réservations. | 1 j |
 | Multi-sites | Site par poste (règles sur le nom ou import CSV) et par serveur ; filtre et répartition par site. | 1 j |
 | Licences inutilisées | Vue dédiée : features sans aucun usage sur la période, coût associé. | ½ j |
+
+### 26.3.1 — Recette sur le site client (prochaine version, ~3 j)
+
+Version de validation avant production, sans nouvelle fonction de suivi.
+
+| Fonction | Contenu | Effort |
+|---|---|:---:|
+| Étape « Recette » dans l'assistant | Sur le serveur installé : `lmstat` / `rlmstat` lancé en direct sur chaque vrai serveur de licences et comparé à ce que HeptagonesLM a enregistré (features, jetons, utilisateurs), écarts signalés ; collecte planifiée sans erreur depuis N heures ; connexion Windows depuis un poste, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test. | 2 j |
+| PV de recette | Document (PDF ou Word) horodaté : chaque point vert / orange / rouge, à signer pour le passage en production. | ½ j |
+| Sorties réelles en tests de non-régression | Sorties brutes des serveurs du client (anonymisables) enregistrées par la recette et rejouées par les tests automatiques. | ½ j |
+| Étape « Tickets ITSM » dans l'assistant ✅ | Activation au choix, ServiceNow / Jira / GLPI / Teams-Slack, bouton « Ouvrir un ticket de test », mot de passe ou jetons chiffrés par Windows (DPAPI) dans `secrets\` (fait, branche de développement). | 1 j |
+| Vérification du serveur plus rapide | L'étape « Vérification du serveur » de l'assistant prend plus de 2 minutes sur un Windows Server réel : contrôles regroupés et progression affichée. | ½ j |
 
 ### 26.4.0 — Analytics et achats (cible : fin novembre 2026, ~8 j)
 

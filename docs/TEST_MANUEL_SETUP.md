@@ -23,17 +23,17 @@ Deux essais, du plus simple au plus complet :
 
 ## 2. Récupérer HeptagonesLM-Setup.exe
 
-1. Ouvrir la page du dernier run vert de la CI (voir la liste ci-dessous), connecté à GitHub.
-2. En bas de la page, section **Artifacts**, télécharger le zip : **`HeptagonesLM-windows`** pour le
-   run déjà disponible ci-dessous, **`HeptagonesLM-Setup`** pour les suivants.
-3. Dézipper et utiliser **uniquement `dist\HeptagonesLM-Setup.exe`**. L'application est incluse
-   dedans ; le zip du run déjà disponible contient aussi `HeptagonesLM.exe` : ne pas le lancer (il
-   ouvre la démonstration).
+Télécharger **`HeptagonesLM-Setup.exe`** depuis la release **v26.3.0** :
+https://github.com/Valou94460/HEPTAGONES-LM/releases/tag/v26.3.0
 
-| Version | Où | Remarque |
-|---|---|---|
-| Déjà disponible | https://github.com/Valou94460/HEPTAGONES-LM/actions/runs/36597258723 | Version 26.3.0, installation réelle validée sur Windows Server par la CI. Pas encore le bouton « Rechercher l'outil » : saisir le **chemin complet** de lmutil.exe, sans guillemets (`C:\Flexlm\lmutil.exe`). |
-| Avec le bouton « Rechercher l'outil » | Prochain run vert de la PR #7 | Produit dès que GitHub Actions sera débloqué. |
+C'est le seul fichier nécessaire : l'application `HeptagonesLM.exe` est incluse dedans. Vérification d'intégrité
+(facultative), dans une invite de commandes :
+
+```
+certutil -hashfile HeptagonesLM-Setup.exe SHA256
+```
+
+Le résultat doit correspondre à la ligne `HeptagonesLM-Setup.exe` du fichier `SHA256SUMS` de la release.
 
 Windows SmartScreen peut afficher « Windows a protégé votre ordinateur » (exécutable non signé) :
 **Informations complémentaires** > **Exécuter quand même**.
@@ -75,12 +75,13 @@ c'est une installation réelle.
 | 2. Vérification du serveur | Lire les contrôles, **Suivant** | Aucun contrôle rouge (en mode Poste local, IIS n'est pas requis). |
 | 3. Emplacement et compte de service | Dossier `C:\HeptagonesLM` ; compte `NOMDUPC\svc_heptagoneslm` + mot de passe ; **Tester le compte** | Vert : « compte trouvé et mot de passe valide ». |
 | 4. Base de données | Choisir **SQLite local** | — |
-| 5. Serveurs de licences | Chaque serveur : nom (ex. `AUTODESK`), type FlexLM, adresse `27000@srvlic01` ; chemin de lmutil : `C:\Flexlm\lmutil.exe` (ou le bouton **Rechercher l'outil** s'il est présent) ; **Tester** sur chaque ligne | Vert : « N features, x / y jetons utilisés », avec les vrais noms de vos licences. |
+| 5. Serveurs de licences | Chaque serveur : nom (ex. `AUTODESK`), type FlexLM, adresse `27000@srvlic01` ; bouton **Rechercher l'outil** (ou le chemin `C:\Flexlm\lmutil.exe`, ou simplement le dossier) ; **Tester** sur chaque ligne | Vert : « N features, x / y jetons utilisés », avec les vrais noms de vos licences. |
 | 6. Interface web | Choisir **Poste local** | — |
 | 7. Rapport par e-mail | Laisser désactivé (ou renseigner votre SMTP puis **Envoyer un message de test au premier destinataire**) | — |
-| 8. Récapitulatif | Relire, **Installer** | — |
-| 9. Installation | Attendre | Toutes les étapes vertes. |
-| 10. Vérification | Lire | « HeptagonesLM est installé et opérationnel » (les avertissements orange sont acceptables). |
+| 8. Tickets ITSM | Laisser désactivé, ou cocher **Ouvrir automatiquement des tickets**, choisir l'outil (ServiceNow, Jira, GLPI, Teams / Slack), saisir l'adresse et le compte technique, puis **Ouvrir un ticket de test** | Vert : « ticket de test ouvert, commenté puis résolu », avec son numéro ; le ticket est visible (résolu) dans l'outil. |
+| 9. Récapitulatif | Relire, **Installer** | Tickets ITSM : « Secrets chiffrés par Windows (DPAPI) ». |
+| 10. Installation | Attendre | Toutes les étapes vertes. |
+| 11. Vérification | Lire | « HeptagonesLM est installé et opérationnel » (les avertissements orange sont acceptables) ; si l'ITSM est activé, « Secret chiffré itsm_password.dpapi » vert. |
 
 Ensuite, vérifier les **vraies données** :
 

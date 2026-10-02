@@ -63,3 +63,50 @@ for ($i = 0; $i -lt 90; $i++) {
 }
 Write-Host "Collecte planifiée : dernier résultat $($info.LastTaskResult)"
 if ($info.LastTaskResult -ne 0) { Get-Content C:\HeptagonesLM\logs\heptagoneslm.log -Tail 40; throw "collecte planifiée en échec" }
+# Tickets ITSM (si configurés par l'assistant) : secret chiffré par Windows (DPAPI), dossier réservé à
+# SYSTEM, aux administrateurs et au compte de service, déchiffré par l'application installée, y compris
+# sous le compte de service. Variables : ITSM_URL, ITSM_PASSWORD ; SVC_ACCOUNT / SVC_PASSWORD (ou SVC_PWD).
+if ($env:ITSM_URL) {
+  $exe, $cfg = "C:\HeptagonesLM\HeptagonesLM.exe", "C:\HeptagonesLM\heptagoneslm.yaml"
+  $secretDir = "C:\HeptagonesLM\secrets"; $secret = Join-Path $secretDir "itsm_password.dpapi"
+  if (-not (Test-Path $secret)) { throw "secret ITSM chiffré absent : $secret" }
+  $hex = [BitConverter]::ToString([IO.File]::ReadAllBytes($secret))
+  foreach ($enc in [Text.Encoding]::UTF8, [Text.Encoding]::Unicode) {
+    if ($hex.Contains([BitConverter]::ToString($enc.GetBytes($env:ITSM_PASSWORD)))) { throw "mot de passe ITSM en clair dans $secret" }
+  }
+  if ((Get-Content $cfg -Raw).Contains($env:ITSM_PASSWORD)) { throw "mot de passe ITSM dans heptagoneslm.yaml" }
+  Write-Host "heptagoneslm.yaml : $((Select-String -Path $cfg -Pattern 'dpapi:').Line.Trim())"
+  $svc = Get-Setting SVC_ACCOUNT "$env:COMPUTERNAME\svc_heptagoneslm"
+  $sid = { param($n) (New-Object Security.Principal.NTAccount($n)).Translate([Security.Principal.SecurityIdentifier]).Value }
+  $acl = Get-Acl $secretDir
+  $acl.Access | ForEach-Object { Write-Host "  secrets : $($_.IdentityReference) $($_.FileSystemRights) (hérité : $($_.IsInherited))" }
+  if (-not $acl.AreAccessRulesProtected) { throw "héritage des droits non coupé sur $secretDir" }
+  $ids = @($acl.Access | ForEach-Object { $_.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value } | Sort-Object -Unique)
+  $want = @("S-1-5-18", "S-1-5-32-544", (& $sid $svc)) | Sort-Object -Unique
+  if (Compare-Object $want $ids) { throw "droits inattendus sur $secretDir : $($ids -join ', ')" }
+  # PowerShell 7 renvoie un tableau JSON comme un seul objet : le dérouler avant de compter
+  $incidents = { @((Invoke-RestMethod "$env:ITSM_URL/incidents.json") | ForEach-Object { $_ }) }
+  $count = { (& $incidents).Count }
+  $before = & $count
+  # Déchiffrement par l'application (administrateur) : ticket de test ouvert, commenté, résolu
+  & $exe -c $cfg test-itsm
+  if ($LASTEXITCODE -ne 0) { throw "test-itsm (administrateur) : code $LASTEXITCODE" }
+  # Déchiffrement sous le compte de service (tâche planifiée temporaire, comme la collecte)
+  $name = "HeptagonesLM - Test ITSM (contrôle)"
+  $action = New-ScheduledTaskAction -Execute $exe -Argument "-c `"$cfg`" test-itsm"
+  Register-ScheduledTask -TaskName $name -Action $action -User $svc -Password (Get-Setting SVC_PASSWORD $env:SVC_PWD) -RunLevel Limited | Out-Null
+  try {
+    Start-ScheduledTask -TaskName $name
+    for ($i = 0; $i -lt 60; $i++) {
+      Start-Sleep 2
+      $t = Get-ScheduledTask -TaskName $name; $info = $t | Get-ScheduledTaskInfo
+      if ($t.State -ne "Running" -and $info.LastTaskResult -ne 267009 -and $info.LastTaskResult -ne 267011) { break }
+    }
+    Write-Host "test-itsm sous $svc : dernier résultat $($info.LastTaskResult)"
+    if ($info.LastTaskResult -ne 0) { Get-Content C:\HeptagonesLM\logs\heptagoneslm.log -Tail 20; throw "test-itsm sous le compte de service en échec" }
+  } finally { Unregister-ScheduledTask -TaskName $name -Confirm:$false }
+  $after = & $count
+  Write-Host "Incidents reçus par l'outil ITSM : $before -> $after"
+  if ($after -lt $before + 2) { throw "tickets de test non reçus par l'outil ITSM ($before -> $after)" }
+  & $incidents | Select-Object -Last 2 number, state, short_description, caller_id | Format-Table
+}

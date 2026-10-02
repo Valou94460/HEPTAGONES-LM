@@ -11,6 +11,7 @@ import time
 import traceback
 from dataclasses import dataclass, field
 from datetime import datetime
+from pathlib import PureWindowsPath
 from typing import Callable
 
 from heptagoneslm import __version__
@@ -104,10 +105,19 @@ def step_config(ctx: Context) -> str:
 
 
 def step_secrets(ctx: Context) -> str:
-    names = list(ctx.a.machine_secrets())
+    a = ctx.a
+    names = list(a.machine_secrets())
     for name in names:
-        ctx.system.set_machine_env(name, ctx.a.machine_secrets()[name])
+        ctx.system.set_machine_env(name, a.machine_secrets()[name])
         ctx.log(f"Variable d'environnement machine {name} définie (valeur masquée)")
+    files = a.secret_files()
+    if files:
+        ctx.system.restrict_secrets_dir(a.secrets_dir, a.service_account)
+        ctx.log(f"Dossier {a.secrets_dir} réservé à SYSTEM, aux administrateurs et à {a.service_account} (lecture)")
+        for path, value in files.items():
+            ctx.system.write_secret(path, value)
+            ctx.log(f"Secret chiffré par Windows (DPAPI) : {path}")
+        names += [PureWindowsPath(p).name for p in files]
     return ", ".join(names) if names else "Aucun secret à stocker"
 
 
@@ -267,7 +277,7 @@ def build_plan(a: Answers) -> list[Step]:
         Step("binaries", "Copie de HeptagonesLM", 2, step_binaries),
         Step("config", "Écriture de la configuration", 1, step_config),
     ]
-    if a.machine_secrets():
+    if a.machine_secrets() or a.secret_files():
         steps.append(Step("secrets", "Stockage des secrets", 1, step_secrets))
     steps += [
         Step("acl", "Droits du compte de service", 1, step_acl),

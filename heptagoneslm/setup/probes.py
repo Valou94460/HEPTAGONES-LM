@@ -162,3 +162,37 @@ def test_smtp(system: System, a: Answers, to: str | None = None) -> dict:
     except Exception as exc:
         return _res("error", f"Envoi impossible : {exc}")
     return _res("ok", f"Message de test envoyé à {to}")
+
+
+ITSM_LABELS = {"servicenow": "ServiceNow", "jira": "Jira", "glpi": "GLPI", "webhook": "Webhook"}
+
+
+def test_itsm(system: System, a: Answers) -> dict:
+    """Ouvre, commente puis résout un vrai ticket de test dans l'outil ITSM saisi (secrets en mémoire)."""
+    from types import SimpleNamespace
+
+    from heptagoneslm.config import ConfigError, _parse_itsm
+    from heptagoneslm.itsm import ItsmError, check_connector
+
+    errors = a.validate("itsm") if a.itsm_enabled else [{"message": "Tickets ITSM désactivés"}]
+    if errors:
+        return _res("error", "Compléter les champs avant le test", [e["message"] for e in errors])
+    try:
+        cfg = _parse_itsm(0, a.itsm_entry(clear=True))
+    except ConfigError as exc:
+        return _res("error", str(exc))
+    label = ITSM_LABELS.get(a.itsm_type, a.itsm_type)
+    try:
+        steps = check_connector(cfg, SimpleNamespace(web=SimpleNamespace(public_url=a.public_url)))
+    except ItsmError as exc:
+        hints = {"401": "Identifiant ou mot de passe refusé par l'outil (compte technique, jeton).",
+                 "403": "Compte reconnu mais droits insuffisants (ServiceNow : rôle itil ; Jira : créer des tickets "
+                        "dans le projet ; GLPI : profil autorisé à créer des tickets).",
+                 "404": "Adresse ou projet introuvable : vérifier l'URL de l'instance."}
+        detail = next((h for code, h in hints.items() if f"HTTP {code}" in str(exc)), None)
+        if "CERTIFICATE_VERIFY_FAILED" in str(exc):
+            detail = ("Certificat de l'outil non reconnu par ce serveur : importer l'autorité de certification "
+                      "interne dans Windows, ou indiquer son fichier PEM.")
+        return _res("error", f"Échec du ticket de test : {exc}", [detail] if detail else [])
+    return _res("ok", f"{label} : ticket de test ouvert, commenté puis résolu",
+                steps + ["Le secret sera chiffré par Windows (DPAPI) à l'installation, jamais écrit en clair."])

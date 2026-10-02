@@ -299,6 +299,9 @@ jobs:
       PUBLIC_HOST: heptagoneslm.ci.local
       TOUR_USER: ci_lecteur
       EXPECT_LMUTIL: 'C:\Flexlm\lmutil.exe'
+      ITSM_URL: https://127.0.0.1:8443          # faux ServiceNow HTTPS (tests/fake_servicenow.py)
+      ITSM_USER: svc_heptagoneslm
+      ITSM_PASSWORD: Snow-Test-2026
     steps:
       - uses: actions/checkout@v4
 
@@ -359,6 +362,14 @@ jobs:
           Add-Content $env:GITHUB_ENV "SVC_ACCOUNT=$env:COMPUTERNAME\svc_heptagoneslm"
           Add-Content $env:GITHUB_ENV "ACCESS_GROUP=$env:COMPUTERNAME\HeptagonesLM_Lecteurs"
 
+      - name: Faux ServiceNow HTTPS (autorité de certification de test approuvée par Windows)
+        run: |
+          # Comme une AC d'entreprise déployée par GPO : aucun fichier d'AC à indiquer dans l'assistant
+          Copy-Item tests\fixtures\itsm_test_ca.pem itsm_test_ca.cer
+          Import-Certificate -FilePath itsm_test_ca.cer -CertStoreLocation Cert:\LocalMachine\Root | Out-Null
+          ./tests/windows/start_fake_servicenow.ps1
+          Invoke-WebRequest $env:ITSM_URL -UseBasicParsing | Select-Object StatusCode
+
       - name: Assistant d'installation réel, piloté par le navigateur et filmé
         timeout-minutes: 50
         run: |
@@ -368,13 +379,16 @@ jobs:
             if ((curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8792/setup.css) -ne "000") { break }
             Start-Sleep 1
           }
+          ./tests/windows/start_fake_servicenow.ps1
           node tests/ui/setup_real.cjs http://127.0.0.1:8792 ci-reel installation-reelle
           $code = $LASTEXITCODE
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           if ($code -ne 0) { Get-Content setup-gui.log, setup-gui.err -Tail 60 -ErrorAction SilentlyContinue; throw "parcours réel de l'assistant en échec" }
 
-      - name: Contrôles après installation (SSO via IIS, groupes, collecte par le compte de service)
-        run: ./tests/windows/post_install_checks.ps1
+      - name: Contrôles après installation (SSO via IIS, groupes, collecte par le compte de service, ITSM)
+        run: |
+          ./tests/windows/start_fake_servicenow.ps1
+          ./tests/windows/post_install_checks.ps1
 
       - name: Visite filmée de l'interface installée (IIS, connexion Windows)
         continue-on-error: true
@@ -389,6 +403,10 @@ jobs:
             if (Test-Path $f) { Copy-Item $f $dest }
           }
           if (Test-Path C:\HeptagonesLM\logs) { Copy-Item C:\HeptagonesLM\logs (Join-Path $dest logs) -Recurse }
+          Get-ChildItem fake-snow*.log, fake-snow*.err -ErrorAction SilentlyContinue | Copy-Item -Destination $dest
+          try { Invoke-RestMethod "$env:ITSM_URL/incidents.json" | ConvertTo-Json -Depth 5 | Set-Content (Join-Path $dest incidents_servicenow.json) } catch { }
+          try { (Invoke-WebRequest $env:ITSM_URL -UseBasicParsing).Content | Set-Content (Join-Path $dest incidents_servicenow.html) } catch { }
+          if (Test-Path C:\HeptagonesLM\secrets) { icacls C:\HeptagonesLM\secrets | Set-Content (Join-Path $dest droits_secrets.txt) }
 
       - name: Publication de la vidéo, des captures et des journaux
         if: always()

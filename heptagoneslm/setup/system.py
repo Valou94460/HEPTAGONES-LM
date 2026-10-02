@@ -119,6 +119,9 @@ class System:
     def exists(self, path: str) -> bool: raise NotImplementedError
     def grant(self, path: str, account: str, rights: str) -> None: raise NotImplementedError
     def set_machine_env(self, name: str, value: str) -> None: raise NotImplementedError
+    def restrict_secrets_dir(self, path: str, account: str) -> None: raise NotImplementedError
+    def write_secret(self, path: str, value: str) -> None: raise NotImplementedError
+    def secret_status(self, path: str) -> str | None: raise NotImplementedError
     def register_task(self, spec: TaskSpec, account: str, password: str) -> None: raise NotImplementedError
     def grant_batch_logon(self, account: str) -> bool: raise NotImplementedError
     def start_task(self, name: str) -> None: raise NotImplementedError
@@ -452,6 +455,35 @@ foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome'
         r = self.run(["icacls", path, "/grant", f"{account}:(OI)(CI){rights}", "/T", "/C", "/Q"], timeout=300)
         if not r.ok:
             raise SetupError(f"icacls {path} : {r.message}")
+
+    def restrict_secrets_dir(self, path: str, account: str) -> None:
+        """Dossier des secrets : héritage coupé, accès réservé à SYSTEM, aux administrateurs (SID, quelle que
+        soit la langue de Windows) et au compte de service (lecture)."""
+        os.makedirs(path, exist_ok=True)
+        r = self.run(["icacls", path, "/inheritance:r", "/grant:r", "*S-1-5-18:(OI)(CI)F",
+                      "*S-1-5-32-544:(OI)(CI)F", f"{account}:(OI)(CI)R", "/C", "/Q"], timeout=120)
+        if not r.ok:
+            raise SetupError(f"icacls {path} : {r.message}")
+
+    def write_secret(self, path: str, value: str) -> None:
+        from heptagoneslm import vault
+
+        try:
+            data = vault.protect(value)
+        except vault.SecretError as exc:
+            raise SetupError(str(exc)) from None
+        with open(path, "wb") as f:
+            f.write(data)
+
+    def secret_status(self, path: str) -> str | None:
+        """None si le secret se déchiffre sur ce serveur, sinon la raison."""
+        from heptagoneslm import vault
+
+        try:
+            vault.resolve(vault.reference(path))
+            return None
+        except vault.SecretError as exc:
+            return str(exc)
 
     def set_machine_env(self, name: str, value: str) -> None:
         r = self.ps(f"[Environment]::SetEnvironmentVariable({ps_quote(name)}, $env:{SECRET_ENV}, 'Machine')", secret=value)
@@ -843,6 +875,20 @@ class SimulatedSystem(System):
     def set_machine_env(self, name: str, value: str) -> None:
         self._step("set_machine_env", 0.3)
         self.env[name] = "********"
+
+    def restrict_secrets_dir(self, path: str, account: str) -> None:
+        self._step("restrict_secrets_dir", 0.3)
+        self._real(path).mkdir(parents=True, exist_ok=True)
+        self.acl.append((path, "SYSTEM, Administrateurs, " + account, "secrets"))
+
+    def write_secret(self, path: str, value: str) -> None:
+        self._step("write_secret", 0.2)
+        real = self._real(path)
+        real.parent.mkdir(parents=True, exist_ok=True)
+        real.write_bytes(b"DPAPI simule (aucun secret en clair) " + os.urandom(16))
+
+    def secret_status(self, path: str) -> str | None:
+        return None if self._real(path).is_file() else f"Secret introuvable : {path}"
 
     def register_task(self, spec: TaskSpec, account: str, password: str) -> None:
         self._step(f"register_task:{spec.name}", 0.6)

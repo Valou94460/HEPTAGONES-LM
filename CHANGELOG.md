@@ -5,7 +5,21 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
-## [26.3.0] — 2026-09-29
+### Ajouté
+- **Assistant d'installation : étape « Tickets ITSM »** (désactivée par défaut) : ServiceNow, Jira,
+  GLPI ou Teams / Slack, gravité minimale, autorité de certification interne facultative ; bouton
+  « Ouvrir un ticket de test » qui ouvre, commente puis résout un vrai ticket avec les identifiants
+  saisis (refus 401 / 403, adresse 404 et certificat non reconnu expliqués). Aussi en mode silencieux
+  (`itsm_*` dans le fichier de réponses).
+- **Secrets chiffrés par Windows (DPAPI)** : mot de passe ou jetons de l'outil ITSM dans
+  `<installation>\secrets\*.dpapi`, dossier réservé à SYSTEM, aux administrateurs et au compte de
+  service ; la configuration n'en contient qu'une référence `dpapi:`, déchiffrée en mémoire au moment
+  de l'appel. Vérification finale : secret présent et déchiffrable sur le serveur.
+
+### Corrigé
+- Assistant : le message d'erreur d'un champ disparaît dès que le champ est corrigé.
+
+## [26.3.0] — 2026-10-01
 
 Publie aussi le contenu de 26.2.0 (non publiée séparément).
 

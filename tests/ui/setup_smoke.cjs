@@ -7,6 +7,8 @@
  */
 const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright");
 const fs = require("fs");
+const path = require("path");
+const { spawn } = require("child_process");
 
 (async () => {
   const base = (process.argv[2] || "http://127.0.0.1:8790").replace(/\/$/, "");
@@ -15,6 +17,14 @@ const fs = require("fs");
   fs.mkdirSync(out, { recursive: true });
   const failures = [];
   const check = (cond, msg) => { if (!cond) failures.push(msg); };
+  // Faux ServiceNow HTTPS (tests/fake_servicenow.py) pour le bouton « Ouvrir un ticket de test »
+  const snowPort = process.env.ITSM_PORT || "8443";
+  const snowUrl = process.env.ITSM_URL || `https://127.0.0.1:${snowPort}`;   // captures : nom DNS d'entreprise
+  const snow = spawn(process.env.PYTHON || (process.platform === "win32" ? "python" : "python3"),
+                     ["-m", "tests.fake_servicenow", snowPort], { cwd: path.resolve(__dirname, "../.."), stdio: "inherit" });
+  process.on("exit", () => snow.kill());
+  // ITSM_CA vide : AC approuvée par le système (comme une AC d'entreprise déployée par GPO)
+  const caFile = "ITSM_CA" in process.env ? process.env.ITSM_CA : path.resolve(__dirname, "../fixtures/itsm_test_ca.pem");
   const browser = await chromium.launch();
   // SETUP_DOC_SHOTS=1 : captures de la fenêtre seule (documentation) plutôt que de la page entière
   const docShots = !!process.env.SETUP_DOC_SHOTS;
@@ -132,13 +142,58 @@ const fs = require("fs");
   await test("smtp");
   await shot("08_email");
 
-  // 8. Récapitulatif
+  // 8. Tickets ITSM : désactivés par défaut, puis ServiceNow avec ticket de test réel
+  await next("Tickets ITSM");
+  check(!(await page.isChecked('[data-bind="itsm_enabled"]')), "tickets ITSM activés par défaut");
+  check(!(await page.$('[data-bind="itsm_url"]')), "champs ITSM visibles alors que désactivés");
+  await shot("08b_tickets_itsm_desactives");
+  await page.check('[data-bind="itsm_enabled"]');
+  await page.waitForSelector('[data-choice="itsm_type"]');
+  for (const [kind, field] of [["jira", "itsm_project"], ["glpi", "itsm_app_token"], ["webhook", "itsm_format"], ["servicenow", "itsm_user"]]) {
+    await page.click(`[data-choice="itsm_type"][data-value="${kind}"]`);
+    await page.waitForSelector(`[data-bind="${field}"]`, { timeout: 5000 }).catch(() => failures.push(`champ ${field} absent pour ${kind}`));
+  }
+  check((await page.getAttribute('[data-bind="itsm_password"]', "type")) === "password", "mot de passe ITSM affiché en clair");
+  // Champs vides : « Suivant » bloqué
+  await page.click("#next");
+  await page.waitForSelector('[data-f="itsm_url"].invalid', { timeout: 5000 }).catch(() => failures.push("adresse ITSM vide acceptée"));
+  await page.fill('[data-bind="itsm_url"]', snowUrl);
+  await page.fill('[data-bind="itsm_user"]', "svc_heptagoneslm");
+  await page.fill('[data-bind="itsm_assignment_group"]', "Support licences");
+  if (caFile) await page.fill('[data-bind="itsm_ca_file"]', caFile);
+  for (let i = 0; i < 40; i++) {           // attente du faux ServiceNow
+    try { await page.request.get(snowUrl, { ignoreHTTPSErrors: true }); break; } catch (e) { await page.waitForTimeout(250); }
+  }
+  await page.fill('[data-bind="itsm_password"]', "mauvais-mot-de-passe");
+  check(!(await page.$$eval(".ferr", e => e.some(x => x.textContent.trim()))), "messages d'erreur restés affichés après correction");
+  await test("itsm", "error");
+  check((await page.textContent("#res-itsm")).includes("401"), "mauvais mot de passe ServiceNow non signalé (401)");
+  await shot("08c_tickets_itsm_refus");
+  await page.fill('[data-bind="itsm_password"]', "Snow-Test-2026");
+  await test("itsm", "ok");
+  const ticket = await page.textContent("#res-itsm");
+  check(/INC\d{7}/.test(ticket) && ticket.includes("résolution : OK"), `ticket de test incomplet : ${ticket}`);
+  await shot("08d_tickets_itsm_test");
+  // Le ticket existe bien dans l'outil (page des incidents du faux ServiceNow)
+  const tool = await browser.newPage({ viewport: { width: 1280, height: 860 }, ignoreHTTPSErrors: true });
+  await tool.goto(snowUrl);
+  const toolText = await tool.textContent("body");
+  check(toolText.includes("Test de connexion HeptagonesLM") && toolText.includes("Résolu"), "ticket absent ou non résolu dans l'outil ITSM");
+  await tool.screenshot({ path: `${out}/setup_08e_servicenow_incident.png`, fullPage: true });
+  await tool.close();
+
+  // 9. Récapitulatif
   await next("Récapitulatif");
   await page.waitForSelector("pre.yaml", { state: "attached", timeout: 15000 });
   await page.waitForFunction(() => !document.getElementById("next").disabled, null, { timeout: 15000 })
     .catch(() => failures.push("bouton Installer désactivé au récapitulatif"));
   check((await page.textContent("#next")).includes("Installer"), "bouton Installer absent");
   await page.click("details summary");
+  const recap = await page.textContent("#step-body");
+  check(recap.includes("Chiffrés par Windows (DPAPI)") && recap.includes("réussi"), "récapitulatif ITSM incomplet");
+  const yamlText = await page.textContent("pre.yaml");
+  check(yamlText.includes("dpapi:C:/HeptagonesLM/secrets/itsm_password.dpapi"), "référence au secret chiffré absente du YAML");
+  check(!yamlText.includes("Snow-Test-2026") && !(await page.content()).includes("Snow-Test-2026"), "mot de passe ITSM en clair dans le récapitulatif");
   await shot("09_recapitulatif");
 
   // 9. Installation : barre de progression jusqu'à 100 %
@@ -162,6 +217,7 @@ const fs = require("fs");
   check(vtext.includes("Test depuis un poste utilisateur") && vtext.includes("PC-ETU-037"), "test d'accès depuis un poste absent de la vérification");
   check(vtext.includes("heptagoneslm.entreprise.local/acces"), "adresse du test d'accès absente");
   check(vtext.includes("Zone Intranet local"), "contrôle de la zone Intranet absent");
+  check(vtext.includes("Secret chiffré itsm_password.dpapi") && vtext.includes("déchiffrable sur ce serveur"), "contrôle du secret ITSM absent");
   await shot("11_verification");
   const spnFix = await page.$('[data-vfix="register_spn"]');
   check(!!spnFix, "déclaration du SPN non proposée");
@@ -188,6 +244,7 @@ const fs = require("fs");
   check(!(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)), "débordement horizontal sur mobile");
 
   await browser.close();
+  snow.kill();
   if (failures.length) { console.error("ÉCHECS :\n - " + failures.join("\n - ")); process.exit(1); }
   console.log("Assistant d'installation OK : parcours complet, vérification verte, aucune erreur JavaScript.");
 })().catch(e => { console.error(e); process.exit(1); });

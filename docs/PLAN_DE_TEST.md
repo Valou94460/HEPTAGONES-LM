@@ -108,15 +108,16 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 |---|---|
 | Tests + démo (Linux, Windows × Python 3.10, 3.12) | Tests unitaires ; script SQL à jour ; démo 30 jours + rapport Excel ; collecte « en direct » via le faux lmutil ; relecture des classeurs ; rendu PDF (LibreOffice) |
 | Interface web (navigateur) | `tests/ui/ui_smoke.cjs`, `tests/ui/login_smoke.cjs`, `tests/ui/setup_smoke.cjs` + captures d'écran publiées |
+| Installation réelle filmée (assistant graphique) | `HeptagonesLM-Setup.exe` sans simulation, piloté par un navigateur sur Windows Server : corrections des prérequis, compte de service, recherche de lmutil, IIS, installation, vérification finale, connexion Windows, refus hors du groupe, collecte planifiée, tickets ITSM (faux ServiceNow HTTPS : ticket de test, secret DPAPI, droits du dossier `secrets`, déchiffrement sous le compte de service) ; captures et déroulé publiés (`installation-reelle`) |
 | Installation réelle sur Windows Server | `HeptagonesLM-Setup.exe setup --answers` sur un runner Windows : installation d'IIS, d'URL Rewrite et d'ARR, site HTTPS (certificat), tâches sous un compte de service local, authentification unique vérifiée à travers IIS, collecte planifiée, réinstallation (idempotence) |
-| Exécutable Windows | Construction de `HeptagonesLM.exe` ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
+| Exécutable Windows | Construction de `HeptagonesLM.exe` et de `HeptagonesLM-Setup.exe` (seul fichier publié, artefact `HeptagonesLM-Setup`) ; `--version` ; démo ; collecte ; interface ; export du classeur complet |
 | SQL Server 2022 | Création de base ; démo 14 jours ; `init-db` ×2 (idempotence) ; collecte ; purge ; rapport ; verrou anti-collectes simultanées ; aperçu d'e-mail ; vues SQL non vides ; relance de la démo |
 
 | Id | Cas | Résultat attendu | Statut |
 |---|---|---|:---:|
 | AUT-01 🔴 | Consulter la dernière exécution CI de la version testée | Tous les jobs verts | ☐ |
 | AUT-02 | Télécharger l'artefact `captures-interface-web` | Captures lisibles, cohérentes avec § 5.6 | ☐ |
-| AUT-03 | `python -m pytest` sur le poste de test (E2) | 89 tests passés (« skipped » uniquement si openpyxl, ldap3 ou openssl sont absents) | ☐ |
+| AUT-03 | `python -m pytest` sur le poste de test (E2) | tous les tests passés (plus de 200) (« skipped » uniquement si openpyxl, ldap3 ou openssl sont absents) | ☐ |
 
 ---
 
@@ -375,6 +376,8 @@ Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 | INST-05 | Compte de service | Tester un compte inconnu, puis un mauvais mot de passe, puis le bon | Erreur explicite, puis « mot de passe valide » | ☐ |
 | INST-06 🔴 | Base | Tester l'instance ; installer avec « Créer la base » | Base créée (SIMPLE), connexion Windows du compte de service, rôles lecture / écriture | ☐ |
 | INST-07 | Licences | Tester chaque serveur ; tester une adresse erronée | Nombre de features et de jetons ; erreur « injoignable » | ☐ |
+| INST-07b 🔴 | Rechercher l'outil | Champ lmutil vide, bouton « Rechercher l'outil » ; refaire avec lmutil présent seulement sur le serveur de licences | lmutil.exe trouvé sur ce serveur et retenu ; sinon trouvé sur le serveur de licences et « Copier ici et utiliser » le copie dans `bin` ; serveur injoignable signalé (DNS, partage C$) | ☐ |
+| INST-07c | Chemin saisi | Saisir le dossier de lmutil, puis le chemin entre guillemets, puis un script `lmutil.cmd` | Dossier complété par `lmutil.exe`, guillemets retirés, script conservé tel quel ; test lmstat vert | ☐ |
 | INST-08 🔴 | IIS | Mode IIS, certificat du magasin, groupe AD | Site HTTPS démarré, authentification Windows seule, accès limité au groupe ; un membre du groupe arrive connecté sous son nom (en-tête `X-Remote-User` forgé par le navigateur ignoré) | ☐ |
 | INST-09 🔴 | Progression | Lancer l'installation | Barre de 0 à 100 %, étapes cochées, journal détaillé | ☐ |
 | INST-10 | Reprise | Provoquer un échec (compte sans droit), corriger, « Réessayer » | Reprise à l'étape en échec, installation terminée | ☐ |
@@ -383,6 +386,9 @@ Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 | INST-13 | Silencieux | `HeptagonesLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
 | INST-14 | Secrets | Rechercher les mots de passe dans `heptagoneslm.yaml`, `logs\*`, le rapport | Absents | ☐ |
 | INST-15 🔴 | SPN / zone Intranet | Vérification finale avec un nom DNS alias ; « Déclarer le SPN » (compte administrateur du domaine) | SPN déclaré sur le compte ordinateur, puis contrôle vert ; zone Intranet signalée si la GPO est absente, avec la commande | ☐ |
+| INST-17 | Démonstration signalée | Double-clic sur HeptagonesLM.exe sans installation ; choisir « Voir une démonstration » | Menu Installer / Démonstration / Quitter ; interface avec le bandeau « Démonstration » et le titre « [Démonstration] » ; jamais de bandeau sur une installation réelle | ☐ |
+| INST-18 🔴 | Tickets ITSM | Étape 8 : activer, choisir l'outil, saisir l'adresse et le compte technique ; « Ouvrir un ticket de test » avec un mauvais mot de passe, puis le bon | Refus expliqué (401) ; puis ticket de test ouvert, commenté et résolu, visible dans l'outil ; désactivé par défaut | ☐ |
+| INST-19 🔴 | Secret ITSM chiffré | Après installation : `secrets\itsm_password.dpapi`, `icacls secrets`, `heptagoneslm.yaml`, puis `test-itsm` en administrateur et par la collecte planifiée | Fichier illisible (aucun mot de passe en clair), héritage coupé, accès : SYSTEM, Administrateurs, compte de service seulement ; YAML avec `dpapi:` ; tickets ouverts sous les deux comptes | ☐ |
 | INST-16 🔴 | Test depuis un poste | Depuis 2 postes (membre du groupe, poste hors GPO), ouvrir `/acces`, répondre, puis « Relancer la vérification » | Utilisateur reconnu avec la méthode (Kerberos / NTLM) ; poste sans GPO signalé « mot de passe demandé » ; non-membre refusé | ☐ |
 
 ## 6. Validation sur les serveurs réels

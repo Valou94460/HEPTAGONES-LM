@@ -56,9 +56,10 @@ avec Python : `heptagoneslm setup --simulate`).
 | 5 | Serveurs de licences | Serveurs : type, adresse (triades), log debug ; chemin (ou dossier) de lmutil (FlexLM) et de rlmutil (RLM), ou bouton « Rechercher l'outil » (ce serveur et les serveurs de licences ; copie dans `bin` si trouvé ailleurs) | `lmstat` / `rlmstat` en direct pour chaque serveur |
 | 6 | Interface web et IIS | IIS avec connexion Windows automatique (recommandé), HTTPS intégré avec identifiants AD, ou poste local ; pare-feu | Certificat (nom, validité), groupe AD, connexion LDAP |
 | 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires, alertes immédiates (optionnel) | Envoi d'un message de test |
-| 8 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
-| 9 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
-| 10 | Vérification | Contrôle de bout en bout, adresse de l'interface, rapport d'installation téléchargeable | — |
+| 8 | Tickets ITSM | Activation (désactivé par défaut) ; ServiceNow, Jira, GLPI ou Teams / Slack : adresse, compte technique et mot de passe ou jetons, projet ou groupe d'affectation, gravité minimale, AC interne facultative | « Ouvrir un ticket de test » : vrai ticket ouvert, commenté puis résolu |
+| 9 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
+| 10 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
+| 11 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
 
 <table>
 <tr>
@@ -77,6 +78,14 @@ avec Python : `heptagoneslm setup --simulate`).
 <td align="center"><em>IIS : certificat, groupe autorisé</em></td>
 <td align="center"><em>Récapitulatif avant installation</em></td>
 </tr>
+<tr>
+<td><img src="images/installation-itsm.png" alt="Tickets ITSM"></td>
+<td><img src="images/installation-verification.png" alt="Vérification"></td>
+</tr>
+<tr>
+<td align="center"><em>Tickets ITSM : ticket de test ServiceNow</em></td>
+<td align="center"><em>Vérification finale de bout en bout</em></td>
+</tr>
 </table>
 
 ![Installation en cours](images/installation-progression.png)
@@ -90,7 +99,7 @@ Chaque étape est **idempotente** : relancer l'assistant (ou « Réessayer ») n
 | Dossiers | `C:\HeptagonesLM` avec `logs`, `reports` (et `data` en SQLite, `iis` en mode IIS) |
 | Copie de HeptagonesLM | `HeptagonesLM.exe` embarqué dans l'assistant copié dans le dossier |
 | Configuration | `heptagoneslm.yaml` généré et validé ; l'ancienne version est sauvegardée (`.bak`) |
-| Secrets | Mots de passe SQL / SMTP dans des variables d'environnement machine (`HEPTAGONESLM_DB_PASSWORD`, `HEPTAGONESLM_SMTP_PASSWORD`), jamais dans le fichier |
+| Secrets | Mots de passe SQL / SMTP dans des variables d'environnement machine (`HEPTAGONESLM_DB_PASSWORD`, `HEPTAGONESLM_SMTP_PASSWORD`) ; mot de passe ou jetons de l'outil ITSM chiffrés par Windows (DPAPI) dans `secrets\` (dossier réservé à SYSTEM, aux administrateurs et au compte de service), référencés par `dpapi:` ; jamais dans le fichier |
 | Droits | Compte de service : lecture sur le dossier, modification sur `logs`, `reports`, `data` |
 | Base | Création de la base (récupération SIMPLE), de la connexion Windows du compte de service, rôles `db_datareader` / `db_datawriter` |
 | Schéma | `HeptagonesLM.exe init-db` |
@@ -153,6 +162,7 @@ hors du fichier). Codes retour : **0** succès, **1** échec, **2** installé av
 | `tls_cert`, `tls_key`, `ldap_servers`, `base_dn`, `upn_suffix` | — | Mode `https` |
 | `open_firewall` | `true` | Règle de pare-feu |
 | `email_enabled`, `smtp_host`, `smtp_port`, `smtp_security`, `smtp_user`, `smtp_password`, `sender`, `recipients` | désactivé | Rapport par e-mail |
+| `itsm_enabled`, `itsm_type`, `itsm_url`, `itsm_user`, `itsm_password`, `itsm_app_token`, `itsm_project`, `itsm_issue_type`, `itsm_assignment_group`, `itsm_format`, `itsm_min_severity`, `itsm_ca_file` | désactivé, `servicenow`, …, `serious` | Tickets ITSM (`itsm_password` : mot de passe ServiceNow, jeton Jira ou jeton utilisateur GLPI ; `${VARIABLE}` conseillé) |
 | `auto_fix` | `false` | Installer automatiquement les rôles et modules IIS manquants |
 
 ## 6. Serveur sans accès Internet
@@ -173,6 +183,8 @@ téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté d
   variable d'environnement du seul processus enfant (jamais en ligne de commande), absents du
   journal et du rapport d'installation.
 - Compte SYSTEM refusé pour les tâches ; droits minimaux sur les dossiers et la base.
+- Secrets de l'outil ITSM chiffrés par Windows (DPAPI, portée machine) : un fichier copié sur un
+  autre serveur est indéchiffrable ; déchiffrés en mémoire au moment de l'appel seulement.
 - HeptagonesLM n'écoute que sur la boucle locale derrière IIS ; les en-têtes `X-Remote-User` et
   `X-Remote-Auth-Method` ne sont acceptés que du proxy local et sont toujours supprimés puis
   posés par le module IIS (une valeur envoyée par le navigateur est ignorée).

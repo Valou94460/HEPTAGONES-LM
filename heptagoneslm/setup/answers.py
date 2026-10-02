@@ -2,7 +2,8 @@
 
 Les mots de passe ne sont jamais écrits dans le fichier : ils sont stockés dans des
 variables d'environnement machine (``HEPTAGONESLM_DB_PASSWORD``, ``HEPTAGONESLM_SMTP_PASSWORD``)
-référencées par ``${VAR}``, ou servent une seule fois (compte de service des tâches).
+référencées par ``${VAR}``, chiffrés par Windows (DPAPI) dans ``secrets\\`` pour l'outil ITSM
+(référence ``dpapi:``), ou servent une seule fois (compte de service des tâches).
 """
 
 from __future__ import annotations
@@ -13,7 +14,8 @@ from pathlib import PureWindowsPath
 
 import yaml
 
-from heptagoneslm.config import ConfigError, parse_config
+from heptagoneslm import vault
+from heptagoneslm.config import ITSM_TYPES, SEVERITIES, WEBHOOK_FORMATS, ConfigError, parse_config
 
 DB_PASSWORD_VAR = "HEPTAGONESLM_DB_PASSWORD"
 SMTP_PASSWORD_VAR = "HEPTAGONESLM_SMTP_PASSWORD"
@@ -21,7 +23,9 @@ DEFAULT_DRIVER = "ODBC Driver 18 for SQL Server"
 
 WEB_MODES = ("iis", "https", "local")
 DB_MODES = ("sqlserver", "sqlite")
-SECRET_FIELDS = ("service_password", "db_password", "smtp_password")
+SECRET_FIELDS = ("service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token")
+# Secrets de l'outil ITSM chiffrés sur le disque : champ -> (paramètre du connecteur, fichier)
+ITSM_SECRETS = {"itsm_password": "itsm_password.dpapi", "itsm_app_token": "itsm_app_token.dpapi"}
 
 _ACCOUNT_RE = re.compile(r"^[\w.\- ]+\\[\w.\-$ ]+$")
 _DB_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -126,6 +130,19 @@ class Answers:
     sender: str = ""
     recipients: list[str] = field(default_factory=list)
     email_alerts: bool = True         # alertes immédiates (collecte, refus, saturation, échéances)
+    # Tickets ITSM (optionnel) : un connecteur, secrets chiffrés par DPAPI
+    itsm_enabled: bool = False
+    itsm_type: str = "servicenow"     # servicenow | jira | glpi | webhook
+    itsm_url: str = ""
+    itsm_user: str = ""               # ServiceNow : compte technique ; Jira Cloud : e-mail
+    itsm_password: str = ""           # ServiceNow : mot de passe ; Jira : jeton d'API / PAT ; GLPI : jeton utilisateur
+    itsm_app_token: str = ""          # GLPI : jeton d'application
+    itsm_project: str = ""            # Jira : clé du projet
+    itsm_issue_type: str = "Incident"  # Jira : type de ticket
+    itsm_assignment_group: str = ""   # ServiceNow : groupe d'affectation
+    itsm_format: str = "teams"        # webhook : teams | slack | json
+    itsm_min_severity: str = "serious"
+    itsm_ca_file: str = ""            # autorité de certification interne (fichier PEM), si besoin
     # Tâches planifiées
     collect_interval: int = 5
     # Mode silencieux : corriger automatiquement les prérequis manquants
@@ -220,8 +237,44 @@ class Answers:
             out[SMTP_PASSWORD_VAR] = self.smtp_password
         return out
 
+    @property
+    def secrets_dir(self) -> str:
+        return self.path("secrets")
+
+    def secret_files(self) -> dict[str, str]:
+        """Fichiers chiffrés (DPAPI) à écrire : chemin -> valeur en clair."""
+        if not self.itsm_enabled:
+            return {}
+        return {self.path("secrets", name): getattr(self, f) for f, name in ITSM_SECRETS.items() if getattr(self, f)}
+
+    def itsm_entry(self, clear: bool = False) -> dict:
+        """Connecteur ITSM de la configuration ; ``clear`` : secrets en clair (test depuis l'assistant)."""
+        def secret(f: str) -> str:
+            return getattr(self, f) if clear else vault.reference(self.path("secrets", ITSM_SECRETS[f]))
+
+        kind = self.itsm_type
+        entry: dict = {"name": kind, "type": kind, "url": self.itsm_url.rstrip("/")}
+        if kind == "servicenow":
+            entry.update(username=self.itsm_user, password=secret("itsm_password"))
+            if self.itsm_assignment_group:
+                entry["assignment_group"] = self.itsm_assignment_group
+            entry["caller"] = self.itsm_user
+        elif kind == "jira":
+            if self.itsm_user:
+                entry["username"] = self.itsm_user
+            entry.update(token=secret("itsm_password"), project=self.itsm_project.upper(),
+                         issue_type=self.itsm_issue_type or "Incident")
+        elif kind == "glpi":
+            entry.update(app_token=secret("itsm_app_token"), user_token=secret("itsm_password"))
+        else:
+            entry["format"] = self.itsm_format
+        entry["min_severity"] = self.itsm_min_severity
+        if self.itsm_ca_file:
+            entry["ca_file"] = self.itsm_ca_file.replace("\\", "/")
+        return entry
+
     # -------------------------------------------------------------- validation
-    STEPS = ("location", "database", "licenses", "web", "email")
+    STEPS = ("location", "database", "licenses", "web", "email", "itsm")
 
     def validate(self, step: str | None = None) -> list[dict]:
         """Erreurs de saisie : [{field, message}] (toutes, ou celles d'une étape)."""
@@ -325,6 +378,33 @@ class Answers:
                 err("sender", "Adresse d'expéditeur attendue")
             if not self.recipients or not all(_EMAIL_RE.match(r) for r in self.recipients):
                 err("recipients", "Au moins une adresse de destinataire valide")
+        if want("itsm") and self.itsm_enabled:
+            kind = self.itsm_type
+            if kind not in ITSM_TYPES:
+                err("itsm_type", "Outil inconnu")
+            if not re.match(r"^https://[\w.\-]+(:\d{1,5})?(/\S*)?$", self.itsm_url or ""):
+                err("itsm_url", "Adresse https:// attendue (http:// refusé : identifiants en clair)")
+            elif kind == "glpi" and not self.itsm_url.rstrip("/").endswith("/apirest.php"):
+                err("itsm_url", "Adresse de l'API REST attendue, terminée par /apirest.php")
+            if kind == "servicenow":
+                if not self.itsm_user:
+                    err("itsm_user", "Compte technique requis")
+                if not self.itsm_password:
+                    err("itsm_password", "Mot de passe du compte technique requis")
+            elif kind == "jira":
+                if not re.match(r"^[A-Za-z][A-Za-z0-9_]{0,19}$", self.itsm_project or ""):
+                    err("itsm_project", "Clé du projet Jira attendue (ex. LIC)")
+                if not self.itsm_password:
+                    err("itsm_password", "Jeton d'API (Cloud) ou jeton personnel (Data Center) requis")
+            elif kind == "glpi":
+                if not self.itsm_app_token:
+                    err("itsm_app_token", "Jeton d'application requis")
+                if not self.itsm_password:
+                    err("itsm_password", "Jeton d'API de l'utilisateur technique requis")
+            elif kind == "webhook" and self.itsm_format not in WEBHOOK_FORMATS:
+                err("itsm_format", "Format inconnu")
+            if self.itsm_min_severity not in SEVERITIES:
+                err("itsm_min_severity", "Gravité inconnue")
         return errors
 
     # ------------------------------------------------------------ configuration
@@ -372,8 +452,13 @@ class Answers:
                 email["username"] = self.smtp_user
                 email["password"] = f"${{{SMTP_PASSWORD_VAR}}}"
             cfg["email"] = email
-            if self.email_alerts:
-                cfg["alerts"] = {"recipients": list(self.recipients)}
+        alerts: dict = {}
+        if self.email_enabled and self.email_alerts:
+            alerts["recipients"] = list(self.recipients)
+        if self.itsm_enabled:
+            alerts["itsm"] = [self.itsm_entry()]
+        if alerts:
+            cfg["alerts"] = alerts
         return cfg
 
     def yaml_text(self, generated_at: str = "") -> str:
@@ -381,7 +466,8 @@ class Answers:
                   + (f" le {generated_at}" if generated_at else "") + "\n"
                   "# Référence de tous les paramètres : heptagoneslm.example.yaml / dossier d'exploitation (DEX).\n"
                   "# Après modification des règles « products » : HeptagonesLM.exe apply-products\n"
-                  "# Les mots de passe sont dans des variables d'environnement machine (${VAR}).\n\n")
+                  "# Les mots de passe sont dans des variables d'environnement machine (${VAR}) ou chiffrés\n"
+                  "# par Windows (DPAPI) dans le dossier secrets (dpapi:) : jamais dans ce fichier.\n\n")
         body = yaml.safe_dump(self.config_dict(), allow_unicode=True, sort_keys=False, default_flow_style=False,
                               width=120)
         body = body.replace("products: []\n", "products: []   # règles feature -> produit (voir heptagoneslm.example.yaml)\n")

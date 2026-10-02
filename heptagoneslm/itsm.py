@@ -27,10 +27,10 @@ import logging
 import ssl
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 
-from heptagoneslm import __version__
+from heptagoneslm import __version__, vault
 from heptagoneslm.config import SEVERITIES, AppConfig, ItsmConfig
 from heptagoneslm.storage.db import Database
 
@@ -312,8 +312,17 @@ class Webhook(Connector):
 CONNECTORS = {"servicenow": ServiceNow, "jira": Jira, "glpi": Glpi, "webhook": Webhook}
 
 
+SECRET_FIELDS = ("password", "token", "app_token", "user_token")
+
+
 def make_connector(cfg: ItsmConfig, config: AppConfig) -> Connector:
-    return CONNECTORS[cfg.type](cfg, config)
+    """Connecteur prêt à l'emploi : secrets ``dpapi:`` déchiffrés en mémoire, le temps des appels."""
+    try:
+        clear = {n: vault.resolve(getattr(cfg, n)) for n in SECRET_FIELDS if vault.is_reference(getattr(cfg, n))}
+        headers = {k: vault.resolve(v) for k, v in cfg.headers.items()}
+    except vault.SecretError as exc:
+        raise ItsmError(f"{cfg.name} : {exc}") from None
+    return CONNECTORS[cfg.type](replace(cfg, headers=headers, **clear), config)
 
 
 # ---------------------------------------------------------------------------
@@ -358,7 +367,11 @@ def sync(config: AppConfig, db: Database, now: datetime, current: list, sent: li
     repeat = timedelta(hours=rules.repeat_hours)
 
     for cfg in rules.itsm:
-        conn = make_connector(cfg, config)
+        try:
+            conn = make_connector(cfg, config)
+        except ItsmError as exc:
+            result.errors.append(str(exc))
+            continue
         name = cfg.name.lower()
         try:
             for alert in candidates:
@@ -420,7 +433,8 @@ def check_connector(cfg: ItsmConfig, config: AppConfig, resolve: bool = True) ->
 
     now = datetime.now().replace(microsecond=0)
     alert = Alert(f"test:{now:%Y%m%d%H%M%S}", "collection", "info", "Test de connexion HeptagonesLM",
-                  "Ticket de test créé par « heptagoneslm test-itsm » : il peut être ignoré.")
+                  "Ticket de test créé par HeptagonesLM (assistant d'installation ou commande test-itsm) : "
+                  "il peut être ignoré.")
     conn = make_connector(cfg, config)
     steps = []
     try:

@@ -3,7 +3,8 @@
  *   HeptagonesLM-Setup.exe setup --no-open --port 8792 --token <jeton>     (sans --simulate)
  *   node tests/ui/setup_real.cjs http://127.0.0.1:8792 <jeton> <dossier>
  * Variables : SVC_ACCOUNT, SVC_PWD, CERT_THUMB, ACCESS_GROUP, PUBLIC_HOST ;
- *   facultatives : LICENSE_SERVERS (« NOM=port@serveur;… »), EXPECT_LMUTIL (chemin attendu de lmutil.exe).
+ *   facultatives : LICENSE_SERVERS (« NOM=port@serveur;… »), EXPECT_LMUTIL (chemin attendu de lmutil.exe),
+ *   ITSM_URL / ITSM_USER / ITSM_PASSWORD (ServiceNow : étape « Tickets ITSM » et ticket de test réel).
  * Le navigateur remplit l'assistant comme un administrateur : corrections des prérequis (rôles IIS,
  * modules), compte de service, SQLite, recherche de lmutil, IIS, installation, vérification finale.
  * Produit : vidéo (.webm), une capture par étape et le déroulé horodaté (deroule.txt).
@@ -150,12 +151,29 @@ const path = require("path");
     await next("Rapport par e-mail");
     await shot("email");
 
-    // 8. Récapitulatif
+    // 8. Tickets ITSM : ServiceNow, ticket de test réel, secret chiffré par DPAPI à l'installation
+    await next("Tickets ITSM");
+    if (process.env.ITSM_URL) {
+      await page.check('[data-bind="itsm_enabled"]');
+      await page.click('[data-choice="itsm_type"][data-value="servicenow"]');
+      await page.fill('[data-bind="itsm_url"]', env("ITSM_URL"));
+      await page.fill('[data-bind="itsm_user"]', env("ITSM_USER"));
+      await page.fill('[data-bind="itsm_password"]', env("ITSM_PASSWORD"));
+      await page.fill('[data-bind="itsm_assignment_group"]', "Support licences");
+      await test("itsm");
+    }
+    await shot("tickets_itsm");
+
+    // 9. Récapitulatif
     await next("Récapitulatif");
     await page.waitForSelector("pre.yaml", { state: "attached", timeout: 60000 });
     await page.waitForFunction(() => !document.getElementById("next").disabled, null, { timeout: 120000 })
       .catch(async () => check(false, `bouton Installer désactivé : ${await page.textContent("#step-body")}`));
     await page.click("details summary");
+    if (process.env.ITSM_URL) {
+      check(!(await page.content()).includes(env("ITSM_PASSWORD")), "mot de passe ITSM en clair dans le récapitulatif");
+      check((await page.textContent("pre.yaml")).includes("dpapi:"), "secret ITSM non référencé en dpapi: dans le YAML");
+    }
     await shot("recapitulatif");
 
     // 9. Installation réelle
