@@ -68,17 +68,17 @@ et mode silencieux : IIS, connexion Windows, tâches planifiées, collecte par l
 | Multi-sites | Site par poste (règles sur le nom ou import CSV) et par serveur ; filtre et répartition par site. | 1 j |
 | Licences inutilisées | Vue dédiée : features sans aucun usage sur la période, coût associé. | ½ j |
 
-### 26.3.1 — Recette sur le site client (prochaine version, ~3 j)
+### 26.3.1 — Recette sur le site client (prochaine version, développée)
 
 Version de validation avant production, sans nouvelle fonction de suivi.
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
-| Étape « Recette » dans l'assistant | Sur le serveur installé : `lmstat` / `rlmstat` lancé en direct sur chaque vrai serveur de licences et comparé à ce que HeptagonesLM a enregistré (features, jetons, utilisateurs), écarts signalés ; collecte planifiée sans erreur depuis N heures ; connexion Windows depuis un poste, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test. | 2 j |
-| PV de recette | Document (PDF ou Word) horodaté : chaque point vert / orange / rouge, à signer pour le passage en production. | ½ j |
-| Sorties réelles en tests de non-régression | Sorties brutes des serveurs du client (anonymisables) enregistrées par la recette et rejouées par les tests automatiques. | ½ j |
+| Étape « Recette » dans l'assistant ✅ | Sur le serveur installé : `lmstat` / `rlmstat` lancé en direct sur chaque vrai serveur de licences et comparé à ce que HeptagonesLM a enregistré (features, jetons, utilisateurs), écarts signalés ; collecte planifiée sans erreur depuis N heures ; connexion Windows depuis un poste, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test. | 2 j |
+| PV de recette ✅ | Document Word horodaté : chaque point vert / orange / rouge, à signer pour le passage en production. | ½ j |
+| Sorties réelles en tests de non-régression ✅ | Sorties brutes des serveurs du client (anonymisables) enregistrées par la recette et rejouées par les tests automatiques. | ½ j |
 | Étape « Tickets ITSM » dans l'assistant ✅ | Activation au choix, ServiceNow / Jira / GLPI / Teams-Slack, bouton « Ouvrir un ticket de test », mot de passe ou jetons chiffrés par Windows (DPAPI) dans `secrets\` (fait, branche de développement). | 1 j |
-| Vérification du serveur plus rapide | L'étape « Vérification du serveur » de l'assistant prend plus de 2 minutes sur un Windows Server réel : contrôles regroupés et progression affichée. | ½ j |
+| Vérification du serveur plus rapide ✅ | L'étape « Vérification du serveur » prenait plus de 2 minutes sur un Windows Server neuf : lectures en parallèle, IIS absent détecté immédiatement, progression affichée. | ½ j |
 
 ### 26.4.0 — Analytics et achats (cible : fin novembre 2026, ~8 j)
 

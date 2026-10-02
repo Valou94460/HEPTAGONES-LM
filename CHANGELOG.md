@@ -6,6 +6,15 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Recette sur le site client** (étape 12 de l'assistant, ou depuis l'accueil quand HeptagonesLM est déjà
+  installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé feature par feature à la
+  base (lecture indépendante de la sortie brute), collecte planifiée sur N heures, vérification de bout en
+  bout, connexion depuis les postes, refus d'un compte hors du groupe, e-mail, ticket ITSM et rapport Excel de
+  test confirmés par l'opérateur. **PV de recette** Word à signer et archive des preuves.
+- Sorties réelles des serveurs de licences (anonymisables) enregistrées par la recette et rejouées par les
+  tests de non-régression (`tests/fixtures/reel`).
+- **Vérification du serveur accélérée** : lectures en parallèle, IIS absent détecté sans `Get-WindowsFeature`,
+  progression affichée.
 - **Assistant d'installation : étape « Tickets ITSM »** (désactivée par défaut) : ServiceNow, Jira,
   GLPI ou Teams / Slack, gravité minimale, autorité de certification interne facultative ; bouton
   « Ouvrir un ticket de test » qui ouvre, commente puis résout un vrai ticket avec les identifiants
