@@ -11,6 +11,7 @@
 # les jobs Windows lourds (exécutable signé, installations réelles, parcours filmé) ne tournent
 # que sur main, les pull requests, un lancement manuel (« Run workflow ») ou un commit dont le
 # message contient [ci complet]. Les autres pushs lancent les tests rapides.
+# Le parcours filmé de l'assistant ne tourne que sur demande : « Run workflow » avec « filmer » coché.
 
 name: CI
 
@@ -22,6 +23,10 @@ on:
       days:
         description: "Nombre de jours d'historique simulé"
         default: "30"
+      filmer:
+        description: "Lancer aussi l'installation réelle filmée (assistant graphique, ~30 min Windows)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -369,9 +374,7 @@ jobs:
     # navigateur et filmée : vidéo, captures et déroulé horodaté publiés dans « installation-reelle ».
     name: Installation réelle filmée (assistant graphique)
     needs: exe
-    if: >-
-      github.event_name != 'push' || github.ref == 'refs/heads/main' ||
-      contains(github.event.head_commit.message, '[ci complet]')
+    if: github.event_name == 'workflow_dispatch' && inputs.filmer
     runs-on: windows-latest
     timeout-minutes: 75
     defaults:
