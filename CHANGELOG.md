@@ -6,6 +6,11 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Icône HeptagonesLM sur le bureau** (et dans le menu Démarrer) en fin d'installation ou de mise à jour :
+  ouvre le tableau de bord.
+- **Relance automatique de l'interface web** : tâche « Surveillance de l'interface » (toutes les 5 minutes,
+  sous SYSTEM) qui relance l'interface si elle ne tourne pas, par exemple après un redémarrage du serveur où
+  le domaine ou la base n'étaient pas encore prêts. Les tâches tournent aussi sur batterie.
 - **Mise à jour en place** : l'assistant reconnaît l'installation existante et sa version ; « Mettre à jour »
   sauvegarde (configuration, réponses, web.config, base SQLite), remplace l'exécutable, met à jour le schéma,
   redémarre l'interface, lance une collecte de contrôle puis la vérification — sans rien ressaisir

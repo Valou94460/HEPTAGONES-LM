@@ -86,6 +86,7 @@ class TaskSpec:
     at: str = "06:00"               # daily / weekly
     description: str = ""
     permanent: bool = False         # interface web : pas de limite de durée, relance auto
+    system: bool = False            # exécutée sous SYSTEM (aucun mot de passe : surveillance de l'interface)
 
 
 class System:
@@ -165,6 +166,7 @@ class System:
     def stop_heptagoneslm(self, exe_path: str) -> int: raise NotImplementedError
     def configure_iis_site(self, a: Answers, physical_path: str) -> dict: raise NotImplementedError
     def firewall_rule(self, name: str, port: int) -> None: raise NotImplementedError
+    def shortcut_dirs(self) -> list[str]: raise NotImplementedError       # bureau public, menu Démarrer (tous)
 
     # -- réseau / base -------------------------------------------------------------------
     def port_free(self, port: int) -> bool:
@@ -599,13 +601,15 @@ catch {{
             trigger = f"New-ScheduledTaskTrigger -Weekly -DaysOfWeek Sunday -At {ps_quote(spec.at)}"
         else:
             trigger = "New-ScheduledTaskTrigger -AtStartup"
+        # Serveur sur batterie (portable, certaines VM) : par défaut Windows ne lance pas la tâche
+        common = "New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
         if spec.permanent:
-            settings = ("New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew "
-                        "-ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)")
+            settings = common + "-ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 999 -RestartInterval (New-TimeSpan -Minutes 1)"
         else:
-            settings = ("New-ScheduledTaskSettingsSet -StartWhenAvailable -MultipleInstances IgnoreNew "
-                        "-ExecutionTimeLimit (New-TimeSpan -Minutes 30)")
-        if account.endswith("$"):
+            settings = common + "-ExecutionTimeLimit (New-TimeSpan -Minutes 30)"
+        if spec.system:
+            who = "-Principal (New-ScheduledTaskPrincipal -UserId 'SYSTEM' -LogonType ServiceAccount -RunLevel Highest)"
+        elif account.endswith("$"):
             who = f"-Principal (New-ScheduledTaskPrincipal -UserId {ps_quote(account)} -LogonType Password)"
         else:
             who = f"-User {ps_quote(account)} -Password $env:{SECRET_ENV}"
@@ -617,6 +621,10 @@ Register-ScheduledTask -TaskName {ps_quote(spec.name)} -TaskPath {ps_quote(TASK_
         r = self.ps(script, secret=password)
         if not r.ok:
             raise SetupError(f"Tâche « {spec.name} » : {r.message}")
+
+    def shortcut_dirs(self) -> list[str]:
+        return [os.path.join(os.environ.get("PUBLIC", r"C:\Users\Public"), "Desktop"),
+                os.path.join(os.environ.get("ProgramData", r"C:\ProgramData"), "Microsoft", "Windows", "Start Menu", "Programs")]
 
     def grant_batch_logon(self, account: str) -> bool:
         """Droit « Ouvrir une session en tant que tâche » (SeBatchLogonRight), requis pour les tâches planifiées.
@@ -1026,10 +1034,14 @@ class SimulatedSystem(System):
 
     def register_task(self, spec: TaskSpec, account: str, password: str) -> None:
         self._step(f"register_task:{spec.name}", 0.6)
-        if not account.endswith("$") and not password:
+        if not spec.system and not account.endswith("$") and not password:
             raise SetupError("Mot de passe du compte de service requis")
         self.tasks[spec.name] = {"exists": True, "state": "Ready", "last_result": 267011, "last_run": None,
-                                 "next_run": None, "user": account, "spec": spec.arguments}
+                                 "next_run": None, "user": "SYSTEM" if spec.system else account,
+                                 "spec": spec.arguments}
+
+    def shortcut_dirs(self) -> list[str]:
+        return [r"C:\Users\Public\Desktop", r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs"]
 
     def grant_batch_logon(self, account: str) -> bool:
         self._step("grant_batch_logon", 0.3)

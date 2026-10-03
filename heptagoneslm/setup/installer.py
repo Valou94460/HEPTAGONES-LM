@@ -21,9 +21,11 @@ import yaml
 from heptagoneslm import __version__
 from heptagoneslm.setup import iis
 from heptagoneslm.setup.answers import SECRET_FIELDS, Answers
-from heptagoneslm.setup.system import SetupError, System, TaskSpec
+from heptagoneslm.setup.system import TASK_FOLDER, SetupError, System, TaskSpec
 
 WEB_TASK = "HeptagonesLM - Interface web"
+WATCHDOG_TASK = "HeptagonesLM - Surveillance de l'interface"
+SHORTCUT_NAME = "HeptagonesLM.url"
 ANSWERS_FILE = "setup-reponses.json"      # réponses de l'assistant sans les secrets (recette, mise à jour)
 
 
@@ -312,7 +314,22 @@ def _tasks(ctx: Context) -> list[TaskSpec]:
             "Rapports mensuels par e-mail (une fois par période)", at="07:00")
     add("HeptagonesLM - Purge", ["purge"], "weekly", "Purge selon la politique de rétention", at="03:00")
     add(WEB_TASK, ["web"], "startup", "Interface web HeptagonesLM", permanent=True)
+    specs.append(watchdog_spec(a))
     return specs
+
+
+def watchdog_spec(a: Answers) -> TaskSpec:
+    """Relance l'interface web si elle ne tourne pas : démarrage du serveur raté (domaine pas encore joignable,
+    base pas prête), arrêt après les relances automatiques. Sous SYSTEM : aucun mot de passe, donc aussi
+    ajoutée par la mise à jour en place. Une tâche désactivée volontairement n'est pas relancée."""
+    folder = TASK_FOLDER.replace("'", "''")
+    web = WEB_TASK.replace("'", "''")
+    command = (f"$t = Get-ScheduledTask -TaskPath '{folder}' -TaskName '{web}' -ErrorAction SilentlyContinue; "
+               "if ($t -and $t.State -ne 'Running' -and $t.State -ne 'Disabled') { Start-ScheduledTask -InputObject $t }")
+    return TaskSpec(name=WATCHDOG_TASK, execute="powershell.exe",
+                    arguments=f'-NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "{command}"',
+                    workdir=a.install_dir, trigger="repeat", minutes=5, system=True,
+                    description="Relance l'interface web HeptagonesLM si elle est arrêtée")
 
 
 def schedule_label(spec: TaskSpec) -> str:
@@ -365,6 +382,33 @@ def step_start(ctx: Context) -> str:
     raise SetupError("L'interface ne répond pas : consulter logs\\heptagoneslm.log (certificat, port déjà utilisé ?)")
 
 
+def step_watchdog(ctx: Context) -> str:
+    spec = watchdog_spec(ctx.a)
+    ctx.system.register_task(spec, ctx.a.service_account, "")
+    ctx.log(f"Tâche « {spec.name} » enregistrée ({schedule_label(spec)}, compte SYSTEM)")
+    return "Interface relancée automatiquement si elle s'arrête"
+
+
+def shortcut_text(a: Answers) -> str | None:
+    url = a.public_url
+    if not url:
+        return None
+    return (f"[InternetShortcut]\r\nURL={url}/\r\nIconFile={a.path('HeptagonesLM.exe')}\r\nIconIndex=0\r\n")
+
+
+def step_shortcut(ctx: Context) -> str:
+    """Icône « HeptagonesLM » sur le bureau de tous les utilisateurs et dans le menu Démarrer : ouvre le tableau de bord."""
+    text = shortcut_text(ctx.a)
+    if not text:
+        ctx.log("Adresse publique inconnue : raccourci non créé")
+        return "Raccourci non créé (adresse inconnue)"
+    for folder in ctx.system.shortcut_dirs():
+        path = str(PureWindowsPath(folder, SHORTCUT_NAME))
+        ctx.system.write_text(path, text)
+        ctx.log(f"Raccourci {path} → {ctx.a.public_url}")
+    return "Icône HeptagonesLM sur le bureau"
+
+
 def build_plan(a: Answers) -> list[Step]:
     steps = [
         Step("prepare", "Préparation des dossiers", 1, step_prepare),
@@ -386,6 +430,7 @@ def build_plan(a: Answers) -> list[Step]:
     if a.open_firewall and a.web_mode != "local":
         steps.append(Step("firewall", "Pare-feu Windows", 1, step_firewall))
     steps.append(Step("start", "Démarrage de l'interface web", 2, step_start))
+    steps.append(Step("shortcut", "Raccourci sur le bureau", 1, step_shortcut))
     return steps
 
 
@@ -395,8 +440,10 @@ def build_update_plan(a: Answers) -> list[Step]:
         Step("backup", "Sauvegarde", 1, step_backup),
         Step("binaries", "Remplacement de HeptagonesLM", 2, step_binaries),
         Step("schema", "Mise à jour du schéma", 2, step_schema),
+        Step("watchdog", "Relance automatique de l'interface", 1, step_watchdog),
         Step("start", "Redémarrage de l'interface web", 2, step_start),
         Step("collect", "Collecte de contrôle", 2, step_collect),
+        Step("shortcut", "Raccourci sur le bureau", 1, step_shortcut),
     ]
 
 

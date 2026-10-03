@@ -116,9 +116,10 @@ Chaque étape est **idempotente** : relancer l'assistant (ou « Réessayer ») n
 | Schéma | `HeptagonesLM.exe init-db` |
 | Première collecte | `HeptagonesLM.exe collect` : chaque serveur de licences est interrogé |
 | IIS | Rôles et modules manquants, pool .NET v4.0 (pipeline intégré), site HTTPS (liaison SNI + certificat), authentification Windows seule, proxy ARR, module `HeptagonesLMUserHeader` (en-tête `X-Remote-User` posé après l'authentification), autorisation du groupe, `web.config` de relais vers HeptagonesLM (écoute locale) |
-| Tâches | Collecte, rapport mensuel, envoi des e-mails, purge, interface web permanente, sous le compte de service |
+| Tâches | Collecte, rapport mensuel, envoi des e-mails, purge, interface web permanente (lancée au démarrage du serveur), sous le compte de service ; **surveillance de l'interface** toutes les 5 minutes sous SYSTEM : relance l'interface si elle ne tourne pas (démarrage raté parce que le domaine ou la base n'étaient pas encore prêts, par exemple). Toutes les tâches tournent aussi sur batterie |
 | Pare-feu | Règle entrante sur le port HTTPS (profils Domaine et Privé) |
 | Démarrage | Lancement de l'interface et attente de sa réponse |
+| Raccourci | Icône **HeptagonesLM** sur le bureau de tous les utilisateurs et dans le menu Démarrer : ouvre le tableau de bord (adresse publique) |
 
 La vérification finale contrôle : exécutable et configuration, schéma de la base, dernière
 collecte de chaque serveur, présence et état des tâches, réponse de HeptagonesLM, site IIS démarré
@@ -186,8 +187,10 @@ l'assistant reconnaît l'installation et sa version. Le bouton **« Mettre à jo
    par ajouts) ;
 2. remplace `HeptagonesLM.exe` (HeptagonesLM en cours d'exécution est arrêté puis relancé) ;
 3. met à jour le schéma de la base (`init-db`) ;
-4. redémarre l'interface web et lance une collecte de contrôle ;
-5. enchaîne sur la vérification de bout en bout, puis propose la recette.
+4. ajoute la surveillance de l'interface (relance automatique, sous SYSTEM), redémarre l'interface web et
+   lance une collecte de contrôle ;
+5. crée l'icône **HeptagonesLM** sur le bureau ;
+6. enchaîne sur la vérification de bout en bout, puis propose la recette.
 
 **Rien n'est ressaisi** : configuration, réglages personnalisés, mots de passe (variables d'environnement
 machine, secrets DPAPI), tâches planifiées, site IIS et droits restent tels quels. La version installée est
@@ -270,5 +273,6 @@ l'installation pour diagnostiquer le poste d'un utilisateur.
 | Serveur de licences injoignable au test | Vérifier `port@serveur`, le pare-feu (port lmgrd **et** port du démon éditeur) |
 | Échec à l'étape « Tâches planifiées » | Mot de passe du compte de service ; pour un gMSA : `Install-ADServiceAccount` sur le serveur |
 | Vérification : « IIS ne joint pas HeptagonesLM (502) » | La tâche « HeptagonesLM - Interface web » est arrêtée : consulter `C:\HeptagonesLM\logs\heptagoneslm.log` |
+| Tableau de bord injoignable après un redémarrage du serveur | La surveillance relance l'interface dans les 5 minutes. Sinon : `Get-ScheduledTask -TaskPath '\HeptagonesLM\' \| Get-ScheduledTaskInfo \| Format-Table TaskName, LastRunTime, LastTaskResult` et `C:\HeptagonesLM\logs\heptagoneslm.log` (installation antérieure à 26.3.2 : lancer la mise à jour) |
 | Navigateur : avertissement de certificat | Le certificat ne couvre pas le nom DNS choisi (test « Vérifier le certificat ») |
 | Connexion Windows qui redemande un mot de passe | Faire ouvrir `https://heptagoneslm.entreprise.local/acces` depuis le poste concerné, puis suivre les contrôles *SPN Kerberos* et *Zone Intranet local* de la vérification finale (§ 8) |

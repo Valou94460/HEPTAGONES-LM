@@ -81,7 +81,8 @@ class MergeTest(unittest.TestCase):
 class UpdateTest(unittest.TestCase):
     def test_update_plan_needs_no_password(self):
         a = answers(service_password="", db_password="")
-        self.assertEqual([st.id for st in build_update_plan(a)], ["backup", "binaries", "schema", "start", "collect"])
+        self.assertEqual([st.id for st in build_update_plan(a)],
+                         ["backup", "binaries", "schema", "watchdog", "start", "collect", "shortcut"])
 
     def test_update_keeps_configuration_and_records_version(self):
         s, a = ready_system(), answers()
@@ -99,7 +100,8 @@ class UpdateTest(unittest.TestCase):
         app.installer.wait(30)
         st = app.installer.state()
         self.assertEqual(st["status"], "done", st["error"])
-        self.assertEqual([x["id"] for x in st["steps"]], ["backup", "binaries", "schema", "start", "collect"])
+        self.assertEqual([x["id"] for x in st["steps"]],
+                         ["backup", "binaries", "schema", "watchdog", "start", "collect", "shortcut"])
         self.assertEqual(s.read_text(a.config_path), before)                 # configuration intacte
         self.assertEqual(json.loads(s.read_text(a.path(ANSWERS_FILE)))["_version"], __version__)
         backups = [p.name for p in s._real(a.path("backup")).rglob("*")]
@@ -107,7 +109,9 @@ class UpdateTest(unittest.TestCase):
         self.assertIn(ANSWERS_FILE, backups)
         self.assertIn("Mise à jour terminée", app.installer.report_text())
         update_calls = " ".join(s.calls[calls_before:])
-        self.assertNotIn("register_task", update_calls)                     # tâches, site IIS, droits : inchangés
+        registered = [c for c in s.calls[calls_before:] if c.startswith("register_task:")]
+        self.assertEqual(registered, ["register_task:HeptagonesLM - Surveillance de l'interface"])  # sous SYSTEM
+        self.assertTrue(s.exists(r"C:\Users\Public\Desktop\HeptagonesLM.url"))
         self.assertNotIn("configure_iis_site", update_calls)
         self.assertEqual(app.installed_version(a.config_path), __version__)
 
@@ -127,6 +131,36 @@ class UpdateTest(unittest.TestCase):
         install(s, a)
         s.write_text(a.path(ANSWERS_FILE), "")
         self.assertEqual(SetupApp(s, token="t").installed_version(a.config_path), "antérieure à 26.3.1")
+
+
+
+class RestartTest(unittest.TestCase):
+    """Après un redémarrage du serveur : interface relancée, tâches lancées même sur batterie."""
+
+    def _scripts(self, spec):
+        from heptagoneslm.setup.system import Result, WindowsSystem
+
+        seen = {}
+        w = WindowsSystem.__new__(WindowsSystem)
+        w.ps = lambda script, **kw: seen.update(script=script, **kw) or Result(0, "", "")
+        w.register_task(spec, "ENTREPRISE\\svc_heptagoneslm", "")
+        return seen
+
+    def test_watchdog_runs_as_system_without_password(self):
+        from heptagoneslm.setup.installer import watchdog_spec
+
+        seen = self._scripts(watchdog_spec(answers()))
+        self.assertIn("-UserId 'SYSTEM' -LogonType ServiceAccount", seen["script"])
+        self.assertNotIn("-Password", seen["script"])
+        self.assertIn("-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries", seen["script"])
+        self.assertIn("Start-ScheduledTask", seen["script"])
+        self.assertIn("-ne ''Disabled''", seen["script"])            # tâche désactivée à la main : laissée telle quelle
+
+    def test_shortcut_without_public_address(self):
+        from heptagoneslm.setup.installer import shortcut_text
+
+        self.assertIsNone(shortcut_text(answers(web_mode="iis", public_host="")))
+        self.assertIn("URL=http://localhost:8765/", shortcut_text(answers(web_mode="local")))
 
 
 if __name__ == "__main__":

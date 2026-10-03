@@ -319,6 +319,30 @@ jobs:
       - name: Contrôles après installation
         run: ./tests/windows/post_install_checks.ps1
 
+      - name: Icône sur le bureau et relance automatique de l'interface (après redémarrage)
+        run: |
+          foreach ($f in "$env:PUBLIC\Desktop\HeptagonesLM.url", "$env:ProgramData\Microsoft\Windows\Start Menu\Programs\HeptagonesLM.url") {
+            if (-not (Test-Path $f)) { throw "raccourci absent : $f" }
+            Write-Host "$f :"; Get-Content $f
+          }
+          if (-not (Select-String -Path "$env:PUBLIC\Desktop\HeptagonesLM.url" -Pattern "URL=https://heptagoneslm.ci.local" -Quiet)) { throw "adresse du raccourci" }
+          $web = Get-ScheduledTask -TaskPath '\HeptagonesLM\' -TaskName 'HeptagonesLM - Interface web'
+          $dog = Get-ScheduledTask -TaskPath '\HeptagonesLM\' -TaskName "HeptagonesLM - Surveillance de l'interface"
+          if ($dog.Principal.UserId -notmatch 'SYSTEM') { throw "surveillance : compte $($dog.Principal.UserId)" }
+          if ($web.Settings.DisallowStartIfOnBatteries) { throw "interface web non lancée sur batterie" }
+          # Interface arrêtée (comme après un démarrage raté) : la surveillance la relance
+          Stop-ScheduledTask -InputObject $web; Get-Process HeptagonesLM -ErrorAction SilentlyContinue | Stop-Process -Force
+          Start-Sleep -Seconds 3
+          Start-ScheduledTask -InputObject $dog
+          $ok = $false
+          for ($i = 0; $i -lt 60 -and -not $ok; $i++) {
+            Start-Sleep -Seconds 2
+            $code = curl.exe -s -o NUL -w "%{http_code}" http://127.0.0.1:8765/favicon.svg   # IIS : HeptagonesLM écoute en HTTP local
+            $ok = $code -eq "200"
+          }
+          Write-Host "Interface web : $((Get-ScheduledTask -TaskPath '\HeptagonesLM\' -TaskName 'HeptagonesLM - Interface web').State)"
+          if (-not $ok) { throw "interface non relancée par la tâche de surveillance" }
+
       - name: Relance de l'installation (idempotence)
         run: |
           # Réglage ajouté à la main par l'exploitant : doit survivre à la réinstallation
