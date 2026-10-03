@@ -6,6 +6,11 @@
 #
 # Les rapports Excel générés sont téléchargeables dans l'onglet « Actions »
 # du dépôt, section « Artifacts » de chaque exécution.
+#
+# Économie de minutes (dépôt privé : quota mensuel, minutes Windows comptées double) :
+# les jobs Windows lourds (exécutable signé, installations réelles, parcours filmé) ne tournent
+# que sur main, les pull requests, un lancement manuel (« Run workflow ») ou un commit dont le
+# message contient [ci complet]. Les autres pushs lancent les tests rapides.
 
 name: CI
 
@@ -21,6 +26,10 @@ on:
 permissions:
   contents: read
 
+concurrency:                      # un nouveau push annule l'exécution en cours de la même branche
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 defaults:
   run:
     shell: bash
@@ -34,6 +43,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest]
         python: ["3.10", "3.12"]
+        exclude:                  # Windows : la version la plus récente suffit (3.10 couverte sous Linux)
+          - os: windows-latest
+            python: "3.10"
     steps:
       - uses: actions/checkout@v4
 
@@ -168,6 +180,9 @@ jobs:
   exe:
     name: Exécutable Windows (HeptagonesLM.exe)
     runs-on: windows-latest
+    if: >-
+      github.event_name != 'push' || github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, '[ci complet]')
     steps:
       - uses: actions/checkout@v4
 
@@ -243,6 +258,9 @@ jobs:
   setup-windows:
     name: Installation réelle sur Windows Server (assistant)
     needs: exe
+    if: >-
+      github.event_name != 'push' || github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, '[ci complet]')
     runs-on: windows-latest
     timeout-minutes: 45
     defaults:
@@ -351,6 +369,9 @@ jobs:
     # navigateur et filmée : vidéo, captures et déroulé horodaté publiés dans « installation-reelle ».
     name: Installation réelle filmée (assistant graphique)
     needs: exe
+    if: >-
+      github.event_name != 'push' || github.ref == 'refs/heads/main' ||
+      contains(github.event.head_commit.message, '[ci complet]')
     runs-on: windows-latest
     timeout-minutes: 75
     defaults:
