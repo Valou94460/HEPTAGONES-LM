@@ -182,6 +182,28 @@ class SetupApp:
             self.installer.start()
         return {"started": True, "install_dir": installed.install_dir}
 
+    def start_admins_config(self, form: Answers, config_path: str | None = None) -> dict:
+        """Groupe AD des administrateurs de l'interface, sur l'installation existante."""
+        path = config_path or self.installed_config()
+        if not path:
+            raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur")
+        with self.lock:
+            if self.installer and self.installer.status == "running":
+                raise SetupError("Une installation est déjà en cours")
+            installed = recette.load_installed(self.system, path)
+            a = installed.answers
+            if a.web_mode == "local":
+                raise SetupError("Interface en mode poste local : pas d'administrateurs à déclarer")
+            a.admin_group = (form.admin_group or "").strip()
+            errors = [e for e in a.validate("web") if e["field"] == "admin_group"]
+            if errors:
+                raise SetupError(errors[0]["message"])
+            self.answers = a
+            self.installer = Installer(self.system, a, mode="admins")
+            self.verification = None
+            self.installer.start()
+        return {"started": True, "install_dir": installed.install_dir}
+
     def recette_context(self, config_path: str | None = None) -> dict:
         path = config_path or self.installed_config()
         if not path:
@@ -479,6 +501,8 @@ class SetupHandler(BaseHTTPRequestHandler):
                 return self._json(app.start_update(body.get("config_path") or None))
             if path == "/api/autodesk/context":
                 return self._json(app.autodesk_context(body.get("config_path") or None))
+            if path == "/api/admins/configure":
+                return self._json(app.start_admins_config(a, body.get("config_path") or None))
             if path == "/api/autodesk/configure":
                 return self._json(app.start_autodesk_config(a, body.get("config_path") or None))
             if path == "/api/autodesk/login":

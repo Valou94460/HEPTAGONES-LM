@@ -12,7 +12,7 @@
     db_mode: "sqlserver", db_server: "", db_name: "HeptagonesLM", db_driver: "ODBC Driver 18 for SQL Server", db_auth: "windows",
     db_user: "", db_password: "", db_encrypt: true, db_trust_cert: false, db_create: true,
     lmutil_path: "", rlmutil_path: "", servers: [],
-    web_mode: "iis", web_port: 8765, public_host: "", access_group: "", iis_site: "HeptagonesLM", iis_port: 443,
+    web_mode: "iis", web_port: 8765, public_host: "", access_group: "", admin_group: "", iis_site: "HeptagonesLM", iis_port: 443,
     iis_cert_thumbprint: "", tls_cert: "", tls_key: "", ldap_servers: [], base_dn: "", upn_suffix: "", open_firewall: true,
     email_enabled: false, smtp_host: "", smtp_port: 25, smtp_security: "starttls", smtp_user: "", smtp_password: "",
     sender: "", recipients: [], email_alerts: true,
@@ -185,9 +185,13 @@
   let recetteMode = false;            // recette d'une installation existante, ouverte depuis la page d'accueil
   let updateMode = false;             // mise à jour en place d'une installation existante
   let autodeskMode = false;           // licences Autodesk ajoutées à une installation existante
+  let adminsMode = false;             // groupe des administrateurs de l'interface (installation existante)
+  let adminsForm = null;              // formulaire de l'accueil : null (fermé) | {group}
   const AUTODESK = at("autodesk");
   // Libellés de la page de progression selon l'opération (installation, mise à jour, configuration Autodesk)
-  const op = () => autodeskMode ? { name: "Configuration Autodesk", done: "Configuration Autodesk terminée",
+  const op = () => adminsMode ? { name: "Administrateurs de l'interface", done: "Administrateurs enregistrés",
+      stopped: "Enregistrement interrompu", failed: "L'enregistrement des administrateurs s'est arrêté" }
+    : autodeskMode ? { name: "Configuration Autodesk", done: "Configuration Autodesk terminée",
       stopped: "Configuration Autodesk interrompue", failed: "La configuration Autodesk s'est arrêtée" }
     : updateMode ? { name: "Mise à jour", done: "Mise à jour terminée", stopped: "Mise à jour interrompue",
       failed: "La mise à jour s'est arrêtée" }
@@ -201,6 +205,7 @@
       let reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
       if (recetteMode) reachable = !locked && i !== step && (i === 0 || i === RECETTE);
       if (updateMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
+      if (adminsMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
       if (autodeskMode) reachable = !locked && i !== step && (i === 0 || i === AUTODESK || (i >= INSTALL && i <= maxStep));
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
@@ -211,9 +216,10 @@
   function render() {
     const s = STEPS[step];
     $("step-eyebrow").textContent = `Étape ${step + 1} sur ${STEPS.length}`;
-    $("step-title").textContent = (updateMode || autodeskMode) && step === INSTALL ? op().name : s.title;
+    $("step-title").textContent = (updateMode || autodeskMode || adminsMode) && step === INSTALL ? op().name : s.title;
     $("step-desc").textContent = updateMode && step === INSTALL
       ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés."
+      : adminsMode && step === INSTALL ? "Seuls les rôles de l'interface (et les groupes autorisés par IIS) changent : rien d'autre n'est modifié."
       : autodeskMode && step === INSTALL ? "Seule la section Autodesk de la configuration change : base, tâches, site IIS et mots de passe restent tels quels."
       : autodeskMode && step === AUTODESK ? "Installation existante : seule la partie Autodesk de la configuration sera modifiée, sans réinstaller ni ressaisir de mot de passe."
       : s.desc;
@@ -270,7 +276,12 @@
         <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>` : ""}
           <button type="button" class="btn ${newer ? "" : "primary"}" id="go-recette">Faire la recette de cette installation</button>
           <button type="button" class="btn" id="go-autodesk">Configurer les licences Autodesk</button>
-          <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div></div>` : ""}
+          <button type="button" class="btn" id="go-admins">Administrateurs de l'interface web</button>
+          <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div>
+        ${adminsForm ? `<div class="form-grid" style="margin-top:14px">
+          <label class="f full"><span>Groupe AD des administrateurs</span><input type="text" id="admin-group" value="${esc(adminsForm.group)}" placeholder="ENTREPRISE\\GG_HeptagonesLM_Admins">
+            <small class="hint">Ses membres voient la page « Administration » de l'interface (serveurs de licences, import des exports Autodesk). Vide : aucune administration depuis le navigateur.</small></label></div>
+          <div class="actions"><button type="button" class="btn primary" id="save-admins">Enregistrer les administrateurs</button></div>` : ""}</div>` : ""}
       <div class="welcome-grid">${feats.map(([i, t, d]) => `<div class="feature"><span class="ico">${icon(i)}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div>
       <div class="recap">
         <div class="panel"><h2>Ce serveur</h2><dl class="kv">
@@ -292,8 +303,15 @@
 
   STEPS[0].after = () => {
     $("go-recette")?.addEventListener("click", () => { recetteMode = true; step = RECETTE; render(); window.scrollTo({ top: 0 }); loadRecette(); });
-    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; autodeskMode = false; go(1); });
+    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; autodeskMode = false; adminsMode = false; go(1); });
     $("go-autodesk")?.addEventListener("click", openAutodeskConfig);
+    $("go-admins")?.addEventListener("click", async () => {
+      showError("");
+      try { const ctx = await api("/api/autodesk/context", {}); adminsForm = { group: ctx.answers.admin_group || "" }; }
+      catch (e) { showError(e.message); return; }
+      render();
+    });
+    $("save-admins")?.addEventListener("click", startAdminsConfig);
     $("go-update")?.addEventListener("click", startUpdate);
   };
 
@@ -543,6 +561,7 @@
           ${input("iis_port", "Port HTTPS", { type: "number", min: 1, max: 65535 })}
           ${input("web_port", "Port interne de HeptagonesLM", { type: "number", min: 1024, max: 65535, hint: "Écoute locale uniquement (127.0.0.1)." })}
           ${input("access_group", "Groupe AD autorisé", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Lecteurs", hint: "Vide : tout utilisateur du domaine." })}
+          ${input("admin_group", "Groupe AD des administrateurs", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Admins", hint: "Page « Administration » de l'interface : ajout de serveurs, import des exports Autodesk. Vide : aucune administration depuis le navigateur." })}
         </div>
         ${testBlock("certificate", "certificate", "Vérifier le certificat")}${testBlock("group", "group", "Vérifier le groupe")}</div>`;
     } else if (mode === "https") {
@@ -556,6 +575,7 @@
           ${input("base_dn", "Base de recherche", { placeholder: "DC=entreprise,DC=local" })}
           ${input("upn_suffix", "Suffixe UPN", { placeholder: "entreprise.local" })}
           ${input("access_group", "Groupe AD autorisé", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Lecteurs", hint: "Vide : tout utilisateur du domaine." })}
+          ${input("admin_group", "Groupe AD des administrateurs", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Admins", hint: "Page « Administration » de l'interface : ajout de serveurs, import des exports Autodesk. Vide : aucune administration depuis le navigateur." })}
         </div>
         ${testBlock("ldap", "ldap", "Tester une connexion",
           `<input type="text" id="ldap-user" placeholder="identifiant de test" autocomplete="off" style="height:34px;width:180px">
@@ -717,7 +737,7 @@
         ${block("Emplacement", 2, [["Dossier", esc(a.install_dir)], ["Compte de service", esc(a.service_account)], ["Collecte", `toutes les ${esc(a.collect_interval)} min`]])}
         ${block("Base de données", 3, a.db_mode === "sqlite" ? [["Mode", "SQLite local"]] : [["Instance", esc(a.db_server)], ["Base", esc(a.db_name) + (a.db_create ? " (créée si absente)" : "")], ["Authentification", a.db_auth === "sql" ? "SQL : " + esc(a.db_user) : "Windows (compte de service)"], ["Chiffrement", a.db_encrypt ? "Oui" : "Non"]])}
         ${block("Serveurs de licences", 4, [...(a.servers.some(s => s.license_type !== "rlm") ? [["lmutil", esc(a.lmutil_path)]] : []), ...(a.servers.some(s => s.license_type === "rlm") ? [["rlmutil", esc(a.rlmutil_path)]] : []), ...a.servers.map(s => [s.name, (s.license_type === "rlm" ? "RLM · " : "") + esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
-        ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
+        ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.admin_group && a.web_mode !== "local" ? ["Administrateurs", esc(a.admin_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
         ${block("Tickets ITSM", at("itsm"), a.itsm_enabled ? [["Outil", esc((ITSM[a.itsm_type] || {}).label || a.itsm_type)], ["Adresse", esc(a.itsm_url)], a.itsm_user ? ["Compte", esc(a.itsm_user)] : null, a.itsm_type === "jira" ? ["Projet", esc(a.itsm_project)] : null, ["Secrets", a.itsm_type === "webhook" ? "Aucun" : "Chiffrés par Windows (DPAPI)"], ["Ticket de test", results.itsm && results.itsm.status === "ok" ? `${dot("ok")} réussi` : "non effectué"]] : [["Tickets automatiques", "Désactivés"]])}
         ${block("Licences Autodesk nommées", at("autodesk"), a.autodesk_enabled ? [["Exports du portail", esc(a.autodesk_import_dir || (a.install_dir + "\\autodesk"))], ["Inactive après", `${esc(a.autodesk_inactive_days)} jours`], ["API Autodesk", a.autodesk_api_enabled ? (a.autodesk_context_id ? `équipe ${esc(a.autodesk_context_id)}` : "connexion à faire") : "Non"]] : [["Suivi", "Désactivé"]])}
         ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))], ["Alertes immédiates", a.email_alerts ? "Activées" : "Désactivées"]] : [["Rapport par e-mail", "Désactivé"]])}
@@ -749,7 +769,7 @@
       ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${op().failed}</h2>
         <p>${esc(st.error || "")}</p></div></div>
         <div class="actions"><button type="button" class="btn primary" id="retry">Réessayer à partir de cette étape</button>
-          ${updateMode || autodeskMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
+          ${updateMode || autodeskMode || adminsMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
           <a class="btn ghost" href="/api/report">Télécharger le journal</a></div></div>` : ""}
       <div class="panel"><details ${st.status === "failed" ? "open" : ""} id="log-details"><summary>Journal détaillé</summary>
         <div class="console" id="console" style="margin-top:12px"></div></details></div>`;
@@ -788,6 +808,17 @@
       if (res.errors.length) { markErrors(res.errors); showError("Corrigez les champs signalés pour continuer."); return; }
       await api("/api/autodesk/configure", { answers: A });
     } catch (e) { showError(e.message); return; }
+    logCount = 0; consoleLines = []; poll.last = null;
+    install = { status: "running", steps: [] };
+    step = INSTALL; maxStep = INSTALL;
+    render(); window.scrollTo({ top: 0 });
+    poll();
+  }
+  async function startAdminsConfig() {
+    showError("");
+    try { await api("/api/admins/configure", { answers: { admin_group: $("admin-group").value.trim() } }); }
+    catch (e) { showError(e.message); return; }
+    adminsMode = true; autodeskMode = false; updateMode = false; recetteMode = false; adminsForm = null;
     logCount = 0; consoleLines = []; poll.last = null;
     install = { status: "running", steps: [] };
     step = INSTALL; maxStep = INSTALL;

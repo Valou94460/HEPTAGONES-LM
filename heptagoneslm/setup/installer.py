@@ -168,6 +168,12 @@ def merge_user_settings(new: dict, old: dict) -> tuple[dict, list[str]]:
                     continue             # abonnement unique de l'assistant : ses destinataires priment
                 target[k] = copy.deepcopy(v)
                 kept.append(f"{section}.{k}")
+    # Groupe des administrateurs saisi dans l'assistant : prime sur l'ancien ; rôles par service gardés
+    new_roles = (new.get("web") or {}).get("roles")
+    old_roles = (old.get("web") or {}).get("roles") if isinstance(old.get("web"), dict) else None
+    if new_roles and isinstance(old_roles, dict):
+        out["web"]["roles"] = {**copy.deepcopy(old_roles), "admins": list(new_roles["admins"]),
+                               "default": old_roles.get("default") or new_roles["default"]}
     return out, kept
 
 
@@ -222,6 +228,10 @@ def step_acl(ctx: Context) -> str:
     for sub in writable:
         ctx.system.grant(a.path(sub), a.service_account, "M")
         ctx.log(f"{a.service_account} : modification sur {a.path(sub)}")
+    if a.admin_group and ctx.system.exists(a.config_path):
+        # page Administration de l'interface (serveurs de licences) : heptagoneslm.yaml modifiable par le service
+        ctx.system.grant(a.config_path, a.service_account, "M")
+        ctx.log(f"{a.service_account} : modification sur {a.config_path} (page Administration)")
     if a.autodesk_enabled and not a.autodesk_dir.lower().startswith(a.install_dir.lower().rstrip("\\") + "\\"):
         ctx.system.grant(a.autodesk_dir, a.service_account, "RX")
         ctx.log(f"{a.service_account} : lecture sur {a.autodesk_dir} (exports Autodesk)")
@@ -442,6 +452,7 @@ def build_update_plan(a: Answers) -> list[Step]:
         Step("backup", "Sauvegarde", 1, step_backup),
         Step("binaries", "Remplacement de HeptagonesLM", 2, step_binaries),
         Step("schema", "Mise à jour du schéma", 2, step_schema),
+        Step("acl", "Droits du compte de service", 1, step_acl),
         Step("watchdog", "Relance automatique de l'interface", 1, step_watchdog),
         Step("start", "Redémarrage de l'interface web", 2, step_start),
         Step("collect", "Collecte de contrôle", 2, step_collect),
@@ -510,6 +521,63 @@ def step_autodesk_config(ctx: Context) -> str:
     return "Exports du portail" + (" et API Autodesk" if a.autodesk_api_on else "") + " configurés"
 
 
+def step_admins_config(ctx: Context) -> str:
+    """Groupe des administrateurs sur l'installation existante : web.roles (et groupes LDAP), web.config IIS."""
+    from heptagoneslm.config import ConfigError, parse_config
+
+    a, system = ctx.a, ctx.system
+    previous = system.read_text(a.config_path)
+    if previous is None:
+        raise SetupError(f"Configuration introuvable : {a.config_path}")
+    cfg = yaml.safe_load(previous) or {}
+    web = cfg.setdefault("web", {})
+    roles = web.get("roles") if isinstance(web.get("roles"), dict) else {}
+    if a.admin_group:
+        web["roles"] = {**roles, "admins": [a.admin_group], "default": roles.get("default") or "reader"}
+    elif roles:
+        roles = {**roles, "admins": []}
+        if roles.get("readers") or roles.get("departments") or roles.get("scoped"):
+            web["roles"] = roles
+        else:
+            web.pop("roles", None)                  # plus aucun rôle déclaré : comportement d'origine
+    auth = web.get("auth") or {}
+    if auth.get("mode") == "ldap" and a.access_group:
+        auth["allowed_groups"] = [a.access_group_name] + ([a.admin_group.split("\\", 1)[-1]] if a.admin_group else [])
+    try:
+        parse_config(cfg)
+    except ConfigError as exc:
+        raise SetupError(f"Configuration invalide : {exc}") from None
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    system.write_text(a.config_path + f".{stamp}.bak", previous)
+    head = []
+    for line in previous.splitlines():
+        if not line.startswith("#"):
+            break
+        head.append(line)
+    system.write_text(a.config_path, ("\n".join(head) + "\n\n" if head else "") + a.dump_config(cfg))
+    ctx.log(f"web.roles : administrateurs = {a.admin_group or 'aucun'} (sauvegarde heptagoneslm.yaml.{stamp}.bak)")
+    if a.web_mode == "iis" and system.exists(a.path("iis", "web.config")):
+        from heptagoneslm.setup import iis
+
+        system.write_text(a.path("iis", "web.config"), iis.web_config(a))
+        ctx.log("web.config : groupes autorisés par IIS mis à jour")
+    raw = system.read_text(a.path(ANSWERS_FILE))
+    try:
+        saved = json.loads(raw) if raw else {}
+    except ValueError:
+        saved = {}
+    saved["admin_group"] = a.admin_group
+    system.write_text(a.path(ANSWERS_FILE), json.dumps(saved, ensure_ascii=False, indent=2))
+    return f"Administrateurs : {a.admin_group}" if a.admin_group else "Administration depuis le navigateur désactivée"
+
+
+def build_admins_plan(a: Answers) -> list[Step]:
+    """Groupe des administrateurs de l'interface sur une installation existante (aucun mot de passe)."""
+    return [Step("admins_config", "Administrateurs de l'interface", 1, step_admins_config),
+            Step("acl", "Droits du compte de service", 1, step_acl),
+            Step("start", "Redémarrage de l'interface web", 2, step_start)]
+
+
 def build_autodesk_plan(a: Answers) -> list[Step]:
     """Licences Autodesk nommées sur une installation existante : sans réinstaller ni ressaisir de mot de passe."""
     steps = []
@@ -532,7 +600,8 @@ class Installer:
         """``mode`` : install (défaut), update (mise à jour en place), autodesk (licences Autodesk sur l'existant)."""
         self.mode = mode or ("update" if update else "install")
         self.system, self.a, self.update = system, a, self.mode == "update"
-        self.steps = {"update": build_update_plan, "autodesk": build_autodesk_plan}.get(self.mode, build_plan)(a)
+        self.steps = {"update": build_update_plan, "autodesk": build_autodesk_plan,
+                      "admins": build_admins_plan}.get(self.mode, build_plan)(a)
         self.status = "idle"               # idle | running | done | failed
         self.current = -1
         self.fraction = 0.0                # avancement dans l'étape courante
@@ -581,7 +650,8 @@ class Installer:
                 s.status, s.message, s.started, s.ended = "pending", "", None, None
             self.logs.clear()
             self.started_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            verb = {"update": "Mise à jour vers", "autodesk": "Configuration Autodesk de"}.get(self.mode, "Installation de")
+            verb = {"update": "Mise à jour vers", "autodesk": "Configuration Autodesk de",
+                    "admins": "Administrateurs de l'interface de"}.get(self.mode, "Installation de")
             self.log(f"{verb} HeptagonesLM {__version__} dans {self.a.install_dir} ({self.system.name})")
         self.status, self.error, self.ended_at = "running", None, None
         self._thread = threading.Thread(target=self._run, args=(first,), daemon=True, name="heptagoneslm-setup")
@@ -613,7 +683,8 @@ class Installer:
                 step.ended = time.time()
         self.status = "done"
         self.ended_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        self.log({"update": "Mise à jour terminée", "autodesk": "Configuration Autodesk terminée"}
+        self.log({"update": "Mise à jour terminée", "autodesk": "Configuration Autodesk terminée",
+                  "admins": "Administrateurs enregistrés"}
                  .get(self.mode, "Installation terminée"), "ok")
         if self.update:
             self._record_version()
@@ -641,7 +712,8 @@ class Installer:
             host = self.system.os_info().get("hostname") or self.system.name
         except Exception:
             host = self.system.name
-        kind = {"update": "rapport de mise à jour", "autodesk": "rapport de configuration Autodesk"}.get(
+        kind = {"update": "rapport de mise à jour", "autodesk": "rapport de configuration Autodesk",
+                 "admins": "rapport de configuration des administrateurs"}.get(
             self.mode, "rapport d'installation")
         lines = [f"HeptagonesLM {__version__} — {kind}", f"Serveur : {host}",
                  f"Début : {self.started_at}  Fin : {self.ended_at or '—'}  "

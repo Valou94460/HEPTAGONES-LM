@@ -114,6 +114,7 @@ class Answers:
     web_port: int = 8765
     public_host: str = ""             # nom DNS utilisé par les navigateurs
     access_group: str = ""            # DOMAINE\groupe autorisé (vide = tout le domaine)
+    admin_group: str = ""             # DOMAINE\groupe des administrateurs (page Administration de l'interface)
     iis_site: str = "HeptagonesLM"
     iis_port: int = 443
     iis_cert_thumbprint: str = ""
@@ -226,6 +227,10 @@ class Answers:
             return None
         port = self.iis_port if self.web_mode == "iis" else self.web_port
         return f"https://{self.public_host}" + ("" if port == 443 else f":{port}")
+
+    def roles_entry(self) -> dict:
+        """web.roles : administrateurs (page Administration) ; tout autre utilisateur autorisé en lecture."""
+        return {"admins": [self.admin_group], "default": "reader"}
 
     def connection_string(self) -> str:
         if self.db_mode == "sqlite":
@@ -379,6 +384,8 @@ class Answers:
                     err("public_host", "Nom DNS attendu (ex. heptagoneslm.entreprise.local)")
                 if self.access_group and not _ACCOUNT_RE.match(self.access_group):
                     err("access_group", "Format DOMAINE\\groupe attendu")
+                if self.admin_group and not _ACCOUNT_RE.match(self.admin_group):
+                    err("admin_group", "Format DOMAINE\\groupe attendu")
             if self.web_mode == "iis":
                 if not re.match(r"^[\w .\-]{1,64}$", self.iis_site or ""):
                     err("iis_site", "Nom de site IIS invalide")
@@ -486,9 +493,12 @@ class Answers:
                         "tls_key": self.tls_key.replace("\\", "/"), "public_url": self.public_url})
             web["auth"] = {"mode": "ldap", "ldap_servers": list(self.ldap_servers), "base_dn": self.base_dn,
                            "upn_suffix": self.upn_suffix,
-                           "allowed_groups": [self.access_group_name] if self.access_group else []}
+                           "allowed_groups": ([self.access_group_name] if self.access_group else [])
+                           + ([self.admin_group.split("\\", 1)[-1]] if self.access_group and self.admin_group else [])}
         else:
             web["auth"] = {"mode": "none"}
+        if self.web_mode != "local" and self.admin_group:
+            web["roles"] = self.roles_entry()
         cfg["web"] = web
         if self.email_enabled:
             email = {"smtp_host": self.smtp_host, "smtp_port": self.smtp_port, "security": self.smtp_security,

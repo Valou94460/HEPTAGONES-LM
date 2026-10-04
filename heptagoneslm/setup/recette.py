@@ -209,7 +209,9 @@ def answers_from_config(cfg: AppConfig, install_dir: str, saved: dict | None, we
         if web_config:
             m = re.search(r'roles="([^"]+)"', web_config)
             if m:
-                a.access_group = m.group(1)
+                a.access_group = m.group(1).split(",")[0].strip()       # « lecteurs,administrateurs »
+        if cfg.web.roles and cfg.web.roles.admins:
+            a.admin_group = cfg.web.roles.admins[0]
         if cfg.web.auth.mode == "ldap":
             a.ldap_servers = list(cfg.web.auth.ldap_servers)
             a.base_dn, a.upn_suffix = cfg.web.auth.base_dn, cfg.web.auth.upn_suffix or ""

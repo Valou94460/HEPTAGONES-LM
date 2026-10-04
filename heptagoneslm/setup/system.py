@@ -553,7 +553,10 @@ catch {{
         return os.path.exists(path)
 
     def grant(self, path: str, account: str, rights: str) -> None:
-        r = self.run(["icacls", path, "/grant", f"{account}:(OI)(CI){rights}", "/T", "/C", "/Q"], timeout=300)
+        if os.path.isfile(path):             # fichier (heptagoneslm.yaml) : pas d'héritage
+            r = self.run(["icacls", path, "/grant", f"{account}:{rights}", "/C", "/Q"], timeout=60)
+        else:
+            r = self.run(["icacls", path, "/grant", f"{account}:(OI)(CI){rights}", "/T", "/C", "/Q"], timeout=300)
         if not r.ok:
             raise SetupError(f"icacls {path} : {r.message}")
 

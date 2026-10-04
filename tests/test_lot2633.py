@@ -173,5 +173,41 @@ class SimulatorGuardTest(unittest.TestCase):
             del os.environ["HEPTAGONESLM_ALLOW_SIMULATOR"]
 
 
+
+class AdminGroupTest(unittest.TestCase):
+    """Groupe AD des administrateurs : à l'installation et sur une installation existante."""
+
+    def test_install_writes_roles_and_iis_groups(self):
+        a = answers(admin_group="ENTREPRISE\\GG_HeptagonesLM_Admins")
+        cfg = parse_config(a.config_dict())
+        self.assertEqual(cfg.web.roles.admins, ["ENTREPRISE\\GG_HeptagonesLM_Admins"])
+        self.assertEqual(cfg.web.roles.default, "reader")              # groupe d'accès : lecture
+        from heptagoneslm.setup import iis
+        self.assertIn("GG_HeptagonesLM_Lecteurs,ENTREPRISE\\GG_HeptagonesLM_Admins", iis.web_config(a))
+        self.assertIsNone(parse_config(answers().config_dict()).web.roles)   # sans groupe : comme avant
+
+    def test_existing_installation(self):
+        s, a = ready_system(), answers()
+        install(s, a)
+        app = SetupApp(s, token="t")
+        app.start_admins_config(Answers(admin_group="ENTREPRISE\\GG_Admins"))
+        app.installer.wait(30)
+        self.assertEqual(app.installer.state()["status"], "done", app.installer.error)
+        cfg = yaml.safe_load(s.read_text(a.config_path))
+        self.assertEqual(cfg["web"]["roles"]["admins"], ["ENTREPRISE\\GG_Admins"])
+        self.assertIn("GG_Admins", s.read_text(a.path("iis", "web.config")))
+        self.assertIn((a.config_path, a.service_account, "M"), s.acl)      # yaml modifiable par le service
+        self.assertEqual(app.autodesk_context()["answers"]["admin_group"], "ENTREPRISE\\GG_Admins")
+        app.start_admins_config(Answers(admin_group=""))                    # retrait
+        app.installer.wait(30)
+        self.assertNotIn("roles", yaml.safe_load(s.read_text(a.config_path))["web"])
+
+    def test_invalid_group(self):
+        s, a = ready_system(), answers()
+        install(s, a)
+        with self.assertRaises(SetupError):
+            SetupApp(s, token="t").start_admins_config(Answers(admin_group="pas un groupe"))
+
+
 if __name__ == "__main__":
     unittest.main()
