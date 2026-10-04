@@ -277,6 +277,9 @@ class SetupApp:
         return {"steps": [s.label for s in build_plan(a)], "tasks": tasks}
 
 
+CHECK_FR = {"ok": "OK", "warning": "avertissement", "error": "erreur", "info": "info"}
+
+
 class SetupHandler(BaseHTTPRequestHandler):
     app: SetupApp
     server_version = "HeptagonesLM-Setup"
@@ -385,7 +388,8 @@ class SetupHandler(BaseHTTPRequestHandler):
             text = app.installer.report_text() if app.installer else "Aucune installation.\n"
             if app.verification:
                 text += "\nVérification :\n" + "\n".join(
-                    f"[{c['status']:^7}] {c['category']} · {c['label']} — {c['detail']}" for c in app.verification["checks"])
+                    f"[{CHECK_FR.get(c['status'], c['status']):^13}] {c['category']} · {c['label']} — {c['detail']}"
+                    for c in app.verification["checks"])
             return self._send(200, text.encode("utf-8"), "text/plain; charset=utf-8",
                               {"Content-Disposition": 'attachment; filename="HeptagonesLM_rapport_installation.txt"'})
         return self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)

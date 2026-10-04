@@ -19,6 +19,7 @@ from pathlib import Path
 from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.checks import apply_fix, blocking, run_checks
 from heptagoneslm.setup.installer import Installer
+from heptagoneslm.setup.recette import plural
 from heptagoneslm.setup.system import SetupError, System
 from heptagoneslm.setup.verify import verify
 
@@ -125,8 +126,9 @@ def _verify(system: System, a: Answers, p) -> int:
         p(f"  [{SYMBOL[c['status']]}] {c['category']} · {c['label']} : {c['detail']}")
         if c.get("command"):
             p(f"        commande : {c['command']}")
-    p(f"Résultat : {v['counts']['ok']} conforme(s), {v['counts']['warning']} avertissement(s), "
-      f"{v['counts']['error']} erreur(s)" + (f" — {v['url']}" if v.get("url") else ""))
+    c = v["counts"]
+    p(f"Résultat : {plural(c['ok'], 'conforme')}, {plural(c['warning'], 'avertissement')}, "
+      f"{plural(c['error'], 'erreur')}" + (f" — {v['url']}" if v.get("url") else ""))
     return 0 if v["success"] else 2
 
 

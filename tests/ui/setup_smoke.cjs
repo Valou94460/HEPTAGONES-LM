@@ -253,7 +253,7 @@ const { spawn } = require("child_process");
   const report = `${out}/${dl.suggestedFilename()}`;
   await dl.saveAs(report);
   const text = fs.readFileSync(report, "utf8");
-  check(text.includes("Statut : done") && text.includes("Vérification"), "rapport d'installation incomplet");
+  check(text.includes("Statut : terminé") && text.includes("Vérification"), "rapport d'installation incomplet");
   check(!/Secret-1/.test(text), "le mot de passe apparaît dans le rapport");
 
   // Mode sombre (vérification), puis retour au mode clair

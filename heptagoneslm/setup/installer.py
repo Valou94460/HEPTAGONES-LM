@@ -26,6 +26,8 @@ from heptagoneslm.setup.system import TASK_FOLDER, SetupError, System, TaskSpec
 WEB_TASK = "HeptagonesLM - Interface web"
 WATCHDOG_TASK = "HeptagonesLM - Surveillance de l'interface"
 SHORTCUT_NAME = "HeptagonesLM.url"
+STATUS_FR = {"done": "terminé", "error": "échec", "running": "en cours", "pending": "à faire",
+             "skipped": "ignoré", "idle": "en attente", "failed": "échec"}
 ANSWERS_FILE = "setup-reponses.json"      # réponses de l'assistant sans les secrets (recette, mise à jour)
 
 
@@ -240,25 +242,25 @@ def step_database(ctx: Context) -> str:
 
 def step_schema(ctx: Context) -> str:
     r = ctx.heptagoneslm("init-db")
-    for line in (r.out or "").strip().splitlines()[-5:]:
+    for line in [x for x in (r.out or "").splitlines() if x.strip()][-5:]:
         ctx.log(line)
     if not r.ok:
         raise SetupError(f"Initialisation du schéma : {r.message}")
     from heptagoneslm.storage.schema import SCHEMA_VERSION
 
-    return f"Schéma v{SCHEMA_VERSION} initialisé"
+    return f"Schéma de la base à jour (v{SCHEMA_VERSION})"
 
 
 def step_collect(ctx: Context) -> str:
     r = ctx.heptagoneslm("collect", timeout=600)
-    for line in ((r.out or "") + "\n" + (r.err or "")).strip().splitlines()[-8:]:
-        ctx.log(line)
+    for line in [x for x in ((r.out or "") + "\n" + (r.err or "")).splitlines() if x.strip()][-8:]:
+        ctx.log(line.rstrip())
     if r.code == 2:
         ctx.log("Au moins un serveur de licences n'a pas répondu (voir ci-dessus)", "warning")
         return "Collecte partielle : un serveur au moins en échec"
     if not r.ok:
         raise SetupError(f"Première collecte : {r.message}")
-    return "Première collecte réussie"
+    return "Collecte réussie"
 
 
 def step_iis_prereq(ctx: Context) -> str:
@@ -557,9 +559,16 @@ class Installer:
         self._save_log()
 
     def report_text(self) -> str:
-        lines = [f"HeptagonesLM {__version__} — rapport d'installation", f"Serveur : {self.system.name}",
-                 f"Début : {self.started_at}  Fin : {self.ended_at}  Statut : {self.status}", ""]
-        lines += [f"[{s.status:^8}] {s.label}" + (f" — {s.message}" if s.message else "") for s in self.steps]
+        try:
+            host = self.system.os_info().get("hostname") or self.system.name
+        except Exception:
+            host = self.system.name
+        kind = "rapport de mise à jour" if self.update else "rapport d'installation"
+        lines = [f"HeptagonesLM {__version__} — {kind}", f"Serveur : {host}",
+                 f"Début : {self.started_at}  Fin : {self.ended_at or '—'}  "
+                 f"Statut : {STATUS_FR.get(self.status, self.status)}", ""]
+        lines += [f"[{STATUS_FR.get(s.status, s.status):^9}] {s.label}" + (f" — {s.message}" if s.message else "")
+                  for s in self.steps]
         lines += ["", "Journal :"] + [f"{x['t']} {x['level']:<7} {x['msg']}" for x in self.logs]
         return "\n".join(lines) + "\n"
 

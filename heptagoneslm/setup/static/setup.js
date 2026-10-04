@@ -4,6 +4,8 @@
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // « 0 contrôle », « 1 contrôle », « 2 contrôles » (règle française : pluriel à partir de 2)
+  const pl = (n, one, many) => `${n} ${Math.abs(n) < 2 ? one : (many || one + "s")}`;
   const SECRETS = ["service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token", "autodesk_client_secret"];
   const BASE = {
     install_dir: "C:\\HeptagonesLM", service_account: "", service_password: "", collect_interval: 5,
@@ -196,7 +198,7 @@
     next.hidden = step >= INSTALL;
     next.textContent = s.next || "Suivant";
     next.disabled = step === SUMMARY && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
-    $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${blockingCount} prérequis bloquant(s) à corriger` : "";
+    $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${pl(blockingCount, "prérequis bloquant", "prérequis bloquants")} à corriger` : "";
     // dernières étapes : boutons propres à la page, barre du bas inutile (elle masquait la fin de la page)
     document.querySelector(".setup-foot").hidden = prev.hidden && next.hidden;
     document.title = `${s.title} — Installation de HeptagonesLM`;
@@ -300,8 +302,8 @@
     const fixes = [...new Map(list.filter(c => c.fix).map(c => [c.fix, c])).values()];
     return `
       <div class="summary-bar">
-        <span class="badge sev sev-good">${dot("ok")} ${count("ok")} conforme(s)</span>
-        ${count("warning") ? `<span class="badge sev sev-warning">${dot("warning")} ${count("warning")} avertissement(s)</span>` : ""}
+        <span class="badge sev sev-good">${dot("ok")} ${pl(count("ok"), "conforme")}</span>
+        ${count("warning") ? `<span class="badge sev sev-warning">${dot("warning")} ${pl(count("warning"), "avertissement")}</span>` : ""}
         ${count("error") ? `<span class="badge sev sev-critical">${dot("error")} ${count("error")} à corriger</span>` : ""}
         <span class="spacer"></span>
         <button type="button" class="btn small" id="recheck" ${checksBusy ? "disabled" : ""}>Relancer la vérification</button>
@@ -610,7 +612,7 @@
     let login = "";
     if (adesk && adesk.busy) login = `<span class="spinner"></span><span>${esc(adesk.busy)}</span>`;
     else if (adesk && adesk.error) login = `${dot("error")}<div><b>${esc(adesk.error)}</b></div>`;
-    else if (adesk && adesk.status === "done") login = `${dot("ok")}<div><b>Connecté à Autodesk : ${teams.length} équipe(s)</b><ul><li>Jeton de renouvellement chiffré par Windows (DPAPI) dans le dossier data, renouvelé à chaque synchronisation.</li></ul></div>`;
+    else if (adesk && adesk.status === "done") login = `${dot("ok")}<div><b>Connecté à Autodesk : ${pl(teams.length, "équipe")}</b><ul><li>Jeton de renouvellement chiffré par Windows (DPAPI) dans le dossier data, renouvelé à chaque synchronisation.</li></ul></div>`;
     return `
       <div class="panel">${toggle("autodesk_enabled", "Suivre les licences Autodesk nommées", "Licences affectées à un utilisateur (Autodesk Account) : actives, inactives ou jamais utilisées, et coût récupérable, dans le rapport « Autodesk · utilisateurs nommés ».", { rerender: true })}</div>
       ${A.autodesk_enabled ? `
@@ -678,7 +680,7 @@
         <div class="actions">${[...new Map(blockers.filter(c => c.fix).map(c => [c.fix, c])).values()].map(c =>
           `<button type="button" class="btn primary" data-fix="${c.fix}" ${checksBusy ? "disabled" : ""}>${esc(c.fix_label || "Corriger")}${c.fix === "install_iis" ? "" : ` : ${esc(c.label)}`}</button>`).join("")}</div>
         <div class="result" id="fix-result">${renderResult(fixResult)}</div></div>`
-        : `<div class="panel">${dot("ok")} <b>Tous les prérequis sont satisfaits.</b> <span class="muted">${(checks || []).filter(c => c.status === "warning").length} avertissement(s) non bloquant(s).</span></div>`}
+        : `<div class="panel">${dot("ok")} <b>Tous les prérequis sont satisfaits.</b> <span class="muted">${pl((checks || []).filter(c => c.status === "warning").length, "avertissement non bloquant", "avertissements non bloquants")}.</span></div>`}
       <div class="recap">
         ${block("Emplacement", 2, [["Dossier", esc(a.install_dir)], ["Compte de service", esc(a.service_account)], ["Collecte", `toutes les ${esc(a.collect_interval)} min`]])}
         ${block("Base de données", 3, a.db_mode === "sqlite" ? [["Mode", "SQLite local"]] : [["Instance", esc(a.db_server)], ["Base", esc(a.db_name) + (a.db_create ? " (créée si absente)" : "")], ["Authentification", a.db_auth === "sql" ? "SQL : " + esc(a.db_user) : "Windows (compte de service)"], ["Chiffrement", a.db_encrypt ? "Oui" : "Non"]])}
@@ -797,7 +799,7 @@
     return `
       <div class="panel"><div class="hero-result ${ok ? "sev-good" : "sev-critical"}"><span class="big">${ok ? "✓" : "!"}</span><div>
         <h2>${ok ? "HeptagonesLM est installé et opérationnel" : "Installation terminée avec des points à corriger"}</h2>
-        <p>${v.counts.ok} contrôle(s) conforme(s)${v.counts.warning ? `, ${v.counts.warning} avertissement(s)` : ""}${v.counts.error ? `, ${v.counts.error} erreur(s)` : ""}.
+        <p>${pl(v.counts.ok, "contrôle conforme", "contrôles conformes")}${v.counts.warning ? `, ${pl(v.counts.warning, "avertissement")}` : ""}${v.counts.error ? `, ${pl(v.counts.error, "erreur")}` : ""}.
           ${v.url ? `Adresse de l'interface : <b>${esc(v.url)}</b>` : ""}</p></div></div>
         <div class="actions">
           ${v.url ? `<a class="btn primary" href="${esc(v.url)}" target="_blank" rel="noopener">Ouvrir HeptagonesLM</a>` : ""}
@@ -924,7 +926,7 @@
       const groups = {};
       res.items.forEach(it => (groups[it.category] = groups[it.category] || []).push(it));
       html += `<div class="panel"><div class="hero-result ${cls}"><span class="big">${v.level === "ok" ? "✓" : "!"}</span><div><h2>${esc(v.label)}</h2>
-        <p>${v.counts.ok} conforme(s), ${v.counts.warning} réserve(s), ${v.counts.error} non-conformité(s)${v.pending ? ` · <b>${v.pending} point(s) à confirmer ci-dessous</b>` : ""} · recette du ${esc(new Date(res.started).toLocaleString("fr-FR"))}</p>
+        <p>${pl(v.counts.ok, "conforme")}, ${pl(v.counts.warning, "réserve")}, ${pl(v.counts.error, "non-conformité")}${v.pending ? ` · <b>${pl(v.pending, "point")} à confirmer ci-dessous</b>` : ""} · recette du ${esc(new Date(res.started).toLocaleString("fr-FR"))}</p>
         <p class="muted">Preuves : <code>${esc(res.folder)}</code></p></div></div></div>
         ${Object.entries(groups).map(([g, items]) => `<div class="panel"><h2>${esc(g)}</h2><div class="ritems">${items.map(itemHtml).join("")}</div></div>`).join("")}
         <div class="panel"><h2>PV de recette</h2><p class="muted">Document Word reprenant chaque point, les comparaisons et un cadre de signature (rédacteur et client).</p>

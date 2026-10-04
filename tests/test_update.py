@@ -107,7 +107,13 @@ class UpdateTest(unittest.TestCase):
         backups = [p.name for p in s._real(a.path("backup")).rglob("*")]
         self.assertIn("heptagoneslm.yaml", backups)
         self.assertIn(ANSWERS_FILE, backups)
-        self.assertIn("Mise à jour terminée", app.installer.report_text())
+        report = app.installer.report_text()
+        self.assertIn("Mise à jour terminée", report)
+        self.assertIn("rapport de mise à jour", report)
+        self.assertIn("Serveur : SRV-HEPTAGONESLM", report)               # nom du serveur, pas « Windows »
+        self.assertIn("Statut : terminé", report)
+        self.assertNotIn("[  done", report)
+        self.assertNotIn("info    \n", report)                        # pas de ligne de journal vide
         update_calls = " ".join(s.calls[calls_before:])
         registered = [c for c in s.calls[calls_before:] if c.startswith("register_task:")]
         self.assertEqual(registered, ["register_task:HeptagonesLM - Surveillance de l'interface"])  # sous SYSTEM

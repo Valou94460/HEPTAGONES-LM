@@ -14,6 +14,7 @@ from datetime import datetime
 from xml.sax.saxutils import escape
 
 from heptagoneslm import __version__
+from heptagoneslm.setup.recette import plural
 
 STATUS_TEXT = {"ok": "Conforme", "warning": "Réserve", "error": "Non conforme", "info": "Information"}
 STATUS_FILL = {"ok": "D8F0DC", "warning": "FCEBC2", "error": "F6D0D0", "info": "E6EAF0"}
@@ -28,8 +29,10 @@ def _x(text) -> str:
     return escape(str(text if text is not None else ""), {'"': "&quot;"})
 
 
-def _run(text: str, bold=False, size=None, color=None, italic=False) -> str:
+def _run(text: str, bold=False, size=None, color=None, italic=False, font=None) -> str:
     props = ""
+    if font:      # cases à cocher : police qui contient le caractère (Calibri ne l'a pas)
+        props += f'<w:rFonts w:ascii="{font}" w:hAnsi="{font}" w:eastAsia="{font}" w:cs="{font}"/>'
     if bold:
         props += "<w:b/>"
     if italic:
@@ -101,8 +104,9 @@ def build_pv(state: dict, meta: dict | None = None) -> bytes:
     started = _date(state.get("started"))
     body = []
     body.append(_text_p("Procès-verbal de recette", style="Title"))
-    body.append(_text_p(f"HeptagonesLM {state.get('version') or __version__} · {meta.get('client') or 'Client'} · "
-                        f"serveur {state.get('host') or '?'} · {started}", color="5A6578", size=20, space_after=240))
+    subtitle = [f"HeptagonesLM {state.get('version') or __version__}", meta.get("client"),
+                f"serveur {state.get('host') or '?'}", started]
+    body.append(_text_p(" · ".join(x for x in subtitle if x), color="5A6578", size=20, space_after=240))
 
     body.append(_text_p("1. Identification", style="Heading1", keep_next=True))
     ident = [
@@ -111,7 +115,7 @@ def build_pv(state: dict, meta: dict | None = None) -> bytes:
         ["Version installée", state.get("version") or __version__],
         ["Configuration", state.get("config_path") or "—"],
         ["Date de la recette", started],
-        ["Période de collecte contrôlée", f"{state.get('hours', 24)} heures"],
+        ["Période de collecte contrôlée", plural(int(state.get("hours", 24)), "heure")],
         ["Preuves enregistrées", state.get("folder") or "—"],
         ["Sorties anonymisées", "Oui" if state.get("anonymized") else "Non"],
     ]
@@ -122,10 +126,12 @@ def build_pv(state: dict, meta: dict | None = None) -> bytes:
     body.append(_p(_run("Verdict : ", bold=True) + _run(v.get("label", "—"), bold=True,
                                                           color={"ok": "1E7B34", "warning": "9A6700",
                                                                  "error": "B42318"}.get(v.get("level"), None))))
-    body.append(_text_p(f"{c.get('ok', 0)} point(s) conforme(s), {c.get('warning', 0)} réserve(s), "
-                        f"{c.get('error', 0)} non-conformité(s), {c.get('info', 0)} information(s)"
-                        + (f" ; {v.get('pending')} point(s) en attente de confirmation par l'opérateur."
-                           if v.get("pending") else "."), space_after=120))
+    pending = v.get("pending") or 0
+    body.append(_text_p(f"{plural(c.get('ok', 0), 'point conforme', 'points conformes')}, "
+                        f"{plural(c.get('warning', 0), 'réserve')}, {plural(c.get('error', 0), 'non-conformité')}, "
+                        f"{plural(c.get('info', 0), 'information')}"
+                        + (f" ; {plural(pending, 'point')} en attente de confirmation par l'opérateur." if pending
+                           else "."), space_after=120))
     if meta.get("comment"):
         body.append(_p(_run("Commentaire : ", bold=True) + _run(meta["comment"])))
 
@@ -150,6 +156,10 @@ def build_pv(state: dict, meta: dict | None = None) -> bytes:
         for it in tables:
             body.append(_text_p(it["label"], style="Heading2", keep_next=True))
             t = it["table"]
+            if not t["rows"]:      # serveur sans licence (fichier de test) : pas de tableau vide
+                body.append(_text_p("Aucune feature déclarée par ce serveur : rien à comparer.", italic=True,
+                                    color="5A6578", size=18))
+                continue
             fills = [[None] * 6 + [STATUS_FILL["ok"] if r[-1] == "identique" else STATUS_FILL["warning"]]
                      for r in t["rows"]]
             body.append(_table(t["columns"], t["rows"], [1900, 1100, 1250, 1050, 1250, 1100, 1988], fills, 15))
@@ -177,7 +187,7 @@ def build_pv(state: dict, meta: dict | None = None) -> bytes:
     body.append(_text_p("Le client prononce la recette :", keep_next=True))
     for choice in ("sans réserve, mise en production autorisée", "avec les réserves listées au § 6, mise en "
                    "production autorisée", "refusée, nouvelle recette après correction"):
-        body.append(_text_p(f"☐  {choice}", space_after=40, keep_next=True))
+        body.append(_p(_run("☐", font="Segoe UI Symbol") + _run(f"  {choice}"), space_after=40, keep_next=True))
     sign = [["Rédigé par (intégrateur)", meta.get("redacteur") or "", "", ""],
             ["Validé par (client)", meta.get("valideur") or "", "", ""]]
     body.append(_table(["Rôle", "Nom", "Date", "Visa"], sign, [2600, 2900, 1700, 2438], size=18))
@@ -216,6 +226,12 @@ FOOTER = f"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve">PV de recette HeptagonesLM · page </w:t></w:r>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:instrText xml:space="preserve"> PAGE </w:instrText></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:t>1</w:t></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:t xml:space="preserve"> sur </w:t></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="begin"/></w:r>
+<w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:instrText xml:space="preserve"> NUMPAGES </w:instrText></w:r>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="separate"/></w:r>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:t>1</w:t></w:r>
 <w:r><w:rPr><w:color w:val="7A8496"/><w:sz w:val="16"/></w:rPr><w:fldChar w:fldCharType="end"/></w:r>

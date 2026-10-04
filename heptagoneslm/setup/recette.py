@@ -96,6 +96,11 @@ class Item:
         return asdict(self)
 
 
+def plural(n: int, singular: str, plural_form: str | None = None) -> str:
+    """« 0 contrôle », « 1 contrôle », « 2 contrôles » (règle française : pluriel à partir de 2)."""
+    return f"{n} {singular if abs(n) < 2 else (plural_form or singular + 's')}"
+
+
 def verdict(items: list[Item]) -> dict:
     counts = {k: sum(1 for i in items if i.status == k) for k in STATUS_RANK}
     pending = sum(1 for i in items if i.confirm and i.confirmed is None and i.auto_status in ("ok", "warning"))
@@ -415,14 +420,18 @@ def compare(live: dict[str, dict], live_users: dict[tuple, int], recorded: dict,
         extra = sorted(set(recorded["sessions"]) - set(live_users))
         if missing:
             warnings += 1
-            details.append(f"{len(missing)} utilisateur(s) connecté(s) non vu(s) par HeptagonesLM : "
+            details.append(plural(len(missing), "utilisateur connecté non vu", "utilisateurs connectés non vus")
+                           + " par HeptagonesLM : "
                            + ", ".join(f"{u}@{h} ({f})" for f, u, h in missing[:8]) + (" …" if len(missing) > 8 else ""))
         if extra:
             warnings += 1
-            details.append(f"{len(extra)} session(s) ouverte(s) dans HeptagonesLM mais plus présente(s) : "
+            details.append(plural(len(extra), "session ouverte", "sessions ouvertes") + " dans HeptagonesLM mais "
+                           + ("plus présente" if len(extra) < 2 else "plus présentes") + " sur le serveur : "
                            + ", ".join(f"{u}@{h} ({f})" for f, u, h in extra[:8]) + (" …" if len(extra) > 8 else ""))
         if not missing and not extra:
-            details.append(f"{len(live_users)} utilisateur(s) connecté(s) : identiques dans HeptagonesLM")
+            details.append(plural(len(live_users), "utilisateur connecté", "utilisateurs connectés")
+                           + (" : identique dans HeptagonesLM" if len(live_users) == 1 else
+                              " : identiques dans HeptagonesLM" if live_users else ""))
     status = "error" if errors else "warning" if warnings else "ok"
     return status, rows, details
 
@@ -446,7 +455,8 @@ def collection_health(runs: list[dict], since: datetime, now: datetime, interval
     gaps = [(b - a, a) for a, b in zip(times, times[1:])]
     gaps.append((now - times[-1], times[-1]))
     worst, worst_at = max(gaps, key=lambda g: g[0])
-    details = [f"{len(runs)} collecte(s) depuis le {max(since, times[0]):%d/%m à %H:%M} · {len(errors)} échec(s) · "
+    details = [f"{plural(len(runs), 'collecte')} depuis le {max(since, times[0]):%d/%m à %H:%M} · "
+               f"{plural(len(errors), 'échec')} · "
                f"plus long intervalle : {_dur(worst)}"]
     status = "ok"
     if errors:
@@ -698,17 +708,18 @@ class RecetteRun:
         n_features = len(totals)
         issued = sum(v["issued"] or 0 for v in totals.values())
         used = sum(v["in_use"] for v in totals.values())
-        detail = (f"{n_features} features, {used} / {issued} jetons utilisés · "
+        detail = (f"{plural(n_features, 'feature')}, {used} / {plural(issued, 'jeton utilisé', 'jetons utilisés')} · "
                   + ("identique à HeptagonesLM" if status == "ok" else
                      "écarts d'utilisation (activité entre les deux lectures ?)" if status == "warning" else
                      "écarts à corriger"))
         details = [f"Lecture en direct le {captured:%d/%m/%Y à %H:%M:%S} ; sondage HeptagonesLM du "
                    + (f"{recorded['time']:%d/%m/%Y à %H:%M:%S} ({max(0, int(gap.total_seconds()))} s avant)"
-                      if gap is not None else "— (aucun sondage enregistré)")] + details
+                      if gap is not None else "— (aucun jeton enregistré : le serveur ne déclare aucune licence)"
+                      if not totals else "— (aucun sondage enregistré)")] + details
         if not track:
             details.append("Sessions suivies par le log debug : utilisateurs comparés dans l'historique, pas ici")
         if mapping:
-            details.append(f"Sortie enregistrée anonymisée ({len(mapping)} nom(s) remplacé(s)) : {name}")
+            details.append(f"Sortie enregistrée anonymisée ({plural(len(mapping), 'nom remplacé', 'noms remplacés')}) : {name}")
         self.add(Item(f"srv:{srv.name}", category, f"{srv.name} ({srv.port_at_host})", status, detail, details,
                       table={"columns": COMPARE_COLUMNS, "rows": rows}, files=[name, name.replace(".txt", ".attendu.json")]))
 
@@ -737,9 +748,10 @@ class RecetteRun:
         bad = [c for c in checks if c["status"] in ("error", "warning")]
         n_err = sum(1 for c in checks if c["status"] == "error")
         status = "error" if n_err else "warning" if bad else "ok"
-        detail = (f"{sum(1 for c in checks if c['status'] == 'ok')} contrôle(s) conforme(s)"
-                  + (f", {len(bad) - n_err} avertissement(s)" if len(bad) > n_err else "")
-                  + (f", {n_err} erreur(s)" if n_err else ""))
+        n_ok = sum(1 for c in checks if c['status'] == 'ok')
+        detail = (plural(n_ok, "contrôle conforme", "contrôles conformes")
+                  + (f", {plural(len(bad) - n_err, 'avertissement')}" if len(bad) > n_err else "")
+                  + (f", {plural(n_err, 'erreur')}" if n_err else ""))
         rows = [[c["category"], c["label"], {"ok": "Conforme", "warning": "Avertissement", "error": "Erreur",
                                             "info": "Information"}.get(c["status"], c["status"]), c["detail"]]
                 for c in checks]
@@ -757,7 +769,7 @@ class RecetteRun:
         url = (self.inst.answers.public_url or "").rstrip("/") + "/acces"
         if ok:
             self.add(Item("acces", "Accès des utilisateurs", "Connexion depuis un poste (membre du groupe)", "ok",
-                          f"{len(ok)} poste(s) connecté(s) sans saisie de mot de passe",
+                          plural(len(ok), "poste connecté", "postes connectés") + " sans saisie de mot de passe",
                           [f"{c.label} : {c.detail}" for c in tests]))
         elif tests:
             self.add(Item("acces", "Accès des utilisateurs", "Connexion depuis un poste (membre du groupe)", "warning",
@@ -890,11 +902,21 @@ class RecetteRun:
         if name not in self.files:
             self.files.append(name)
         size = Path(target).stat().st_size // 1024
-        self.add(Item("rapport", "Rapport", "Rapport Excel de test", "ok" if data.summaries else "warning",
-                      f"{len(data.summaries)} features, {len(data.sessions)} sessions sur {self.opt.report_days} jours "
-                      f"({size} Ko)" if data.summaries else "Rapport généré mais vide : aucune donnée sur la période",
-                      files=[name],
-                      confirm="Le rapport Excel s'ouvre et ses chiffres sont cohérents avec l'usage connu ?"))
+        compared = [i for i in self.items if i.id.startswith("srv:") and i.table]
+        no_license = bool(compared) and not any(i.table["rows"] for i in compared)
+        if data.summaries:
+            self.add(Item("rapport", "Rapport", "Rapport Excel de test", "ok",
+                          f"{plural(len(data.summaries), 'feature')}, {plural(len(data.sessions), 'session')} sur "
+                          f"{self.opt.report_days} jours ({size} Ko)", files=[name],
+                          confirm="Le rapport Excel s'ouvre et ses chiffres sont cohérents avec l'usage connu ?"))
+        elif no_license:     # serveur de test sans licence : un rapport vide est le résultat attendu
+            self.add(Item("rapport", "Rapport", "Rapport Excel de test", "info",
+                          "Rapport généré, vide comme attendu : les serveurs de licences ne déclarent aucune licence",
+                          files=[name]))
+        else:
+            self.add(Item("rapport", "Rapport", "Rapport Excel de test", "warning",
+                          "Rapport généré mais vide : aucune donnée sur la période", files=[name],
+                          confirm="Le rapport Excel s'ouvre et ses chiffres sont cohérents avec l'usage connu ?"))
 
     # -- preuves -----------------------------------------------------------------------------------------
     def evidence_zip(self) -> bytes:
