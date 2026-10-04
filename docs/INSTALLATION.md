@@ -128,10 +128,20 @@ résolution DNS. Le rapport d'installation est aussi écrit dans `C:\HeptagonesL
 
 ## 5. Installation silencieuse (industrialisation)
 
+Depuis une invite **PowerShell administrateur** :
+
 ```powershell
 $env:SVC_PWD = Read-Host "Mot de passe du compte de service"
-HeptagonesLM-Setup.exe setup --answers reponses.json
+$p = Start-Process .\HeptagonesLM-Setup.exe -ArgumentList "setup", "--answers", "reponses.json" `
+       -Wait -PassThru -NoNewWindow
+$p.ExitCode
 ```
+
+En invite de commandes (cmd) : `start /wait HeptagonesLM-Setup.exe setup --answers reponses.json`, puis
+`echo %ERRORLEVEL%`. Le Setup est une application fenêtrée, sans console au double-clic : comme pour un
+`.msi`, il faut demander explicitement l'attente (`-Wait` ou `start /wait`) pour récupérer le code retour.
+La progression s'affiche dans l'invite ; elle peut aussi être écrite dans un fichier avec
+`-RedirectStandardOutput setup.log`.
 
 Mêmes contrôles, étapes et vérification que l'assistant, avec une progression en mode texte.
 Les valeurs `${VARIABLE}` sont remplacées par les variables d'environnement (mots de passe
@@ -198,8 +208,9 @@ notée dans `setup-reponses.json`.
 
 En mode silencieux (déploiement par script) :
 
-```
-HeptagonesLM-Setup.exe setup --update [--install-dir D:\HeptagonesLM]
+```powershell
+Start-Process .\HeptagonesLM-Setup.exe -ArgumentList "setup", "--update" -Wait -PassThru -NoNewWindow
+# option : "--install-dir", "D:\HeptagonesLM"
 ```
 
 Codes retour : 0 mise à jour vérifiée, 1 échec (la sauvegarde permet le retour arrière), 2 mise à jour

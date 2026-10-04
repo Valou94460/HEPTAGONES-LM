@@ -393,14 +393,14 @@ Sur un serveur Windows de recette vierge, avec `HeptagonesLM-Setup.exe`.
 | INST-10 | Reprise | Provoquer un échec (compte sans droit), corriger, « Réessayer » | Reprise à l'étape en échec, installation terminée | ☐ |
 | INST-11 🔴 | Vérification | Fin d'installation | Tous les contrôles verts ; « Ouvrir HeptagonesLM » ouvre l'interface sans saisie de mot de passe | ☐ |
 | INST-12 | Réinstallation | Relancer l'assistant avec les mêmes réponses | Aucune erreur ; ancienne configuration sauvegardée en `.bak` | ☐ |
-| INST-13 | Silencieux | `HeptagonesLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
+| INST-13 | Silencieux | `start /wait HeptagonesLM-Setup.exe setup --answers reponses.json` | Progression texte, code retour 0, rapport dans `logs\setup-*.log` | ☐ |
 | INST-14 | Secrets | Rechercher les mots de passe dans `heptagoneslm.yaml`, `logs\*`, le rapport | Absents | ☐ |
 | INST-15 🔴 | SPN / zone Intranet | Vérification finale avec un nom DNS alias ; « Déclarer le SPN » (compte administrateur du domaine) | SPN déclaré sur le compte ordinateur, puis contrôle vert ; zone Intranet signalée si la GPO est absente, avec la commande | ☐ |
 | INST-17 | Démonstration signalée | Double-clic sur HeptagonesLM.exe sans installation ; choisir « Voir une démonstration » | Menu Installer / Démonstration / Quitter ; interface avec le bandeau « Démonstration » et le titre « [Démonstration] » ; jamais de bandeau sur une installation réelle | ☐ |
 | INST-18 🔴 | Tickets ITSM | Étape 8 : activer, choisir l'outil, saisir l'adresse et le compte technique ; « Ouvrir un ticket de test » avec un mauvais mot de passe, puis le bon | Refus expliqué (401) ; puis ticket de test ouvert, commenté et résolu, visible dans l'outil ; désactivé par défaut | ☐ |
 | INST-20 | Vérification rapide | Étape 2 sur un serveur neuf sans IIS | Résultat en moins d'une minute, progression affichée lecture par lecture | ☐ |
 | INST-21 🔴 | Mise à jour en place | Serveur avec une version antérieure ; nouveau Setup › « Mettre à jour vers … » | Sauvegarde dans `backup\<horodatage>`, exécutable remplacé, schéma à jour, interface relancée, vérification verte ; aucun mot de passe demandé ; `heptagoneslm.yaml` inchangé | ☐ |
-| INST-22 | Mise à jour silencieuse | `HeptagonesLM-Setup.exe setup --update` | Code retour 0, même résultat qu'INST-21 | ☐ |
+| INST-22 | Mise à jour silencieuse | `start /wait HeptagonesLM-Setup.exe setup --update` | Code retour 0, même résultat qu'INST-21 | ☐ |
 | INST-23 🔴 | Réglages personnalisés | Ajouter `sites`, des `products` avec coûts et des rôles dans `heptagoneslm.yaml`, puis « Réinstaller » | Réglages conservés, signalés dans le journal ; ancien fichier en `.bak` | ☐ |
 | INST-24 | Signature | `Get-AuthenticodeSignature HeptagonesLM-Setup.exe` (release signée) | `Valid`, éditeur Heptagones, signature horodatée ; plus d'alerte SmartScreen « éditeur inconnu » (certificat EV) | ☐ |
 | REC-01 🔴 | Comparaison en direct | Recette : chaque serveur de licences | Collecte déclenchée (compte de service, résultat 0) ; tableau feature par feature « identique » (jetons émis, utilisés, sessions) ; écart d'émission signalé en rouge | ☐ |

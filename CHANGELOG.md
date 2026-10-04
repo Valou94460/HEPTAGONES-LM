@@ -17,8 +17,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 - **Bouton « Quitter l'assistant »** en fin d'installation, de mise à jour, de vérification et de recette
   (refusé tant qu'une opération est en cours) ; l'assistant s'arrête aussi seul après 30 minutes sans onglet
   ouvert.
-- **Fenêtre console masquée** au double-clic sur `HeptagonesLM-Setup.exe` : seul le navigateur s'affiche
-  (elle reste visible quand le Setup est lancé depuis une invite de commandes, et réapparaît en cas d'erreur).
+- **Plus aucune fenêtre console** au double-clic sur `HeptagonesLM-Setup.exe` : le Setup devient une application
+  fenêtrée et seul le navigateur s'affiche. En cas d'échec au démarrage, une boîte de message s'affiche. En ligne
+  de commande, la sortie est reprise dans l'invite ou dans le fichier de redirection ; pour récupérer le code
+  retour du mode silencieux, lancer avec `start /wait` ou `Start-Process -Wait`, comme pour un `.msi`.
 - **PV de recette, rapport Excel et rapport d'installation relus** : pluriels corrects, serveur sans
   licence (rapport vide attendu, pas de tableau vide), nom réel du serveur et statuts en français dans le
   rapport d'installation, « page X sur Y », cases à cocher affichées.

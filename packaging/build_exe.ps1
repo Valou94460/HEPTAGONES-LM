@@ -21,7 +21,7 @@ py -3 -m venv .build-venv
     heptagoneslm/launcher.py
 
 # Assistant d'installation : demande l'élévation administrateur, embarque HeptagonesLM.exe
-.\.build-venv\Scripts\pyinstaller --noconfirm --onefile --console --uac-admin `
+.\.build-venv\Scripts\pyinstaller --noconfirm --onefile --windowed --uac-admin `
     --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico `
     --collect-submodules heptagoneslm `
     --add-data "heptagoneslm/web/static:heptagoneslm/web/static" `

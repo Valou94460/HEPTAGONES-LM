@@ -62,11 +62,13 @@ class QuitTest(unittest.TestCase):
 
 
 class ConsoleTest(unittest.TestCase):
-    def test_hide_console_is_windows_only(self):
+    def test_console_io_untouched_outside_windows(self):
         import os
+        import sys
         if os.name != "nt":
-            self.assertFalse(launcher.hide_own_console())
-            launcher.show_console()                                    # sans effet, sans erreur
+            before = sys.stdout
+            self.assertTrue(launcher.attach_console_io())             # sortie déjà disponible
+            self.assertIs(sys.stdout, before)
 
 
 
