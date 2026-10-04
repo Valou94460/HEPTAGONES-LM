@@ -245,6 +245,7 @@ class DemoReportsTest(unittest.TestCase):
         from heptagoneslm import mailer
 
         raw = yaml.safe_load(Path(self.result.config_path).read_text(encoding="utf-8"))
+        raw.setdefault("web", {})["public_url"] = "https://heptagoneslm.test.local"     # lien vers la 1re vue
         raw["email"] = {"smtp_host": "127.0.0.1", "security": "none", "subscriptions": [
             {"name": "Achats", "recipients": "achats@test.local", "period": "last-month",
              "views": ["forecast", "renewal", "breakdown"], "dimension": "project", "servers": ["AUTODESK"]}]}
