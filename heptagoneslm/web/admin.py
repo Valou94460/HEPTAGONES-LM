@@ -49,8 +49,9 @@ def editable(path: str | None) -> str | None:
     if not path:
         return "Configuration inconnue (interface lancée sans fichier de configuration)"
     if not os.access(path, os.W_OK):
-        return ("Le compte de service ne peut pas modifier heptagoneslm.yaml : déclarer un groupe d'administrateurs "
-                "dans HeptagonesLM-Setup.exe (accueil › « Administrateurs de l'interface web »)")
+        return ("Le compte de service ne peut pas modifier heptagoneslm.yaml : relancer HeptagonesLM-Setup.exe et "
+                "« Réappliquer la mise à jour » (droits mis à jour), ou déclarer un groupe d'administrateurs (accueil › "
+                "« Administrateurs de l'interface web »)")
     return None
 
 

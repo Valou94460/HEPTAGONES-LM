@@ -17,11 +17,16 @@ classes héritant de ces interfaces, puis les déclarer avec
 
 from __future__ import annotations
 
+import os
 from abc import ABC, abstractmethod
 from typing import ClassVar
 
 from heptagoneslm.config import AppConfig, ServerConfig
 from heptagoneslm.models import LicenseEvent, ServerStatus
+
+# Programmes externes (lmutil, rlmutil, PowerShell…) sans fenêtre console : le Setup est une application
+# fenêtrée, chaque appel ouvrirait sinon une fenêtre noire furtive.
+NO_WINDOW: dict = {"creationflags": 0x08000000} if os.name == "nt" else {}   # CREATE_NO_WINDOW
 
 
 class CollectorError(RuntimeError):

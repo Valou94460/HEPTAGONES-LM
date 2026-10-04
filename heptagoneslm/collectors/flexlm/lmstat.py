@@ -28,7 +28,7 @@ import re
 import subprocess
 from datetime import date, datetime, timedelta
 
-from heptagoneslm.collectors.base import CollectorError, StatusCollector, register
+from heptagoneslm.collectors.base import NO_WINDOW, CollectorError, StatusCollector, register
 from heptagoneslm.models import Checkout, FeatureStatus, Reservation, ServerStatus
 
 log = logging.getLogger(__name__)
@@ -256,7 +256,7 @@ class LmstatCollector(StatusCollector):
         cmd = self.command()
         log.debug("Exécution : %s", " ".join(cmd))
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=self.server.timeout_s, check=False)
+            proc = subprocess.run(cmd, capture_output=True, timeout=self.server.timeout_s, check=False, **NO_WINDOW)
         except FileNotFoundError:
             raise CollectorError(f"lmutil introuvable : {cmd[0]}") from None
         except subprocess.TimeoutExpired:

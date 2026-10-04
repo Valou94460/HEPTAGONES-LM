@@ -273,7 +273,8 @@
         <p class="muted">Configuration <code>${esc(inst)}</code>${iv && !/^\d/.test(iv) ? ` · version ${esc(iv)}` : ""}.
           ${newer ? `La <b>mise à jour vers ${esc(info.version)}</b> remplace le programme et met à jour la base, sans rien ressaisir : configuration, réglages personnalisés, mots de passe, tâches planifiées et site IIS sont conservés (sauvegarde préalable).` : "Cette installation est à jour."}
           La recette compare HeptagonesLM aux serveurs de licences et produit un PV.</p></div></div>
-        <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>` : ""}
+        <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>`
+          : `<button type="button" class="btn" id="go-update" title="Même numéro de version : réinstalle le programme de ce Setup (correctifs), configuration conservée">Réappliquer la mise à jour</button>`}
           <button type="button" class="btn ${newer ? "" : "primary"}" id="go-recette">Faire la recette de cette installation</button>
           <button type="button" class="btn" id="go-autodesk">Configurer les licences Autodesk</button>
           <button type="button" class="btn" id="go-admins">Administrateurs de l'interface web</button>

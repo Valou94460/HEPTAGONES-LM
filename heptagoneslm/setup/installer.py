@@ -228,7 +228,7 @@ def step_acl(ctx: Context) -> str:
     for sub in writable:
         ctx.system.grant(a.path(sub), a.service_account, "M")
         ctx.log(f"{a.service_account} : modification sur {a.path(sub)}")
-    if a.admin_group and ctx.system.exists(a.config_path):
+    if (a.admin_group or a.web_mode == "local") and ctx.system.exists(a.config_path):
         # page Administration de l'interface (serveurs de licences) : heptagoneslm.yaml modifiable par le service
         ctx.system.grant(a.config_path, a.service_account, "M")
         ctx.log(f"{a.service_account} : modification sur {a.config_path} (page Administration)")

@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path, PureWindowsPath
 
+from heptagoneslm.collectors.base import NO_WINDOW
 from heptagoneslm.setup import iis, toolscan
 from heptagoneslm.setup.answers import Answers
 from heptagoneslm.setup.iis import ps_quote
@@ -256,7 +257,7 @@ class WindowsSystem(System):
             # (tâche planifiée, CI, service) et ne se termine jamais.
             proc = subprocess.run(["powershell.exe", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
                                    "-EncodedCommand", encoded], capture_output=True, timeout=timeout, env=env,
-                                  stdin=subprocess.DEVNULL)
+                                  stdin=subprocess.DEVNULL, **NO_WINDOW)
         except subprocess.TimeoutExpired:
             return Result(124, "", f"délai dépassé ({timeout} s)")
         return Result(proc.returncode, _decode(proc.stdout), _clixml_errors(_decode(proc.stderr)))
@@ -452,7 +453,8 @@ foreach ($k in @(@('Edge', 'HKLM:\SOFTWARE\Policies\Microsoft\Edge'), @('Chrome'
         full_env.setdefault("PYTHONIOENCODING", "utf-8")     # HeptagonesLM.exe enfant : sortie UTF-8
         full_env.update(env or {})
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env, stdin=subprocess.DEVNULL)
+            proc = subprocess.run(cmd, capture_output=True, timeout=timeout, env=full_env, stdin=subprocess.DEVNULL,
+                                  **NO_WINDOW)
         except FileNotFoundError:
             return Result(127, "", f"programme introuvable : {cmd[0]}")
         except OSError as exc:             # dossier au lieu d'un .exe, accès refusé…
