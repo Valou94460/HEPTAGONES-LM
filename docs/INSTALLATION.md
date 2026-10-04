@@ -227,6 +227,24 @@ Sur la page d'accueil, **« Configurer les licences Autodesk »** ouvre l'étape
 API Autodesk). Seule la section `autodesk` de `heptagoneslm.yaml` est écrite. Le reste de l'installation
 est conservé et rien n'est ressaisi. Voir [AUTODESK_API.md](AUTODESK_API.md) § 2.
 
+### Administrer depuis l'interface web (26.3.3)
+
+Les membres du **groupe AD des administrateurs** voient la rubrique **Administration** de l'interface. Ce
+groupe se déclare à l'étape *Interface web et IIS* de l'assistant, ou sur une installation existante via
+l'accueil du Setup › *Administrateurs de l'interface web*. On y trouve deux fonctions :
+
+- **Serveurs de licences** : liste avec l'état de la dernière collecte, ajout, modification, suppression
+  et *Tester la connexion* (lmstat / rlmstat en direct). La collecte suivante prend en compte les
+  changements. Seuls le nom, `port@serveur`, le type (FlexLM / RLM) et l'état actif se modifient ici ; les
+  chemins de `lmutil` / `rlmutil` restent réservés à l'assistant ;
+- **Import d'un export Autodesk** : fichier CSV ou Excel du rapport d'utilisation d'Autodesk Account,
+  importé directement, sans passer par le dossier surveillé.
+
+`heptagoneslm.yaml` est validé avant chaque écriture, et l'ancienne version est gardée dans `logs\`.
+Chaque action est tracée dans le journal d'audit.
+
+![Administration](images/administration.png)
+
 ### Fermer l'assistant
 
 Au double-clic, la fenêtre console du Setup est masquée : seul le navigateur s'affiche. En fin

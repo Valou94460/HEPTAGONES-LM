@@ -448,7 +448,8 @@ def cmd_web(args) -> int:
     else:
         cfg = load_config(args.config)
     _setup_logging("DEBUG" if args.verbose else cfg.log_level, None)
-    serve(cfg, host=args.host, port=args.port, open_browser=args.open)
+    serve(cfg, host=args.host, port=args.port, open_browser=args.open,
+          config_path=None if args.demo else args.config)
     return 0
 
 

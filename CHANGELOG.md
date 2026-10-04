@@ -6,6 +6,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### 26.3.3 (en cours)
+- **Rubrique « Administration » de l'interface web**, réservée au groupe AD des administrateurs (nouveau champ
+  de l'assistant, ou accueil du Setup › « Administrateurs de l'interface web » pour une installation
+  existante) : ajout, modification, suppression et test en direct des serveurs de licences, et import d'un
+  export Autodesk depuis le navigateur. Configuration validée avant écriture, sauvegarde et journal d'audit.
 - **Garde-fou contre le simulateur en production** : si `heptagoneslm.yaml` pointe vers le faux `lmutil` des
   tests (`fake-lmutil`), la vérification et la recette passent en erreur, et le PV ne peut pas être conforme. Sur un
   environnement de test, `HEPTAGONESLM_ALLOW_SIMULATOR=1` ramène ce contrôle à un avertissement, qui reste une

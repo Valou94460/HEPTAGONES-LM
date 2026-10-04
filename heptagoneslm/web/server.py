@@ -6,8 +6,9 @@
 * ``GET /api/export?type=...&format=xlsx|csv|json``   téléchargement ; ``type=full`` = classeur complet
 
 * ``POST /api/login`` · ``POST /api/logout`` · ``GET /api/me``   authentification (mode ldap)
+* ``GET|POST /api/admin/servers`` · ``POST /api/admin/autodesk-import``   administration (rôle admin)
 
-L'interface est en lecture seule : aucune route n'écrit en base. Par défaut le
+Hors administration (rôle admin, voir web/admin.py), l'interface est en lecture seule. Par défaut le
 serveur n'écoute que sur ``127.0.0.1`` (poste local). Pour un usage partagé
 sur le réseau, activer l'authentification Windows/AD (``web.auth``) et HTTPS
 (``web.tls_cert`` / ``web.tls_key``) : voir docs/AUTHENTIFICATION.md.
@@ -25,12 +26,12 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse, urlsplit
+from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 
 from heptagoneslm import __version__
 from heptagoneslm.config import AppConfig, ConfigError
 from heptagoneslm.storage.db import Database
-from heptagoneslm.web import access, api
+from heptagoneslm.web import access, admin, api
 from heptagoneslm.web import roles
 from heptagoneslm.web.auth import COOKIE_NAME, Auth, AuthError, UserInfo
 
@@ -118,6 +119,7 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
     auth: Auth
     tls: bool = False
     allowed_hosts: set[str] | None = None
+    config_path: str | None = None    # heptagoneslm.yaml (page Administration)
     timeout = 30  # délai de lecture d'une requête (s) : coupe les connexions lentes
 
     def version_string(self) -> str:
@@ -286,6 +288,8 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                            entry["workstation"] or entry["client"], entry["browser"], entry["method"],
                            {True: "oui", False: "non"}.get(entry["prompted"], "?"))
                 return self._json({"ok": True, "entry": entry})
+            if path.startswith("/api/admin/"):
+                return self._admin_post(path)
             if path == "/api/logout":
                 token = self._token()
                 session = self.auth.sessions.get(token)
@@ -336,7 +340,14 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                 with self._db() as db:
                     return self._json({**roles.filter_meta(api.meta(db), access), "version": __version__,
                                        "demo": self.config.web.demo, "access": access.as_dict(),
+                                       "admin": self._is_admin(access),
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
+            if url.path == "/api/admin/servers":
+                if not self._is_admin(access):
+                    return self._forbidden(url.path, "Réservé aux administrateurs de HeptagonesLM")
+                with self._db() as db:
+                    collections = api.collections_status(db)
+                return self._json(admin.list_servers(self.config_path, collections))
             if url.path == "/api/report":
                 params = roles.restrict(api.params_from_config(query, self.config), access)
                 with self._db() as db:
@@ -364,6 +375,62 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                        HTTPStatus.INTERNAL_SERVER_ERROR)
         except Exception as exc:  # pragma: no cover - diagnostic
             self._internal_error(exc)
+
+    # -- administration ------------------------------------------------------
+
+    def _is_admin(self, access) -> bool:
+        return bool(access and access.role in ("admin", "local") and self.config_path and not self.config.web.demo)
+
+    def _admin_post(self, path: str) -> None:
+        # En-tête personnalisé : interdit l'envoi depuis un autre site (pré-requête CORS refusée)
+        if self.headers.get("X-HeptagonesLM") != "1":
+            return self._json({"error": "Requête refusée"}, HTTPStatus.FORBIDDEN)
+        user = self.current_user()
+        if user is None:
+            return self._deny(path)
+        try:
+            role = roles.resolve(user, self.config.web.roles, self.auth.mode)
+        except roles.Forbidden as exc:
+            return self._forbidden(path, str(exc))
+        if not self._is_admin(role):
+            audit.warning("Administration refusée : %s depuis %s (%s)", user.username, self.client_ip, path)
+            return self._forbidden(path, "Réservé aux administrateurs de HeptagonesLM")
+        backups = str(Path(self.config.log_file).parent) if self.config.log_file else None
+        try:
+            if path == "/api/admin/servers":
+                body = self._read_json()
+                action, server = body.get("action"), body.get("server") or {}
+                if action == "test":
+                    return self._json(admin.test_server(self.config_path, server))
+                if action == "save":
+                    saved = admin.save_server(self.config_path, server, body.get("original") or None, backups)
+                    audit.info("Administration : serveur %s %s (%s) par %s depuis %s", saved["name"],
+                               "modifié" if body.get("original") else "ajouté", saved["port_at_host"], user.username,
+                               self.client_ip)
+                    return self._json({"ok": True, "server": saved})
+                if action == "delete":
+                    admin.delete_server(self.config_path, str(body.get("original") or ""), backups)
+                    audit.info("Administration : serveur %s supprimé par %s depuis %s", body.get("original"),
+                               user.username, self.client_ip)
+                    return self._json({"ok": True})
+                raise admin.AdminError("Action inconnue")
+            if path == "/api/admin/autodesk-import":
+                try:
+                    length = int(self.headers.get("Content-Length") or 0)
+                except ValueError:
+                    length = -1
+                if not 0 < length <= admin.UPLOAD_MAX:
+                    raise admin.AdminError("Fichier vide ou trop volumineux (25 Mo au plus)")
+                name = unquote(self.headers.get("X-Filename") or "")
+                data = self.rfile.read(length)
+                with self._db() as db:
+                    result = admin.import_autodesk(db, name, data)
+                audit.info("Administration : export Autodesk %s importé par %s depuis %s (%s)", result.get("file"),
+                           user.username, self.client_ip, result.get("status"))
+                return self._json(result)
+            return self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)
+        except admin.AdminError as exc:
+            return self._json({"error": str(exc)}, HTTPStatus.UNPROCESSABLE_ENTITY)
 
     def _static(self, name: str) -> None:
         path = STATIC_DIR / name
@@ -398,13 +465,14 @@ def _ssl_context(config: AppConfig) -> ssl.SSLContext:
 
 
 def make_server(config: AppConfig, host: str = "127.0.0.1", port: int = 8765, port_attempts: int = 10,
-                auth: Auth | None = None) -> ThreadingHTTPServer:
+                auth: Auth | None = None, config_path: str | None = None) -> ThreadingHTTPServer:
     """Crée le serveur (HTTPS si un certificat est configuré) ; si le port est occupé, essaie les suivants."""
     check_security(config, host)
     tls = bool(config.web.tls_cert)
     handler = type("BoundHeptagonesLMHandler", (HeptagonesLMHandler,), {
         "config": config, "auth": auth or Auth(config.web.auth), "tls": tls,
         "allowed_hosts": allowed_host_names(config, host), "timeout": config.web.request_timeout_s,
+        "config_path": str(config_path) if config_path else None,
     })
     last_error: OSError | None = None
     for candidate in range(port, port + max(1, port_attempts)):
@@ -423,10 +491,11 @@ def make_server(config: AppConfig, host: str = "127.0.0.1", port: int = 8765, po
     raise OSError(f"Impossible d'ouvrir le port {port} (ni les suivants) : {last_error}")
 
 
-def serve(config: AppConfig, host: str | None = None, port: int | None = None, open_browser: bool = False) -> None:
+def serve(config: AppConfig, host: str | None = None, port: int | None = None, open_browser: bool = False,
+          config_path: str | None = None) -> None:
     host = host or config.web.host
     port = port or config.web.port
-    httpd = make_server(config, host, port)
+    httpd = make_server(config, host, port, config_path=config_path)
     real_port = httpd.server_address[1]
     shown_host = "localhost" if host in ("127.0.0.1", "0.0.0.0", "::") else host
     scheme = "https" if config.web.tls_cert else "http"

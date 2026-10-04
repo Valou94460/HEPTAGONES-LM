@@ -36,6 +36,7 @@
     denials: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
     sessions: '<path d="M4 6h16M4 12h16M4 18h10"/>',
     collections: '<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
     other: '<circle cx="12" cy="12" r="9"/>',
   };
   const SEV_LABEL = { critical: "Critique", serious: "Important", warning: "Attention", info: "Info" };
@@ -251,6 +252,7 @@
       showError("Impossible de charger les métadonnées : " + e.message);
       return;
     }
+    if (meta.admin) meta.reports.admin = "Administration";
     if (!meta.reports[state.type]) state.type = "dashboard";
     $("version").textContent = meta.version || "";
     if (meta.demo) $("demo-banner").hidden = false;
@@ -354,8 +356,9 @@
     const nav = $("nav");
     const placed = new Set(NAV.flatMap(([, items]) => items));
     const groups = NAV.map(([g, items]) => [g, items.filter(k => meta.reports[k])]);
-    const others = Object.keys(meta.reports).filter(k => !placed.has(k));
+    const others = Object.keys(meta.reports).filter(k => !placed.has(k) && k !== "admin");
     if (others.length) groups[1][1].push(...others);
+    if (meta.admin) groups.push(["Administration", ["admin"]]);
     nav.innerHTML = groups.filter(([, items]) => items.length).map(([g, items]) =>
       `<div class="nav-group">${esc(g)}</div>` + items.map(k =>
         `<button type="button" class="nav-item" data-type="${esc(k)}">${icon(k)}<span>${esc(meta.reports[k])}</span></button>`).join("")
@@ -396,6 +399,7 @@
       if (t.dataset.type === state.type) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
+    document.querySelector(".filterbar").hidden = state.type === "admin";   // pas de filtres sur l'administration
     $("page-title").textContent = (meta && meta.reports[state.type]) || "";
     document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${$("page-title").textContent} — HeptagonesLM`;
     document.querySelectorAll("[data-opt]").forEach(b => b.setAttribute("aria-pressed", String(state[b.dataset.opt] === b.dataset.value)));
@@ -427,6 +431,7 @@
   const pageKind = type => (type === "dashboard" || type === "live" ? type : "report");
 
   async function load(opts = {}) {
+    if (state.type === "admin") { if (!opts.silent) renderAdmin(); return; }
     const id = ++requestId;
     const view = $("view");
     if (!opts.silent) {
@@ -451,6 +456,106 @@
     } finally {
       if (id === requestId) view.classList.remove("loading");
     }
+  }
+
+  /* -- Administration (rôle administrateur) ------------------------------------------- */
+  async function postAdmin(url, body, raw, headers) {
+    const r = await fetch(url, {
+      method: "POST", credentials: "same-origin",
+      headers: { "X-HeptagonesLM": "1", ...(raw ? headers : { "Content-Type": "application/json" }) },
+      body: raw || JSON.stringify(body),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+    return data;
+  }
+  let adminEdit = null;      // serveur en cours de modification : null (ajout) | nom d'origine
+  async function renderAdmin() {
+    shownType = "admin";
+    const view = $("view");
+    $("page-desc").textContent = "Serveurs de licences interrogés par la collecte et import des exports Autodesk.";
+    let data;
+    try { data = await fetchJSON("api/admin/servers"); showError(""); }
+    catch (e) { showError(e.message); view.innerHTML = ""; return; }
+    const ro = data.readonly;
+    const status = s => !s.status ? '<span class="muted">pas encore collecté</span>'
+      : `<span class="badge sev ${s.status === "OK" ? "sev-good" : "sev-critical"}">${esc(s.status)}</span> <span class="muted">${esc(fmt(s.last_run, "datetime"))}</span>`;
+    view.innerHTML = `
+      <section class="card"><div class="card-head"><div><h2>Serveurs de licences</h2>
+        <div class="sub">Pris en compte par la collecte suivante (toutes les 5 minutes). Les chemins de lmutil / rlmutil restent réglés par l'assistant d'installation.</div></div></div>
+        <div class="card-body">
+        ${ro ? `<div class="alert sev-warning"><span class="sev-icon" aria-hidden="true">!</span><div class="alert-body"><div class="alert-detail">${esc(ro)}</div></div></div>` : ""}
+        <div class="table-wrap"><table><thead><tr><th>Nom</th><th>Adresse</th><th>Type</th><th>État</th><th>Dernière collecte</th><th></th></tr></thead><tbody>
+        ${data.servers.map(s => `<tr><td><b>${esc(s.name)}</b></td><td><code>${esc(s.port_at_host)}</code></td><td>${s.license_type === "rlm" ? "RLM" : "FlexLM"}</td>
+          <td>${s.enabled ? "Actif" : '<span class="muted">Désactivé</span>'}</td><td title="${esc(s.message || "")}">${status(s)}</td>
+          <td style="white-space:nowrap">${ro ? "" : `<button type="button" class="btn small ghost" data-edit="${esc(s.name)}">Modifier</button><button type="button" class="btn small ghost" data-del="${esc(s.name)}">Supprimer</button>`}</td></tr>`).join("")}
+        </tbody></table></div>
+        ${ro ? "" : `<h3 id="srv-form-title" style="margin:18px 0 8px">Ajouter un serveur</h3>
+        <div class="options" style="flex-wrap:wrap;gap:12px">
+          <label class="field"><span>Nom</span><input type="text" id="srv-name" placeholder="SIEMENS" maxlength="40"></label>
+          <label class="field"><span>Adresse port@serveur</span><input type="text" id="srv-target" placeholder="27000@licsrv01"></label>
+          <label class="field"><span>Type</span><select id="srv-type"><option value="flexlm">FlexLM (lmstat)</option><option value="rlm">RLM (rlmstat)</option></select></label>
+          <label class="field inline" style="align-self:flex-end"><input type="checkbox" id="srv-enabled" checked> <span>Actif</span></label>
+        </div>
+        <div class="options" style="gap:8px;margin-top:10px">
+          <button type="button" class="btn" id="srv-test">Tester la connexion</button>
+          <button type="button" class="btn primary" id="srv-save">Enregistrer</button>
+          <button type="button" class="btn ghost" id="srv-cancel" hidden>Annuler</button>
+        </div>
+        <p id="srv-result" class="muted" style="margin-top:10px"></p>`}
+        </div></section>
+      <section class="card" style="margin-top:16px"><div class="card-head"><div><h2>Import d'un export Autodesk</h2>
+        <div class="sub">Licences « utilisateur nommé » : rapport « Autodesk · utilisateurs nommés ».</div></div></div>
+        <div class="card-body">
+        <ol class="notes" style="margin-bottom:12px">
+          <li>Sur <b>manage.autodesk.com</b> : <i>Rapports › Rapport d'utilisation</i>, puis <i>Exporter</i> (CSV ou Excel).</li>
+          <li>Choisir le fichier ci-dessous puis « Importer ». Un même fichier importé deux fois n'est compté qu'une fois.</li>
+          <li>Pour une récupération automatique chaque jour, sans export manuel : connecteur API Autodesk (abonnement Business Success Plan), réglé dans HeptagonesLM-Setup.exe › « Configurer les licences Autodesk ».</li>
+        </ol>
+        <div class="options" style="gap:8px"><input type="file" id="adsk-file" accept=".csv,.xlsx,.txt">
+          <button type="button" class="btn primary" id="adsk-import">Importer</button></div>
+        <p id="adsk-result" class="muted" style="margin-top:10px"></p>
+        </div></section>`;
+    const form = () => ({ name: $("srv-name").value.trim(), port_at_host: $("srv-target").value.trim(),
+      license_type: $("srv-type").value, enabled: $("srv-enabled").checked });
+    const say = (id, msg, ok) => { const e = $(id); e.textContent = msg; e.style.color = ok === false ? "var(--critical)" : ok ? "var(--good)" : ""; };
+    const setEdit = s => {
+      adminEdit = s ? s.name : null;
+      $("srv-form-title").textContent = s ? `Modifier ${s.name}` : "Ajouter un serveur";
+      $("srv-name").value = s ? s.name : ""; $("srv-target").value = s ? s.port_at_host : "";
+      $("srv-type").value = s ? s.license_type : "flexlm"; $("srv-enabled").checked = s ? s.enabled : true;
+      $("srv-cancel").hidden = !s; say("srv-result", "");
+    };
+    view.querySelectorAll("[data-edit]").forEach(b => b.addEventListener("click", () => setEdit(data.servers.find(s => s.name === b.dataset.edit))));
+    view.querySelectorAll("[data-del]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm(`Supprimer le serveur ${b.dataset.del} ? L'historique déjà collecté est conservé.`)) return;
+      try { await postAdmin("api/admin/servers", { action: "delete", original: b.dataset.del }); renderAdmin(); }
+      catch (e) { showError(e.message); }
+    }));
+    $("srv-cancel")?.addEventListener("click", () => setEdit(null));
+    $("srv-test")?.addEventListener("click", async () => {
+      say("srv-result", "Interrogation du serveur…");
+      try { const r = await postAdmin("api/admin/servers", { action: "test", server: form() }); say("srv-result", r.message, r.ok); }
+      catch (e) { say("srv-result", e.message, false); }
+    });
+    $("srv-save")?.addEventListener("click", async () => {
+      try {
+        await postAdmin("api/admin/servers", { action: "save", server: form(), original: adminEdit });
+        adminEdit = null; await renderAdmin();
+        say("srv-result", "Enregistré : pris en compte par la prochaine collecte.", true);
+      } catch (e) { say("srv-result", e.message, false); }
+    });
+    $("adsk-import").addEventListener("click", async () => {
+      const f = $("adsk-file").files[0];
+      if (!f) { say("adsk-result", "Choisir d'abord un fichier exporté du portail Autodesk.", false); return; }
+      say("adsk-result", "Import en cours…");
+      try {
+        const r = await postAdmin("api/admin/autodesk-import", null, await f.arrayBuffer(),
+          { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(f.name) });
+        say("adsk-result", r.status === "importé" ? `Importé : ${r.rows} licence(s) nommée(s), rapport du ${fmt(r.report_date, "date")}.`
+          : `Ce fichier a déjà été importé (${r.file}).`, true);
+      } catch (e) { say("adsk-result", e.message, false); }
+    });
   }
 
   /* -- Squelettes de page --------------------------------------------------------- */
