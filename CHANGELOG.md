@@ -6,6 +6,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### 26.3.3 (en cours)
+- **Garde-fou contre le simulateur en production** : si `heptagoneslm.yaml` pointe vers le faux `lmutil` des
+  tests (`fake-lmutil`), la vérification et la recette passent en erreur, et le PV ne peut pas être conforme. Sur un
+  environnement de test, `HEPTAGONESLM_ALLOW_SIMULATOR=1` ramène ce contrôle à un avertissement, qui reste une
+  réserve dans le PV.
 - **Licences Autodesk sur une installation existante** : bouton « Configurer les licences Autodesk » sur
   l'accueil du Setup (exports du portail et API Autodesk, connexion comprise). Seule la section `autodesk` de
   `heptagoneslm.yaml` est écrite, sauvegarde `.bak` faite avant ; le Client Secret est chiffré (DPAPI),

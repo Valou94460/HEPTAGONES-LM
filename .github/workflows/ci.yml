@@ -272,6 +272,7 @@ jobs:
       run:
         shell: pwsh
     env:
+      HEPTAGONESLM_ALLOW_SIMULATOR: "1"   # faux lmutil de la CI : signalé en avertissement, pas en erreur
       SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # compte local jetable, propre à la CI
     steps:
       - uses: actions/checkout@v4
@@ -405,6 +406,7 @@ jobs:
       run:
         shell: pwsh
     env:
+      HEPTAGONESLM_ALLOW_SIMULATOR: "1"   # faux lmutil de la CI : signalé en avertissement, pas en erreur
       SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # comptes locaux jetables, propres à la CI
       PUBLIC_HOST: heptagoneslm.ci.local
       TOUR_USER: ci_lecteur

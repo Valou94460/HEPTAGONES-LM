@@ -129,5 +129,47 @@ class AutodeskOnExistingTest(unittest.TestCase):
                                                    autodesk_client_id="x"))
 
 
+
+class SimulatorGuardTest(unittest.TestCase):
+    """Le simulateur de serveurs de licences (tests) est interdit en production : vérification en erreur."""
+
+    def setUp(self):
+        self.s, self.a = ready_system(), answers()
+        install(self.s, self.a)
+
+    def plug_simulator(self):
+        tool = r"C:\HeptagonesLM\test\lmutil.cmd"
+        self.s.write_text(tool, '@"C:\\HeptagonesLM\\HeptagonesLM.exe" fake-lmutil %*')
+        cfg = yaml.safe_load(self.s.read_text(self.a.config_path))
+        cfg["lmutil_path"] = tool
+        cfg["servers"] = [{"name": "AUTODESK", "port_at_host": "27000@licsrv-adsk"}]
+        self.s.write_text(self.a.config_path, yaml.safe_dump(cfg, allow_unicode=True))
+
+    def check(self):
+        from heptagoneslm.setup.verify import verify
+        return next((c for c in verify(self.s, self.a)["checks"] if c["id"] == "simulator"), None)
+
+    def test_real_lmutil_has_no_finding(self):
+        self.assertIsNone(self.check())
+
+    def test_simulator_is_an_error(self):
+        import os
+        self.plug_simulator()
+        os.environ.pop("HEPTAGONESLM_ALLOW_SIMULATOR", None)
+        c = self.check()
+        self.assertEqual(c["status"], "error")
+        self.assertIn("interdit en production", c["detail"])
+        self.assertIn("27000@licsrv-adsk", c["detail"])
+
+    def test_simulator_allowed_in_test_environment(self):
+        import os
+        self.plug_simulator()
+        os.environ["HEPTAGONESLM_ALLOW_SIMULATOR"] = "1"
+        try:
+            self.assertEqual(self.check()["status"], "warning")          # réserve dans le PV, jamais « Conforme »
+        finally:
+            del os.environ["HEPTAGONESLM_ALLOW_SIMULATOR"]
+
+
 if __name__ == "__main__":
     unittest.main()

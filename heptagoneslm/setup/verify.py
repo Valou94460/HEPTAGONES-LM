@@ -54,6 +54,30 @@ def db_status(system: System, a: Answers, connection_string: str | None = None) 
     return {"schema": schema, "servers": servers}
 
 
+SIMULATOR_ENV = "HEPTAGONESLM_ALLOW_SIMULATOR"   # CI et environnements de test uniquement
+
+
+def simulator_findings(system: System, cfg) -> list[str]:
+    """Simulateur de serveurs de licences branché à la place du vrai lmutil / rlmutil (tests uniquement).
+
+    Interdit en production : la vérification et la recette passent en erreur (PV non conforme)."""
+    from heptagoneslm.simulation.model import DEFAULT_SCENARIO
+
+    found = []
+    tools = {cfg.lmutil_path, cfg.rlmutil_path}
+    for srv in cfg.servers:
+        tools |= {srv.lmutil_path, srv.rlmutil_path}
+    for tool in sorted(t for t in tools if t):
+        content = system.read_text(tool) if tool.lower().endswith((".cmd", ".bat", ".ps1")) else None
+        if "fake-lmutil" in tool.lower() or (content and "fake-lmutil" in content.lower()):
+            found.append(f"{tool} appelle le simulateur (fake-lmutil) au lieu du vrai lmutil")
+    simulated = {srv.port_at_host.lower() for srv in DEFAULT_SCENARIO}
+    for srv in cfg.servers:
+        if srv.port_at_host.lower() in simulated and found:
+            found.append(f"serveur {srv.name} ({srv.port_at_host}) : adresse du simulateur")
+    return found
+
+
 def verify(system: System, a: Answers, connection_string: str | None = None) -> dict:
     out: list[Check] = []
 
@@ -69,8 +93,16 @@ def verify(system: System, a: Answers, connection_string: str | None = None) -> 
         add("config", "Fichiers", "Configuration heptagoneslm.yaml", "error", f"{a.config_path} introuvable")
     else:
         try:
-            parse_config(yaml.safe_load(text))
+            cfg = parse_config(yaml.safe_load(text))
             add("config", "Fichiers", "Configuration heptagoneslm.yaml", "ok", a.config_path)
+            sim = simulator_findings(system, cfg)
+            if sim:
+                allowed = os.environ.get(SIMULATOR_ENV) == "1"
+                add("simulator", "Serveurs de licences", "Serveurs de licences réels",
+                    "warning" if allowed else "error",
+                    ("Simulateur autorisé (environnement de test) : " if allowed else
+                     "SIMULATEUR DE TEST branché, interdit en production : remettre le vrai lmutil et les vrais "
+                     "serveurs dans heptagoneslm.yaml. ") + " ; ".join(sim))
         except (ConfigError, yaml.YAMLError) as exc:
             add("config", "Fichiers", "Configuration heptagoneslm.yaml", "error", str(exc))
 
