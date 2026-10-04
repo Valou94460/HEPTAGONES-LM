@@ -20,7 +20,7 @@ import yaml
 
 from heptagoneslm import __version__
 from heptagoneslm.setup import iis
-from heptagoneslm.setup.answers import SECRET_FIELDS, Answers
+from heptagoneslm.setup.answers import AUTODESK_SECRET_FILE, SECRET_FIELDS, Answers
 from heptagoneslm.setup.system import TASK_FOLDER, SetupError, System, TaskSpec
 
 WEB_TASK = "HeptagonesLM - Interface web"
@@ -449,13 +449,90 @@ def build_update_plan(a: Answers) -> list[Step]:
     ]
 
 
+AUTODESK_FIELDS = ("autodesk_enabled", "autodesk_import_dir", "autodesk_inactive_days", "autodesk_api_enabled",
+                   "autodesk_client_id", "autodesk_client_secret", "autodesk_context_id", "autodesk_callback_port")
+
+
+def step_autodesk_secret(ctx: Context) -> str:
+    """Client Secret Autodesk seul (les autres secrets de l'installation ne sont pas touchés)."""
+    a = ctx.a
+    path = a.path("secrets", AUTODESK_SECRET_FILE)
+    ctx.system.restrict_secrets_dir(a.secrets_dir, a.service_account)
+    ctx.system.write_secret(path, a.autodesk_client_secret)
+    ctx.log(f"Secret chiffré par Windows (DPAPI) : {path}")
+    return AUTODESK_SECRET_FILE
+
+
+def step_autodesk_config(ctx: Context) -> str:
+    """Section autodesk de heptagoneslm.yaml remplacée ; le reste du fichier est conservé tel quel."""
+    from heptagoneslm.config import ConfigError, parse_config
+
+    a, system = ctx.a, ctx.system
+    previous = system.read_text(a.config_path)
+    if previous is None:
+        raise SetupError(f"Configuration introuvable : {a.config_path}")
+    try:
+        cfg = yaml.safe_load(previous) or {}
+    except yaml.YAMLError as exc:
+        raise SetupError(f"heptagoneslm.yaml illisible : {exc}") from None
+    section = a.config_dict().get("autodesk")
+    old = cfg.get("autodesk") if isinstance(cfg.get("autodesk"), dict) else {}
+    if section is None:
+        cfg.pop("autodesk", None)
+    else:
+        if old.get("annual_costs"):                 # coûts saisis à la main : conservés
+            section["annual_costs"] = old["annual_costs"]
+        cfg["autodesk"] = section
+    try:
+        parse_config(cfg)
+    except ConfigError as exc:
+        raise SetupError(f"Configuration Autodesk invalide : {exc}") from None
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    system.write_text(a.config_path + f".{stamp}.bak", previous)
+    ctx.log(f"Ancienne configuration sauvegardée : heptagoneslm.yaml.{stamp}.bak")
+    head = []                                       # commentaires d'en-tête conservés
+    for line in previous.splitlines():
+        if not line.startswith("#"):
+            break
+        head.append(line)
+    header = "\n".join(head) + "\n\n" if head else ""
+    system.write_text(a.config_path, header + a.dump_config(cfg))
+    ctx.log("Section autodesk de heptagoneslm.yaml " + ("écrite" if section else "retirée") + " ; reste inchangé")
+    raw = system.read_text(a.path(ANSWERS_FILE))
+    try:
+        saved = json.loads(raw) if raw else {}
+    except ValueError:
+        saved = {}
+    saved.update({k: getattr(a, k) for k in AUTODESK_FIELDS if k not in SECRET_FIELDS})
+    system.write_text(a.path(ANSWERS_FILE), json.dumps(saved, ensure_ascii=False, indent=2))
+    if not a.autodesk_enabled:
+        return "Suivi Autodesk désactivé"
+    return "Exports du portail" + (" et API Autodesk" if a.autodesk_api_on else "") + " configurés"
+
+
+def build_autodesk_plan(a: Answers) -> list[Step]:
+    """Licences Autodesk nommées sur une installation existante : sans réinstaller ni ressaisir de mot de passe."""
+    steps = []
+    if a.autodesk_enabled:
+        steps.append(Step("prepare", "Dossiers Autodesk", 1, step_prepare))
+        if a.autodesk_api_on and a.autodesk_client_secret:
+            steps.append(Step("secrets", "Client Secret Autodesk", 1, step_autodesk_secret))
+        steps.append(Step("acl", "Droits du compte de service", 1, step_acl))
+    steps += [Step("autodesk_config", "Configuration Autodesk", 1, step_autodesk_config),
+              Step("start", "Redémarrage de l'interface web", 2, step_start),
+              Step("collect", "Collecte (import Autodesk)", 2, step_collect)]
+    return steps
+
+
 # ------------------------------------------------------------------------------ exécution
 
 
 class Installer:
-    def __init__(self, system: System, a: Answers, update: bool = False):
-        self.system, self.a, self.update = system, a, update
-        self.steps = build_update_plan(a) if update else build_plan(a)
+    def __init__(self, system: System, a: Answers, update: bool = False, mode: str | None = None):
+        """``mode`` : install (défaut), update (mise à jour en place), autodesk (licences Autodesk sur l'existant)."""
+        self.mode = mode or ("update" if update else "install")
+        self.system, self.a, self.update = system, a, self.mode == "update"
+        self.steps = {"update": build_update_plan, "autodesk": build_autodesk_plan}.get(self.mode, build_plan)(a)
         self.status = "idle"               # idle | running | done | failed
         self.current = -1
         self.fraction = 0.0                # avancement dans l'étape courante
@@ -504,7 +581,7 @@ class Installer:
                 s.status, s.message, s.started, s.ended = "pending", "", None, None
             self.logs.clear()
             self.started_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-            verb = "Mise à jour vers" if self.update else "Installation de"
+            verb = {"update": "Mise à jour vers", "autodesk": "Configuration Autodesk de"}.get(self.mode, "Installation de")
             self.log(f"{verb} HeptagonesLM {__version__} dans {self.a.install_dir} ({self.system.name})")
         self.status, self.error, self.ended_at = "running", None, None
         self._thread = threading.Thread(target=self._run, args=(first,), daemon=True, name="heptagoneslm-setup")
@@ -536,7 +613,8 @@ class Installer:
                 step.ended = time.time()
         self.status = "done"
         self.ended_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-        self.log("Mise à jour terminée" if self.update else "Installation terminée", "ok")
+        self.log({"update": "Mise à jour terminée", "autodesk": "Configuration Autodesk terminée"}
+                 .get(self.mode, "Installation terminée"), "ok")
         if self.update:
             self._record_version()
         self._save_log()
@@ -563,7 +641,8 @@ class Installer:
             host = self.system.os_info().get("hostname") or self.system.name
         except Exception:
             host = self.system.name
-        kind = "rapport de mise à jour" if self.update else "rapport d'installation"
+        kind = {"update": "rapport de mise à jour", "autodesk": "rapport de configuration Autodesk"}.get(
+            self.mode, "rapport d'installation")
         lines = [f"HeptagonesLM {__version__} — {kind}", f"Serveur : {host}",
                  f"Début : {self.started_at}  Fin : {self.ended_at or '—'}  "
                  f"Statut : {STATUS_FR.get(self.status, self.status)}", ""]

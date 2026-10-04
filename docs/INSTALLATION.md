@@ -210,6 +210,18 @@ réponses, mais **conserve les réglages ajoutés à la main** (`products`, `sit
 `reporting`, coûts Autodesk, rôles, abonnements e-mail supplémentaires, types d'alertes) ; l'ancien fichier
 est gardé en `heptagoneslm.yaml.<horodatage>.bak`.
 
+### Ajouter les licences Autodesk à une installation existante
+
+Sur la page d'accueil, **« Configurer les licences Autodesk »** ouvre l'étape Autodesk (exports du portail,
+API Autodesk). Seule la section `autodesk` de `heptagoneslm.yaml` est écrite. Le reste de l'installation
+est conservé et rien n'est ressaisi. Voir [AUTODESK_API.md](AUTODESK_API.md) § 2.
+
+### Fermer l'assistant
+
+Au double-clic, la fenêtre console du Setup est masquée : seul le navigateur s'affiche. En fin
+d'installation, de mise à jour ou de recette, cliquer sur **« Quitter l'assistant »**. Sans onglet ouvert
+pendant 30 minutes, l'assistant s'arrête aussi tout seul, sauf si une opération est en cours.
+
 ### Signature de l'exécutable
 
 `HeptagonesLM-Setup.exe` et `HeptagonesLM.exe` sont signés (Authenticode, horodatage RFC 3161) quand le

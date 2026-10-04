@@ -184,6 +184,15 @@
   const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify"), RECETTE = at("recette");
   let recetteMode = false;            // recette d'une installation existante, ouverte depuis la page d'accueil
   let updateMode = false;             // mise à jour en place d'une installation existante
+  let autodeskMode = false;           // licences Autodesk ajoutées à une installation existante
+  const AUTODESK = at("autodesk");
+  // Libellés de la page de progression selon l'opération (installation, mise à jour, configuration Autodesk)
+  const op = () => autodeskMode ? { name: "Configuration Autodesk", done: "Configuration Autodesk terminée",
+      stopped: "Configuration Autodesk interrompue", failed: "La configuration Autodesk s'est arrêtée" }
+    : updateMode ? { name: "Mise à jour", done: "Mise à jour terminée", stopped: "Mise à jour interrompue",
+      failed: "La mise à jour s'est arrêtée" }
+    : { name: "Installation", done: "Installation terminée", stopped: "Installation interrompue",
+      failed: "L'installation s'est arrêtée" };
 
   function renderStepper() {
     const locked = install.status === "running";
@@ -192,6 +201,7 @@
       let reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
       if (recetteMode) reachable = !locked && i !== step && (i === 0 || i === RECETTE);
       if (updateMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
+      if (autodeskMode) reachable = !locked && i !== step && (i === 0 || i === AUTODESK || (i >= INSTALL && i <= maxStep));
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
     }).join("");
@@ -201,9 +211,12 @@
   function render() {
     const s = STEPS[step];
     $("step-eyebrow").textContent = `Étape ${step + 1} sur ${STEPS.length}`;
-    $("step-title").textContent = updateMode && step === INSTALL ? "Mise à jour" : s.title;
+    $("step-title").textContent = (updateMode || autodeskMode) && step === INSTALL ? op().name : s.title;
     $("step-desc").textContent = updateMode && step === INSTALL
-      ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés." : s.desc;
+      ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés."
+      : autodeskMode && step === INSTALL ? "Seule la section Autodesk de la configuration change : base, tâches, site IIS et mots de passe restent tels quels."
+      : autodeskMode && step === AUTODESK ? "Installation existante : seule la partie Autodesk de la configuration sera modifiée, sans réinstaller ni ressaisir de mot de passe."
+      : s.desc;
     const body = $("step-body");
     body.innerHTML = s.render();
     bind(body);
@@ -212,7 +225,8 @@
     const prev = $("prev"), next = $("next");
     prev.hidden = step === 0 || step >= INSTALL;
     next.hidden = step >= INSTALL;
-    next.textContent = s.next || "Suivant";
+    next.textContent = autodeskMode && step === AUTODESK ? "Enregistrer la configuration Autodesk" : (s.next || "Suivant");
+    prev.textContent = autodeskMode && step === AUTODESK ? "Retour à l'accueil" : "Précédent";
     next.disabled = step === SUMMARY && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
     $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${pl(blockingCount, "prérequis bloquant", "prérequis bloquants")} à corriger` : "";
     // dernières étapes : boutons propres à la page, barre du bas inutile (elle masquait la fin de la page)
@@ -255,6 +269,7 @@
           La recette compare HeptagonesLM aux serveurs de licences et produit un PV.</p></div></div>
         <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>` : ""}
           <button type="button" class="btn ${newer ? "" : "primary"}" id="go-recette">Faire la recette de cette installation</button>
+          <button type="button" class="btn" id="go-autodesk">Configurer les licences Autodesk</button>
           <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div></div>` : ""}
       <div class="welcome-grid">${feats.map(([i, t, d]) => `<div class="feature"><span class="ico">${icon(i)}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div>
       <div class="recap">
@@ -277,7 +292,8 @@
 
   STEPS[0].after = () => {
     $("go-recette")?.addEventListener("click", () => { recetteMode = true; step = RECETTE; render(); window.scrollTo({ top: 0 }); loadRecette(); });
-    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; go(1); });
+    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; autodeskMode = false; go(1); });
+    $("go-autodesk")?.addEventListener("click", openAutodeskConfig);
     $("go-update")?.addEventListener("click", startUpdate);
   };
 
@@ -724,16 +740,16 @@
     return `
       <div class="panel progress-card">
         <div class="progress-top"><span class="pct" id="pct">${pct} %</span>
-          <span class="cur" id="cur">${st.status === "done" ? (updateMode ? "Mise à jour terminée" : "Installation terminée") : st.status === "failed" ? (updateMode ? "Mise à jour interrompue" : "Installation interrompue") : esc(st.current || "Démarrage…")}</span></div>
+          <span class="cur" id="cur">${st.status === "done" ? op().done : st.status === "failed" ? op().stopped : esc(st.current || "Démarrage…")}</span></div>
         <div class="bar ${cls}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
         <ul class="steps-list" id="steps">${(st.steps || []).map(s => `<li class="${s.status}"><span class="ico">${s.status === "running" ? '<span class="spinner"></span>' : icons[s.status]}</span>
           <span>${esc(s.label)}${s.status === "failed" ? `<br><small style="color:var(--critical)">${esc(s.message)}</small>` : ""}</span>
           <small>${s.duration != null ? s.duration + " s" : ""}</small></li>`).join("")}</ul>
       </div>
-      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${updateMode ? "La mise à jour s'est arrêtée" : "L'installation s'est arrêtée"}</h2>
+      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${op().failed}</h2>
         <p>${esc(st.error || "")}</p></div></div>
         <div class="actions"><button type="button" class="btn primary" id="retry">Réessayer à partir de cette étape</button>
-          ${updateMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
+          ${updateMode || autodeskMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
           <a class="btn ghost" href="/api/report">Télécharger le journal</a></div></div>` : ""}
       <div class="panel"><details ${st.status === "failed" ? "open" : ""} id="log-details"><summary>Journal détaillé</summary>
         <div class="console" id="console" style="margin-top:12px"></div></details></div>`;
@@ -753,6 +769,31 @@
     $("retry")?.addEventListener("click", () => startInstall(true));
     $("back-summary")?.addEventListener("click", () => { install = { status: "idle" }; go(SUMMARY); });
   };
+  /* Licences Autodesk sur l'installation existante : formulaire de l'étape Autodesk, puis seule la section
+     autodesk de heptagoneslm.yaml est écrite (plus le Client Secret chiffré et les dossiers). */
+  async function openAutodeskConfig() {
+    showError("");
+    let ctx;
+    try { ctx = await api("/api/autodesk/context", {}); } catch (e) { showError(e.message); return; }
+    A = { ...A, ...ctx.answers };
+    if (!A.autodesk_enabled) A.autodesk_enabled = true;
+    autodeskMode = true; updateMode = false; recetteMode = false; adesk = null;
+    step = AUTODESK; maxStep = Math.max(maxStep, AUTODESK);
+    render(); window.scrollTo({ top: 0 });
+  }
+  async function startAutodeskConfig() {
+    showError("");
+    try {
+      const res = await api("/api/validate", { answers: A, step: "autodesk" });
+      if (res.errors.length) { markErrors(res.errors); showError("Corrigez les champs signalés pour continuer."); return; }
+      await api("/api/autodesk/configure", { answers: A });
+    } catch (e) { showError(e.message); return; }
+    logCount = 0; consoleLines = []; poll.last = null;
+    install = { status: "running", steps: [] };
+    step = INSTALL; maxStep = INSTALL;
+    render(); window.scrollTo({ top: 0 });
+    poll();
+  }
   async function startUpdate() {
     showError("");
     try { await api("/api/update", {}); } catch (e) { showError(e.message); return; }
@@ -984,9 +1025,13 @@
   };
 
   /* -- Démarrage ------------------------------------------------------------------------------ */
-  $("prev").addEventListener("click", () => go(Math.max(0, step - 1)));
+  $("prev").addEventListener("click", () => {
+    if (autodeskMode) { autodeskMode = false; go(0); return; }          // retour à l'accueil
+    go(Math.max(0, step - 1));
+  });
   $("next").addEventListener("click", () => {
-    if (step === SUMMARY) startInstall(false);
+    if (autodeskMode && step === AUTODESK) startAutodeskConfig();
+    else if (step === SUMMARY) startInstall(false);
     else go(step + 1);
   });
 

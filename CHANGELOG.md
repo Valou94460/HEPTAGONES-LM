@@ -6,6 +6,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### 26.3.3 (en cours)
+- **Licences Autodesk sur une installation existante** : bouton « Configurer les licences Autodesk » sur
+  l'accueil du Setup (exports du portail et API Autodesk, connexion comprise). Seule la section `autodesk` de
+  `heptagoneslm.yaml` est écrite, sauvegarde `.bak` faite avant ; le Client Secret est chiffré (DPAPI),
+  l'interface est redémarrée et une collecte lancée, sans réinstaller ni ressaisir de mot de passe.
 - **Bouton « Quitter l'assistant »** en fin d'installation, de mise à jour, de vérification et de recette
   (refusé tant qu'une opération est en cours) ; l'assistant s'arrête aussi seul après 30 minutes sans onglet
   ouvert.

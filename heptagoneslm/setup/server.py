@@ -23,9 +23,9 @@ from urllib.parse import parse_qs, urlparse
 
 from heptagoneslm import __version__
 from heptagoneslm.setup import probes, recette, toolscan
-from heptagoneslm.setup.answers import Answers
+from heptagoneslm.setup.answers import SECRET_FIELDS, Answers
 from heptagoneslm.setup.checks import PROBES, apply_fix, blocking, run_checks
-from heptagoneslm.setup.installer import Installer, build_plan, schedule_label, _tasks, Context
+from heptagoneslm.setup.installer import AUTODESK_FIELDS, Installer, build_plan, schedule_label, _tasks, Context
 from heptagoneslm.setup.system import SetupError, System
 from heptagoneslm.setup.verify import verify
 
@@ -148,6 +148,36 @@ class SetupApp:
             installed = recette.load_installed(self.system, path)
             self.answers = installed.answers
             self.installer = Installer(self.system, installed.answers, update=True)
+            self.verification = None
+            self.installer.start()
+        return {"started": True, "install_dir": installed.install_dir}
+
+    def autodesk_context(self, config_path: str | None = None) -> dict:
+        """Réponses de l'installation existante (sans secret) : base du formulaire Autodesk."""
+        path = config_path or self.installed_config()
+        if not path:
+            raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur")
+        installed = recette.load_installed(self.system, path)
+        answers = {k: v for k, v in installed.answers.to_dict().items() if k not in SECRET_FIELDS}
+        return {"answers": answers, "config_path": path}
+
+    def start_autodesk_config(self, form: Answers, config_path: str | None = None) -> dict:
+        """Licences Autodesk nommées ajoutées (ou modifiées) sur l'installation existante."""
+        path = config_path or self.installed_config()
+        if not path:
+            raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur")
+        with self.lock:
+            if self.installer and self.installer.status == "running":
+                raise SetupError("Une installation est déjà en cours")
+            installed = recette.load_installed(self.system, path)
+            a = installed.answers
+            for field in AUTODESK_FIELDS:
+                setattr(a, field, getattr(form, field))
+            errors = a.validate("autodesk")
+            if errors:
+                raise SetupError("; ".join(e["message"] for e in errors))
+            self.answers = a
+            self.installer = Installer(self.system, a, mode="autodesk")
             self.verification = None
             self.installer.start()
         return {"started": True, "install_dir": installed.install_dir}
@@ -447,6 +477,10 @@ class SetupHandler(BaseHTTPRequestHandler):
                                    "blocking": len(blocking(checks))})
             if path == "/api/update":
                 return self._json(app.start_update(body.get("config_path") or None))
+            if path == "/api/autodesk/context":
+                return self._json(app.autodesk_context(body.get("config_path") or None))
+            if path == "/api/autodesk/configure":
+                return self._json(app.start_autodesk_config(a, body.get("config_path") or None))
             if path == "/api/autodesk/login":
                 return self._json(app.start_autodesk_login(a))
             if path == "/api/test":
