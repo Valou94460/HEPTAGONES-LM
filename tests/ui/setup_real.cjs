@@ -168,7 +168,11 @@ const path = require("path");
     }
     await shot("tickets_itsm");
 
-    // 9. Récapitulatif
+    // 9. Licences Autodesk nommées (26.3.1) : laissées désactivées dans le parcours réel
+    await next("Licences Autodesk nommées");
+    await shot("autodesk");
+
+    // 10. Récapitulatif
     await next("Récapitulatif");
     await page.waitForSelector("pre.yaml", { state: "attached", timeout: 60000 });
     await page.waitForFunction(() => !document.getElementById("next").disabled, null, { timeout: 120000 })

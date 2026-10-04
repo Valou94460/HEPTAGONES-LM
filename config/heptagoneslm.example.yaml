@@ -191,6 +191,13 @@ web:
 #     "AutoCAD LT": 560
 #     "Revit": 3100
 #     "Product Design*": 3500
+#   api:                                           # API Autodesk Business Success Plan (docs/AUTODESK_API.md)
+#     client_id: VOTRE_CLIENT_ID                    # application aps.autodesk.com, URL de rappel :
+#                                                  #   http://localhost:8770/autodesk/callback
+#     # client_secret: dpapi:C:/HeptagonesLM/secrets/autodesk_client_secret.dpapi   # « Traditional Web App »
+#     # context_id: ÉQUIPE                         # si le compte administre plusieurs équipes
+#     lookback_days: 90
+#     sync_hours: 24                               # synchronisation par la collecte, au plus toutes les 24 h
 
 retention:
   snapshots_days: 90       # sondages bruts ; les agrégats horaires sont conservés

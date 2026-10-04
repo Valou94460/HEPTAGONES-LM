@@ -217,8 +217,15 @@ class InstallerTest(unittest.TestCase):
         self.assertEqual(st["status"], "done", st["error"])
         self.assertEqual(st["percent"], 100.0)
         self.assertEqual({t for t in s.tasks}, {"HeptagonesLM - Collecte", "HeptagonesLM - Rapport mensuel", "HeptagonesLM - Purge",
-                                                "HeptagonesLM - Interface web"})
+                                                "HeptagonesLM - Interface web", "HeptagonesLM - Surveillance de l'interface"})
         self.assertIn('"C:\\HeptagonesLM\\heptagoneslm.yaml" collect', s.tasks["HeptagonesLM - Collecte"]["spec"])
+        watchdog = s.tasks["HeptagonesLM - Surveillance de l'interface"]
+        self.assertEqual(watchdog["user"], "SYSTEM")                       # aucun mot de passe nécessaire
+        self.assertIn("Start-ScheduledTask", watchdog["spec"])
+        shortcut = s.read_text(r"C:\Users\Public\Desktop\HeptagonesLM.url")   # icône sur le bureau
+        self.assertIn(f"URL={a.public_url}/", shortcut)
+        self.assertIn(r"IconFile=C:\HeptagonesLM\HeptagonesLM.exe", shortcut)
+        self.assertTrue(s.exists(r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\HeptagonesLM.url"))
         written = s.read_text(a.config_path)
         parse_config(yaml.safe_load(written))
         self.assertNotIn("Pwd-SQL", written)

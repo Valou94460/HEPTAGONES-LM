@@ -182,7 +182,25 @@ const { spawn } = require("child_process");
   await tool.screenshot({ path: `${out}/setup_08e_servicenow_incident.png`, fullPage: true });
   await tool.close();
 
-  // 9. Récapitulatif
+  // 9. Licences Autodesk nommées : exports du portail + API (connexion simulée)
+  await next("Licences Autodesk nommées");
+  await page.check('[data-bind="autodesk_enabled"]');
+  await page.waitForSelector('[data-bind="autodesk_api_enabled"]');
+  await page.check('[data-bind="autodesk_api_enabled"]');
+  await page.waitForSelector('[data-bind="autodesk_client_id"]');
+  await page.fill('[data-bind="autodesk_client_id"]', "abc");
+  await page.click("#autodesk-login");
+  await page.waitForSelector("#res-autodesk .status-dot", { timeout: 15000 });
+  check((await page.textContent("#res-autodesk")).includes("Compléter les champs"), "Client ID invalide accepté");
+  await page.fill('[data-bind="autodesk_client_id"]', "SimClientId0123456789");
+  const [popup] = await Promise.all([page.waitForEvent("popup"), page.click("#autodesk-login")]);
+  await page.waitForFunction(() => (document.getElementById("res-autodesk") || {}).textContent?.includes("Connecté"), null, { timeout: 15000 })
+    .catch(() => failures.push("connexion Autodesk (simulation) non aboutie"));
+  check((await page.inputValue('[data-bind="autodesk_context_id"]')) === "SIM-TEAM-1", "équipe Autodesk non sélectionnée automatiquement");
+  check(popup.isClosed() || popup.url() === "about:blank", "onglet de connexion inattendu en simulation");
+  await shot("08f_autodesk");
+
+  // 10. Récapitulatif
   await next("Récapitulatif");
   await page.waitForSelector("pre.yaml", { state: "attached", timeout: 15000 });
   await page.waitForFunction(() => !document.getElementById("next").disabled, null, { timeout: 15000 })
@@ -193,6 +211,8 @@ const { spawn } = require("child_process");
   check(recap.includes("Chiffrés par Windows (DPAPI)") && recap.includes("réussi"), "récapitulatif ITSM incomplet");
   const yamlText = await page.textContent("pre.yaml");
   check(yamlText.includes("dpapi:C:/HeptagonesLM/secrets/itsm_password.dpapi"), "référence au secret chiffré absente du YAML");
+  check(yamlText.includes("client_id: SimClientId0123456789") && yamlText.includes("context_id: SIM-TEAM-1")
+        && yamlText.includes("token_file: C:/HeptagonesLM/data/autodesk_token.dpapi"), "section autodesk.api absente du YAML");
   check(!yamlText.includes("Snow-Test-2026") && !(await page.content()).includes("Snow-Test-2026"), "mot de passe ITSM en clair dans le récapitulatif");
   await shot("09_recapitulatif");
 

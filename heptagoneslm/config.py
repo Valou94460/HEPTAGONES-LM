@@ -78,11 +78,30 @@ class RetentionConfig:
 
 
 @dataclass
+class AutodeskApiConfig:
+    """API Autodesk « Business Success Plan Reporting » (Insights) : usage des licences nommées sans export manuel."""
+    client_id: str
+    client_secret: str | None = None   # application « Traditional Web App » ; absent : PKCE (application « Desktop »)
+    context_id: str | None = None      # équipe (contexte) Autodesk ; absent : la seule équipe accessible
+    callback_port: int = 8770          # URL de rappel à déclarer : http://localhost:<port>/autodesk/callback
+    lookback_days: int = 90            # période d'usage interrogée à chaque synchronisation
+    sync_hours: int = 24               # synchronisation au plus toutes les N heures (appelée par la collecte)
+    token_file: str | None = None      # jeton de renouvellement (chiffré par DPAPI sous Windows)
+    base_url: str = "https://developer.api.autodesk.com"
+    timeout_s: int = 60
+
+    @property
+    def callback_url(self) -> str:
+        return f"http://localhost:{self.callback_port}/autodesk/callback"
+
+
+@dataclass
 class AutodeskConfig:
     """Licences Autodesk « utilisateur nommé » importées des exports du portail Autodesk Account."""
     import_dir: str | None = None  # dossier surveillé : chaque export déposé est importé à la collecte
     inactive_days: int = 30        # licence inactive au-delà de ce nombre de jours sans utilisation
     annual_costs: dict[str, float] = field(default_factory=dict)  # motif de produit -> coût annuel d'une licence
+    api: AutodeskApiConfig | None = None
 
 
 @dataclass
@@ -425,7 +444,39 @@ def _parse_autodesk(a) -> AutodeskConfig:
         raise ConfigError(f"autodesk : valeur numérique attendue ({exc})") from exc
     if inactive < 1:
         raise ConfigError("autodesk.inactive_days doit être supérieur ou égal à 1")
-    return AutodeskConfig(import_dir=_expand(a.get("import_dir")), inactive_days=inactive, annual_costs=parsed)
+    return AutodeskConfig(import_dir=_expand(a.get("import_dir")), inactive_days=inactive, annual_costs=parsed,
+                          api=_parse_autodesk_api(a.get("api")))
+
+
+def _parse_autodesk_api(c) -> AutodeskApiConfig | None:
+    if not c:
+        return None
+    where = "autodesk.api"
+    if not isinstance(c, dict):
+        raise ConfigError(f"{where} doit être une section (client_id, client_secret, context_id…)")
+    client_id = _expand(str(c.get("client_id") or "")).strip()
+    if not client_id:
+        raise ConfigError(f"{where}.client_id est obligatoire (application créée sur aps.autodesk.com)")
+    try:
+        port, lookback, sync = int(c.get("callback_port", 8770)), int(c.get("lookback_days", 90)), \
+            int(c.get("sync_hours", 24))
+        timeout = int(c.get("timeout_s", 60))
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"{where} : valeur numérique attendue ({exc})") from exc
+    if not 1024 <= port <= 65535:
+        raise ConfigError(f"{where}.callback_port doit être compris entre 1024 et 65535")
+    if not 1 <= lookback <= 365:
+        raise ConfigError(f"{where}.lookback_days doit être compris entre 1 et 365")
+    if sync < 1:
+        raise ConfigError(f"{where}.sync_hours doit être supérieur ou égal à 1")
+    base = str(c.get("base_url") or "https://developer.api.autodesk.com").rstrip("/")
+    if not base.startswith(("https://", "http://127.0.0.1", "http://localhost")):
+        raise ConfigError(f"{where}.base_url doit être en HTTPS")
+    secret = c.get("client_secret")
+    return AutodeskApiConfig(client_id=client_id, client_secret=_expand(str(secret)) if secret else None,
+                             context_id=str(c["context_id"]) if c.get("context_id") else None, callback_port=port,
+                             lookback_days=lookback, sync_hours=sync, token_file=_expand(c.get("token_file")),
+                             base_url=base, timeout_s=timeout)
 
 
 PERIODS = ("last-month", "this-month", "last-week", "last-7d", "last-year")

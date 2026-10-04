@@ -6,6 +6,31 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### Ajouté
+- **Icône HeptagonesLM sur le bureau** (et dans le menu Démarrer) en fin d'installation ou de mise à jour :
+  ouvre le tableau de bord.
+- **Relance automatique de l'interface web** : tâche « Surveillance de l'interface » (toutes les 5 minutes,
+  sous SYSTEM) qui relance l'interface si elle ne tourne pas, par exemple après un redémarrage du serveur où
+  le domaine ou la base n'étaient pas encore prêts. Les tâches tournent aussi sur batterie.
+- **Mise à jour en place** : l'assistant reconnaît l'installation existante et sa version ; « Mettre à jour »
+  sauvegarde (configuration, réponses, web.config, base SQLite), remplace l'exécutable, met à jour le schéma,
+  redémarre l'interface, lance une collecte de contrôle puis la vérification — sans rien ressaisir
+  (configuration, mots de passe, tâches et site IIS conservés). Mode silencieux : `setup --update`.
+- **Réglages personnalisés conservés** quand l'assistant réécrit `heptagoneslm.yaml` (products, sites,
+  rétention, coûts Autodesk, rôles, abonnements e-mail, types d'alertes).
+- **Signature de code** de `HeptagonesLM-Setup.exe` et `HeptagonesLM.exe` (Authenticode horodaté) avec le
+  certificat de l'éditeur (secrets GitHub `SIGN_PFX_BASE64` / `SIGN_PFX_PASSWORD`) ; procédure validée en CI
+  avec un certificat de test.
+- **Connecteur API Autodesk (Business Success Plan Reporting)** : l'usage des licences Autodesk nommées est
+  lu directement chez Autodesk (API Insights : équipes, requêtes d'usage asynchrones paginées, limite de débit
+  respectée), sans export manuel. Connexion OAuth 3 étapes d'un administrateur (PKCE, ou Client Secret chiffré
+  par DPAPI), jeton de renouvellement chiffré et renouvelé à chaque synchronisation. Synchronisation par la
+  collecte au plus toutes les 24 h, ou `autodesk-sync [--dry-run]` ; reconnexion par `autodesk-login`. Les
+  licences affectées sans usage sur la période sont reprises du dernier export ou de la dernière
+  synchronisation (inactives, jamais utilisées). Identifiants hachés pris en charge. Guide : `docs/AUTODESK_API.md`.
+- **Assistant d'installation : étape « Licences Autodesk nommées »** (dossier surveillé des exports du portail,
+  seuil d'inactivité, API Autodesk avec bouton « Se connecter à Autodesk » et choix de l'équipe).
+
+### Ajouté
 - **Licences Autodesk « utilisateur nommé »** : import des exports « Usage report » du portail Autodesk
   Account (CSV ou Excel, colonnes en anglais ou en français, présentation 2026 comprise) par
   `heptagoneslm import-autodesk export.csv` ou par dépôt dans un dossier surveillé (`autodesk.import_dir`,

@@ -98,6 +98,8 @@ def cmd_collect(cfg: AppConfig, args) -> int:
         results = CollectionService(cfg, db).collect_all(only=args.server)
         if cfg.autodesk.import_dir and not args.server:
             _import_autodesk_folder(cfg, db)
+        if cfg.autodesk.api and not args.server:
+            _sync_autodesk_api(cfg, db, args.config)
         if cfg.alerts:
             _notify_alerts(cfg, db)
     failed = [r for r in results if r.status != "OK"]
@@ -120,6 +122,73 @@ def _import_autodesk_folder(cfg: AppConfig, db) -> None:
     for r in results:
         if r["status"] != "déjà importé":
             print(f"Autodesk : {r['file']} {r['status']} {r.get('rows', 0)} licence(s) {r.get('error', '')}".rstrip())
+
+
+def _autodesk_client(cfg: AppConfig, config_path):
+    from heptagoneslm.autodesk_api import InsightsClient, TokenStore, default_token_file
+
+    api = cfg.autodesk.api
+    return InsightsClient(api, TokenStore(api.token_file or default_token_file(config_path)))
+
+
+def _sync_autodesk_api(cfg: AppConfig, db, config_path) -> None:
+    """Synchronisation API Autodesk à la collecte (au plus toutes les sync_hours) ; erreur journalisée seulement."""
+    from heptagoneslm.autodesk_api import ApiError, sync, sync_due
+
+    try:
+        if not sync_due(db, cfg.autodesk.api):
+            return
+        r = sync(db, _autodesk_client(cfg, config_path))
+        print(f"Autodesk (API) : {r.users} ligne(s) d'usage, {r.carried} licence(s) reprise(s) — équipe {r.context}")
+    except ApiError as exc:
+        log.error("Synchronisation API Autodesk impossible : %s", exc)
+    except Exception as exc:
+        log.error("Synchronisation API Autodesk impossible : %s (exécuter « init-db » après une mise à jour)", exc)
+
+
+def cmd_autodesk_login(cfg: AppConfig, args) -> int:
+    from heptagoneslm.autodesk_api import REPORTING_BENEFIT, ApiError, TokenStore, default_token_file, login
+
+    api = cfg.autodesk.api
+    if not api:
+        print("Section autodesk.api absente de la configuration (client_id de l'application Autodesk)", file=sys.stderr)
+        return 1
+    store = TokenStore(api.token_file or default_token_file(args.config))
+    print(f"URL de rappel à déclarer dans l'application Autodesk : {api.callback_url}")
+    try:
+        contexts = login(api, store, open_browser=not args.no_browser, timeout=args.timeout,
+                         on_url=lambda u: print(f"Se connecter avec un compte administrateur Autodesk :\n  {u}"))
+    except ApiError as exc:
+        print(f"Échec : {exc}", file=sys.stderr)
+        return 2
+    print(f"Connecté. Jeton enregistré : {store.path}")
+    for c in contexts:
+        ok = REPORTING_BENEFIT in (c.get("reportingBenefits", [REPORTING_BENEFIT]) or [])
+        print(f"  équipe {c.get('alias') or '?'} — context_id {c.get('contextId')}"
+              + ("" if ok else " (sans API de reporting)"))
+    return 0
+
+
+def cmd_autodesk_sync(cfg: AppConfig, args) -> int:
+    from heptagoneslm.autodesk_api import ApiError
+
+    if not cfg.autodesk.api:
+        print("Section autodesk.api absente de la configuration", file=sys.stderr)
+        return 1
+    from heptagoneslm.autodesk_api import sync
+
+    try:
+        with _open_db(cfg) as db:
+            r = sync(db, _autodesk_client(cfg, args.config), dry_run=args.dry_run)
+    except ApiError as exc:
+        print(f"Échec : {exc}", file=sys.stderr)
+        return 2
+    print(f"Équipe {r.context} : usage du {r.window[0]:%d/%m/%Y} au {r.window[1]:%d/%m/%Y}"
+          + ("" if r.where_filtered else " (filtre de dates refusé : tout l'historique)"))
+    print(f"{r.users} ligne(s) utilisateur × produit lues, {r.carried} licence(s) reprise(s) du dernier état, "
+          f"{r.stored} enregistrée(s)" + (" — simulation, rien n'est écrit" if args.dry_run else "")
+          + (" — identifiants hachés (données personnelles masquées chez Autodesk)" if r.hashed else ""))
+    return 0
 
 
 def _notify_alerts(cfg: AppConfig, db) -> None:
@@ -392,6 +461,10 @@ def cmd_setup(args) -> int:
     except SetupError as exc:
         print(exc, file=sys.stderr)
         return 1
+    if args.update:
+        from heptagoneslm.setup.unattended import run_update
+
+        return run_update(system, args.install_dir)
     if args.answers:
         from heptagoneslm.setup.unattended import run
 
@@ -451,6 +524,12 @@ def build_parser() -> argparse.ArgumentParser:
     ia.add_argument("files", nargs="+", help="export CSV ou Excel (manage.autodesk.com › Reporting › Usage report)")
     ia.add_argument("--force", action="store_true", help="réimporter un fichier déjà importé")
 
+    al = sub.add_parser("autodesk-login", help="connexion à l'API Autodesk (administrateur Business Success Plan)")
+    al.add_argument("--no-browser", action="store_true", help="afficher l'adresse sans ouvrir le navigateur")
+    al.add_argument("--timeout", type=int, default=300, help="attente de la connexion, en secondes")
+    asy = sub.add_parser("autodesk-sync", help="lit l'usage des licences Autodesk nommées par l'API (aussi à la collecte)")
+    asy.add_argument("--dry-run", action="store_true", help="interroger Autodesk sans rien écrire")
+
     sr = sub.add_parser("send-report", help="envoie le rapport par e-mail aux abonnés (à planifier)")
     sr.add_argument("--subscription", action="append", help="limiter à cet abonnement (répétable)")
     sr.add_argument("--period", choices=["last-month", "this-month", "last-week", "last-7d", "last-year"],
@@ -479,6 +558,9 @@ def build_parser() -> argparse.ArgumentParser:
     st = sub.add_parser("setup", help="assistant d'installation sur un serveur Windows (IIS, base, tâches, vérification)")
     st.add_argument("--simulate", action="store_true", help="démonstration : aucune modification du système")
     st.add_argument("--answers", metavar="FICHIER.json", help="installation silencieuse à partir d'un fichier de réponses")
+    st.add_argument("--update", action="store_true",
+                    help="mise à jour silencieuse de l'installation existante (rien à ressaisir)")
+    st.add_argument("--install-dir", help="dossier de l'installation à mettre à jour (défaut : C:\\HeptagonesLM)")
     st.add_argument("--port", type=int, default=0, help="port local de l'assistant (défaut : libre)")
     st.add_argument("--no-open", action="store_true", help="ne pas ouvrir le navigateur")
     st.add_argument("--token", help=argparse.SUPPRESS)
@@ -504,6 +586,8 @@ WITH_CONFIG = {
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
     "import-autodesk": cmd_import_autodesk,
+    "autodesk-login": cmd_autodesk_login,
+    "autodesk-sync": cmd_autodesk_sync,
     "send-report": cmd_send_report,
     "check-alerts": cmd_check_alerts,
     "test-itsm": cmd_test_itsm,

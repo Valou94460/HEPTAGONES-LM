@@ -3,6 +3,7 @@
 Mêmes contrôles, étapes et vérification que l'assistant graphique, avec une
 progression en mode texte. Les valeurs ``${VARIABLE}`` du fichier sont remplacées
 par les variables d'environnement (mots de passe hors du fichier).
+Mise à jour silencieuse d'une installation existante : ``heptagoneslm setup --update``.
 Codes retour : 0 succès, 1 échec de l'installation, 2 installé avec des erreurs de vérification.
 """
 
@@ -45,11 +46,7 @@ def _bar(pct: float, width: int = 30) -> str:
 
 
 def run(system: System, answers_path: str, out=None) -> int:
-    if out is None:
-        out = sys.stdout
-        if not out.isatty() and hasattr(out, "reconfigure"):
-            out.reconfigure(encoding="utf-8", errors="replace")   # sortie redirigée (journal, CI) : UTF-8
-    p = lambda *a: print(*a, file=out, flush=True)
+    p = _out(out)
     try:
         a = load_answers(answers_path)
     except (OSError, ValueError) as exc:
@@ -85,6 +82,20 @@ def run(system: System, answers_path: str, out=None) -> int:
 
     p("== Installation")
     inst = Installer(system, a)
+    if not _follow(inst, p, "Installation terminée"):
+        return 1
+    return _verify(system, a, p)
+
+
+def _out(out):
+    if out is None:
+        out = sys.stdout
+        if not out.isatty() and hasattr(out, "reconfigure"):
+            out.reconfigure(encoding="utf-8", errors="replace")
+    return lambda *a: print(*a, file=out, flush=True)
+
+
+def _follow(inst: Installer, p, done_label: str) -> bool:
     inst.start()
     seen, last_bar = 0, ""
     while True:
@@ -102,9 +113,12 @@ def run(system: System, answers_path: str, out=None) -> int:
         time.sleep(0.5)
     if inst.status == "failed":
         p(f"ÉCHEC : {inst.error}")
-        return 1
-    p(f"  {_bar(100)}  Installation terminée")
+        return False
+    p(f"  {_bar(100)}  {done_label}")
+    return True
 
+
+def _verify(system: System, a: Answers, p) -> int:
     p("== Vérification")
     v = verify(system, a)
     for c in v["checks"]:
@@ -114,3 +128,25 @@ def run(system: System, answers_path: str, out=None) -> int:
     p(f"Résultat : {v['counts']['ok']} conforme(s), {v['counts']['warning']} avertissement(s), "
       f"{v['counts']['error']} erreur(s)" + (f" — {v['url']}" if v.get("url") else ""))
     return 0 if v["success"] else 2
+
+
+def run_update(system: System, install_dir: str | None = None, out=None) -> int:
+    """Mise à jour silencieuse : ``HeptagonesLM-Setup.exe setup --update`` (rien à ressaisir)."""
+    from heptagoneslm import __version__
+    from heptagoneslm.setup import recette
+
+    p = _out(out)
+    path = recette.find_installed(system, install_dir)
+    if not path:
+        where = install_dir or "C:\\HeptagonesLM"
+        p(f"Aucune installation trouvée ({where}\\heptagoneslm.yaml)")
+        return 1
+    try:
+        installed = recette.load_installed(system, path)
+    except SetupError as exc:
+        p(f"Installation illisible : {exc}")
+        return 1
+    p(f"== Mise à jour vers HeptagonesLM {__version__} ({installed.install_dir})")
+    if not _follow(Installer(system, installed.answers, update=True), p, "Mise à jour terminée"):
+        return 1
+    return _verify(system, installed.answers, p)

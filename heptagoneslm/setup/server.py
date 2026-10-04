@@ -18,7 +18,7 @@ import webbrowser
 from concurrent.futures import ThreadPoolExecutor
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 from urllib.parse import parse_qs, urlparse
 
 from heptagoneslm import __version__
@@ -108,6 +108,8 @@ class SetupApp:
         self._info: dict | None = None
         self.check_job: Job | None = None
         self.recette_job: Job | None = None
+        self.autodesk_job: Job | None = None
+        self.autodesk_url: str | None = None
         self.recette_run: recette.RecetteRun | None = None
         self.recette_installed: recette.Installed | None = None
 
@@ -115,12 +117,75 @@ class SetupApp:
     def installed_config(self) -> str | None:
         return recette.find_installed(self.system, self.answers.install_dir)
 
+    def installed_version(self, config_path: str | None) -> str | None:
+        """Version notée à l'installation ou à la dernière mise à jour (26.3.1 et suivantes), sinon « antérieure »."""
+        if not config_path:
+            return None
+        from heptagoneslm.setup.installer import ANSWERS_FILE
+
+        raw = self.system.read_text(str(PureWindowsPath(config_path).parent / ANSWERS_FILE))
+        if not raw:
+            return "antérieure à 26.3.1"
+        try:
+            return str(json.loads(raw).get("_version") or "") or "antérieure à 26.3.1"
+        except ValueError:
+            return "inconnue"
+
+    def start_update(self, config_path: str | None = None) -> dict:
+        """Mise à jour en place de l'installation existante (configuration, secrets et tâches conservés)."""
+        path = config_path or self.installed_config()
+        if not path:
+            raise SetupError("Aucune installation de HeptagonesLM trouvée sur ce serveur")
+        with self.lock:
+            if self.installer and self.installer.status == "running":
+                raise SetupError("Une installation est déjà en cours")
+            installed = recette.load_installed(self.system, path)
+            self.answers = installed.answers
+            self.installer = Installer(self.system, installed.answers, update=True)
+            self.verification = None
+            self.installer.start()
+        return {"started": True, "install_dir": installed.install_dir}
+
     def recette_context(self, config_path: str | None = None) -> dict:
         path = config_path or self.installed_config()
         if not path:
             return {"installed": None}
         self.recette_installed = recette.load_installed(self.system, path)
         return {"installed": self.recette_installed.summary()}
+
+    def start_autodesk_login(self, a: Answers) -> dict:
+        """Connexion Autodesk en arrière-plan : renvoie l'adresse de connexion à ouvrir dans le navigateur."""
+        from heptagoneslm.autodesk_api import REPORTING_BENEFIT
+
+        errors = a.validate("autodesk") if a.autodesk_api_on else [{"message": "API Autodesk désactivée"}]
+        if errors:
+            return {"status": "error", "error": "Compléter les champs avant la connexion : "
+                    + "; ".join(e["message"] for e in errors)}
+        url_ready = threading.Event()
+        with self.lock:
+            if self.autodesk_job and self.autodesk_job.running:
+                return self.autodesk_state()            # connexion déjà en cours : même adresse
+            self.autodesk_url = None
+
+            def on_url(url: str) -> None:
+                self.autodesk_url = url
+                url_ready.set()
+
+            def run(job: Job) -> dict:
+                contexts = self.system.autodesk_login(a.autodesk_api_entry(clear=True), on_url)
+                teams = [{"id": str(c.get("contextId")), "name": c.get("alias") or str(c.get("contextId")),
+                          "reporting": REPORTING_BENEFIT in (c.get("reportingBenefits", [REPORTING_BENEFIT]) or [])}
+                         for c in contexts]
+                return {"teams": teams}
+
+            self.autodesk_job = Job(run)
+        url_ready.wait(5)
+        return self.autodesk_state()
+
+    def autodesk_state(self) -> dict:
+        if not self.autodesk_job:
+            return {"status": "idle"}
+        return {**self.autodesk_job.state(), "url": self.autodesk_url}
 
     def start_recette(self, options: dict, config_path: str | None = None) -> Job:
         with self.lock:
@@ -200,7 +265,10 @@ class SetupApp:
             self._info = {"version": __version__, "simulated": s.simulated, "system": s.name,
                           "admin": s.is_admin(), "os": os_info, "domain": dom, "certificates": certs,
                           "odbc_drivers": drivers, "lmutil_found": lmutil, "defaults": defaults,
-                          "installed": installed}
+                          "installed": installed, "installed_version": self.installed_version(installed)}
+        else:   # installation faite depuis l'ouverture de l'assistant : état relu (lecture de fichier, immédiate)
+            installed = recette.find_installed(self.system, self._info["defaults"]["install_dir"])
+            self._info.update(installed=installed, installed_version=self.installed_version(installed))
         return self._info
 
     def plan(self, a: Answers) -> list[dict]:
@@ -302,6 +370,8 @@ class SetupHandler(BaseHTTPRequestHandler):
                 return self._json({"error": "Aucune recette"}, HTTPStatus.NOT_FOUND)
             return self._send(200, run.evidence_zip(), "application/zip",
                               {"Content-Disposition": f'attachment; filename="HeptagonesLM_recette_{run.stamp}.zip"'})
+        if url.path == "/api/autodesk/state":
+            return self._json(app.autodesk_state())
         if url.path == "/api/checks/state":
             if not app.check_job:
                 return self._json({"status": "idle", "steps": []})
@@ -360,6 +430,10 @@ class SetupHandler(BaseHTTPRequestHandler):
                 checks = run_checks(app.system, a, final=bool(body.get("final")))
                 return self._json({"message": message, "checks": [c.to_dict() for c in checks],
                                    "blocking": len(blocking(checks))})
+            if path == "/api/update":
+                return self._json(app.start_update(body.get("config_path") or None))
+            if path == "/api/autodesk/login":
+                return self._json(app.start_autodesk_login(a))
             if path == "/api/test":
                 return self._json(self._test(a, body))
             if path == "/api/tools/find":

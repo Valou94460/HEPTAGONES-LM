@@ -14,10 +14,11 @@ installe avec une barre de progression, puis **vérifie chaque composant de bout
 3. [Les étapes](#3-les-étapes)
 4. [Ce que fait l'installation](#4-ce-que-fait-linstallation)
 5. [Installation silencieuse](#5-installation-silencieuse-industrialisation)
-6. [Serveur sans accès Internet](#6-serveur-sans-accès-internet)
-7. [Sécurité de l'assistant](#7-sécurité-de-lassistant)
-8. [Authentification unique : SPN, zone Intranet et test depuis un poste](#8-authentification-unique--spn-zone-intranet-et-test-depuis-un-poste)
-9. [Dépannage](#9-dépannage)
+6. [Mettre à jour une installation existante](#6-mettre-à-jour-une-installation-existante)
+7. [Serveur sans accès Internet](#7-serveur-sans-accès-internet)
+8. [Sécurité de l'assistant](#8-sécurité-de-lassistant)
+9. [Authentification unique : SPN, zone Intranet et test depuis un poste](#9-authentification-unique--spn-zone-intranet-et-test-depuis-un-poste)
+10. [Dépannage](#10-dépannage)
 
 ## 1. Avant de commencer
 
@@ -57,10 +58,11 @@ avec Python : `heptagoneslm setup --simulate`).
 | 6 | Interface web et IIS | IIS avec connexion Windows automatique (recommandé), HTTPS intégré avec identifiants AD, ou poste local ; pare-feu | Certificat (nom, validité), groupe AD, connexion LDAP |
 | 7 | Rapport par e-mail | Relais SMTP, expéditeur, destinataires, alertes immédiates (optionnel) | Envoi d'un message de test |
 | 8 | Tickets ITSM | Activation (désactivé par défaut) ; ServiceNow, Jira, GLPI ou Teams / Slack : adresse, compte technique et mot de passe ou jetons, projet ou groupe d'affectation, gravité minimale, AC interne facultative | « Ouvrir un ticket de test » : vrai ticket ouvert, commenté puis résolu |
-| 9 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
-| 10 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
-| 11 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
-| 12 | Recette | Sur l'installation en place (aussi depuis l'accueil quand HeptagonesLM est déjà installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé à la base feature par feature, collecte planifiée sur N heures, vérification, connexion depuis les postes, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test confirmés par l'opérateur | PV de recette Word à signer, archive des preuves (sorties anonymisables, résumés attendus) |
+| 9 | Licences Autodesk nommées | Optionnel : dossier surveillé des exports du portail Autodesk Account, seuil d'inactivité ; API Autodesk Business Success Plan (Client ID, Client Secret facultatif chiffré par DPAPI) — [guide](AUTODESK_API.md) | « Se connecter à Autodesk » : connexion d'un administrateur, choix de l'équipe |
+| 10 | Récapitulatif | Configuration, contrôle final des prérequis, tâches, étapes, `heptagoneslm.yaml` généré | — |
+| 11 | Installation | Barre de progression, étapes en direct, journal détaillé ; « Réessayer » reprend à l'étape en échec | — |
+| 12 | Vérification | Contrôle de bout en bout (dont le secret ITSM déchiffrable), adresse de l'interface, rapport d'installation téléchargeable | — |
+| 13 | Recette | Sur l'installation en place (aussi depuis l'accueil quand HeptagonesLM est déjà installé) : collecte planifiée déclenchée, `lmstat` / `rlmstat` en direct comparé à la base feature par feature, collecte planifiée sur N heures, vérification, connexion depuis les postes, refus hors du groupe, e-mail, ticket ITSM et rapport Excel de test confirmés par l'opérateur | PV de recette Word à signer, archive des preuves (sorties anonymisables, résumés attendus) |
 
 <table>
 <tr>
@@ -114,9 +116,10 @@ Chaque étape est **idempotente** : relancer l'assistant (ou « Réessayer ») n
 | Schéma | `HeptagonesLM.exe init-db` |
 | Première collecte | `HeptagonesLM.exe collect` : chaque serveur de licences est interrogé |
 | IIS | Rôles et modules manquants, pool .NET v4.0 (pipeline intégré), site HTTPS (liaison SNI + certificat), authentification Windows seule, proxy ARR, module `HeptagonesLMUserHeader` (en-tête `X-Remote-User` posé après l'authentification), autorisation du groupe, `web.config` de relais vers HeptagonesLM (écoute locale) |
-| Tâches | Collecte, rapport mensuel, envoi des e-mails, purge, interface web permanente, sous le compte de service |
+| Tâches | Collecte, rapport mensuel, envoi des e-mails, purge, interface web permanente (lancée au démarrage du serveur), sous le compte de service ; **surveillance de l'interface** toutes les 5 minutes sous SYSTEM : relance l'interface si elle ne tourne pas (démarrage raté parce que le domaine ou la base n'étaient pas encore prêts, par exemple). Toutes les tâches tournent aussi sur batterie |
 | Pare-feu | Règle entrante sur le port HTTPS (profils Domaine et Privé) |
 | Démarrage | Lancement de l'interface et attente de sa réponse |
+| Raccourci | Icône **HeptagonesLM** sur le bureau de tous les utilisateurs et dans le menu Démarrer : ouvre le tableau de bord (adresse publique) |
 
 La vérification finale contrôle : exécutable et configuration, schéma de la base, dernière
 collecte de chaque serveur, présence et état des tâches, réponse de HeptagonesLM, site IIS démarré
@@ -174,7 +177,49 @@ hors du fichier). Codes retour : **0** succès, **1** échec, **2** installé av
 | `itsm_enabled`, `itsm_type`, `itsm_url`, `itsm_user`, `itsm_password`, `itsm_app_token`, `itsm_project`, `itsm_issue_type`, `itsm_assignment_group`, `itsm_format`, `itsm_min_severity`, `itsm_ca_file` | désactivé, `servicenow`, …, `serious` | Tickets ITSM (`itsm_password` : mot de passe ServiceNow, jeton Jira ou jeton utilisateur GLPI ; `${VARIABLE}` conseillé) |
 | `auto_fix` | `false` | Installer automatiquement les rôles et modules IIS manquants |
 
-## 6. Serveur sans accès Internet
+## 6. Mettre à jour une installation existante
+
+Télécharger le nouveau `HeptagonesLM-Setup.exe` et le lancer sur le serveur. Sur la page d'accueil,
+l'assistant reconnaît l'installation et sa version. Le bouton **« Mettre à jour vers 26.3.x »** :
+
+1. **sauvegarde** `heptagoneslm.yaml`, les réponses de l'assistant, `web.config` et la base SQLite dans
+   `<installation>\backup\<horodatage>\` (base SQL Server : sauvegarde par le DBA, le schéma n'évolue que
+   par ajouts) ;
+2. remplace `HeptagonesLM.exe` (HeptagonesLM en cours d'exécution est arrêté puis relancé) ;
+3. met à jour le schéma de la base (`init-db`) ;
+4. ajoute la surveillance de l'interface (relance automatique, sous SYSTEM), redémarre l'interface web et
+   lance une collecte de contrôle ;
+5. crée l'icône **HeptagonesLM** sur le bureau ;
+6. enchaîne sur la vérification de bout en bout, puis propose la recette.
+
+**Rien n'est ressaisi** : configuration, réglages personnalisés, mots de passe (variables d'environnement
+machine, secrets DPAPI), tâches planifiées, site IIS et droits restent tels quels. La version installée est
+notée dans `setup-reponses.json`.
+
+En mode silencieux (déploiement par script) :
+
+```
+HeptagonesLM-Setup.exe setup --update [--install-dir D:\HeptagonesLM]
+```
+
+Codes retour : 0 mise à jour vérifiée, 1 échec (la sauvegarde permet le retour arrière), 2 mise à jour
+faite avec des erreurs de vérification.
+
+**Réinstallation complète** (bouton « Réinstaller ») : l'assistant réécrit `heptagoneslm.yaml` à partir des
+réponses, mais **conserve les réglages ajoutés à la main** (`products`, `sites`, `retention`, réglages de
+`reporting`, coûts Autodesk, rôles, abonnements e-mail supplémentaires, types d'alertes) ; l'ancien fichier
+est gardé en `heptagoneslm.yaml.<horodatage>.bak`.
+
+### Signature de l'exécutable
+
+`HeptagonesLM-Setup.exe` et `HeptagonesLM.exe` sont signés (Authenticode, horodatage RFC 3161) quand le
+certificat de signature de code de l'éditeur est configuré dans GitHub (secrets `SIGN_PFX_BASE64` : fichier
+`.pfx` encodé en base64, et `SIGN_PFX_PASSWORD`). Vérification sur le serveur :
+`Get-AuthenticodeSignature .\HeptagonesLM-Setup.exe` → `Valid`. Un certificat **EV** supprime immédiatement
+l'alerte SmartScreen ; un certificat **OV** après quelques centaines de téléchargements. Sans certificat, la
+CI valide la procédure avec un certificat de test (exécutables non distribués).
+
+## 7. Serveur sans accès Internet
 
 Les rôles IIS s'installent depuis Windows. Les modules **URL Rewrite** et **ARR** sont
 téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté de
@@ -183,7 +228,7 @@ téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté d
 - `rewrite_amd64_en-US.msi` (URL Rewrite 2.1)
 - `requestRouter_amd64.msi` (Application Request Routing 3.0)
 
-## 7. Sécurité de l'assistant
+## 8. Sécurité de l'assistant
 
 - Écoute sur `127.0.0.1` uniquement, jeton aléatoire propre à la session (retiré de
   l'adresse et conservé dans un cookie `HttpOnly`, `SameSite=Strict`), contrôle de l'en-tête
@@ -198,7 +243,7 @@ téléchargés chez Microsoft ; hors ligne, déposer les installeurs à côté d
   `X-Remote-Auth-Method` ne sont acceptés que du proxy local et sont toujours supprimés puis
   posés par le module IIS (une valeur envoyée par le navigateur est ignorée).
 
-## 8. Authentification unique : SPN, zone Intranet et test depuis un poste
+## 9. Authentification unique : SPN, zone Intranet et test depuis un poste
 
 Pour que les utilisateurs arrivent connectés **sans saisir de mot de passe**, trois conditions
 côté infrastructure sont contrôlées par l'assistant (juste avant l'installation, puis à la
@@ -217,7 +262,7 @@ Les résultats des tests sont conservés dans `C:\HeptagonesLM\logs\tests-acces.
 (200 derniers) et tracés dans le journal d'audit. La page `/acces` reste disponible après
 l'installation pour diagnostiquer le poste d'un utilisateur.
 
-## 9. Dépannage
+## 10. Dépannage
 
 | Symptôme | Solution |
 |---|---|
@@ -228,5 +273,6 @@ l'installation pour diagnostiquer le poste d'un utilisateur.
 | Serveur de licences injoignable au test | Vérifier `port@serveur`, le pare-feu (port lmgrd **et** port du démon éditeur) |
 | Échec à l'étape « Tâches planifiées » | Mot de passe du compte de service ; pour un gMSA : `Install-ADServiceAccount` sur le serveur |
 | Vérification : « IIS ne joint pas HeptagonesLM (502) » | La tâche « HeptagonesLM - Interface web » est arrêtée : consulter `C:\HeptagonesLM\logs\heptagoneslm.log` |
+| Tableau de bord injoignable après un redémarrage du serveur | La surveillance relance l'interface dans les 5 minutes. Sinon : `Get-ScheduledTask -TaskPath '\HeptagonesLM\' \| Get-ScheduledTaskInfo \| Format-Table TaskName, LastRunTime, LastTaskResult` et `C:\HeptagonesLM\logs\heptagoneslm.log` (installation antérieure à 26.3.2 : lancer la mise à jour) |
 | Navigateur : avertissement de certificat | Le certificat ne couvre pas le nom DNS choisi (test « Vérifier le certificat ») |
 | Connexion Windows qui redemande un mot de passe | Faire ouvrir `https://heptagoneslm.entreprise.local/acces` depuis le poste concerné, puis suivre les contrôles *SPN Kerberos* et *Zone Intranet local* de la vérification finale (§ 8) |

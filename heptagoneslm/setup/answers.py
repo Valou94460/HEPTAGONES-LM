@@ -23,9 +23,12 @@ DEFAULT_DRIVER = "ODBC Driver 18 for SQL Server"
 
 WEB_MODES = ("iis", "https", "local")
 DB_MODES = ("sqlserver", "sqlite")
-SECRET_FIELDS = ("service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token")
+SECRET_FIELDS = ("service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token",
+                 "autodesk_client_secret")
 # Secrets de l'outil ITSM chiffrés sur le disque : champ -> (paramètre du connecteur, fichier)
 ITSM_SECRETS = {"itsm_password": "itsm_password.dpapi", "itsm_app_token": "itsm_app_token.dpapi"}
+AUTODESK_SECRET_FILE = "autodesk_client_secret.dpapi"
+AUTODESK_TOKEN_FILE = "autodesk_token.dpapi"       # jeton de renouvellement (dossier data, modifiable par le service)
 
 _ACCOUNT_RE = re.compile(r"^[\w.\- ]+\\[\w.\-$ ]+$")
 _DB_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
@@ -143,6 +146,15 @@ class Answers:
     itsm_format: str = "teams"        # webhook : teams | slack | json
     itsm_min_severity: str = "serious"
     itsm_ca_file: str = ""            # autorité de certification interne (fichier PEM), si besoin
+    # Licences Autodesk « utilisateur nommé » (optionnel) : exports du portail et / ou API Autodesk
+    autodesk_enabled: bool = False
+    autodesk_import_dir: str = ""     # vide : <installation>\autodesk
+    autodesk_inactive_days: int = 30
+    autodesk_api_enabled: bool = False
+    autodesk_client_id: str = ""      # application créée sur aps.autodesk.com
+    autodesk_client_secret: str = ""  # application « Traditional Web App » (chiffré par DPAPI) ; vide : PKCE
+    autodesk_context_id: str = ""     # équipe Autodesk choisie après la connexion
+    autodesk_callback_port: int = 8770
     # Tâches planifiées
     collect_interval: int = 5
     # Mode silencieux : corriger automatiquement les prérequis manquants
@@ -243,9 +255,32 @@ class Answers:
 
     def secret_files(self) -> dict[str, str]:
         """Fichiers chiffrés (DPAPI) à écrire : chemin -> valeur en clair."""
-        if not self.itsm_enabled:
-            return {}
-        return {self.path("secrets", name): getattr(self, f) for f, name in ITSM_SECRETS.items() if getattr(self, f)}
+        out = {}
+        if self.itsm_enabled:
+            out.update({self.path("secrets", name): getattr(self, f) for f, name in ITSM_SECRETS.items()
+                        if getattr(self, f)})
+        if self.autodesk_api_on and self.autodesk_client_secret:
+            out[self.path("secrets", AUTODESK_SECRET_FILE)] = self.autodesk_client_secret
+        return out
+
+    @property
+    def autodesk_api_on(self) -> bool:
+        return self.autodesk_enabled and self.autodesk_api_enabled
+
+    @property
+    def autodesk_dir(self) -> str:
+        return self.autodesk_import_dir or self.path("autodesk")
+
+    def autodesk_api_entry(self, clear: bool = False) -> dict:
+        """Section autodesk.api ; ``clear`` : secret en clair (connexion depuis l'assistant)."""
+        entry: dict = {"client_id": self.autodesk_client_id.strip(), "callback_port": int(self.autodesk_callback_port),
+                       "token_file": self.path("data", AUTODESK_TOKEN_FILE).replace("\\", "/")}
+        if self.autodesk_client_secret:
+            entry["client_secret"] = (self.autodesk_client_secret if clear
+                                      else vault.reference(self.path("secrets", AUTODESK_SECRET_FILE)))
+        if self.autodesk_context_id:
+            entry["context_id"] = self.autodesk_context_id.strip()
+        return entry
 
     def itsm_entry(self, clear: bool = False) -> dict:
         """Connecteur ITSM de la configuration ; ``clear`` : secrets en clair (test depuis l'assistant)."""
@@ -274,7 +309,7 @@ class Answers:
         return entry
 
     # -------------------------------------------------------------- validation
-    STEPS = ("location", "database", "licenses", "web", "email", "itsm")
+    STEPS = ("location", "database", "licenses", "web", "email", "itsm", "autodesk")
 
     def validate(self, step: str | None = None) -> list[dict]:
         """Erreurs de saisie : [{field, message}] (toutes, ou celles d'une étape)."""
@@ -405,6 +440,18 @@ class Answers:
                 err("itsm_format", "Format inconnu")
             if self.itsm_min_severity not in SEVERITIES:
                 err("itsm_min_severity", "Gravité inconnue")
+        if want("autodesk") and self.autodesk_enabled:
+            d = self.autodesk_import_dir
+            if d and (not PureWindowsPath(d).drive or any(c in d for c in '<>"|?*')):
+                err("autodesk_import_dir", "Chemin absolu attendu, par exemple C:\\HeptagonesLM\\autodesk")
+            if not 1 <= int(self.autodesk_inactive_days or 0) <= 365:
+                err("autodesk_inactive_days", "Nombre de jours entre 1 et 365")
+            if self.autodesk_api_enabled:
+                if not re.match(r"^[A-Za-z0-9_\-]{8,128}$", self.autodesk_client_id.strip()):
+                    err("autodesk_client_id", "Client ID de l'application Autodesk attendu (aps.autodesk.com › "
+                                              "Applications)")
+                if not 1024 <= int(self.autodesk_callback_port or 0) <= 65535:
+                    err("autodesk_callback_port", "Port entre 1024 et 65535")
         return errors
 
     # ------------------------------------------------------------ configuration
@@ -459,19 +506,32 @@ class Answers:
             alerts["itsm"] = [self.itsm_entry()]
         if alerts:
             cfg["alerts"] = alerts
+        if self.autodesk_enabled:
+            autodesk: dict = {"import_dir": self.autodesk_dir.replace("\\", "/"),
+                              "inactive_days": int(self.autodesk_inactive_days), "annual_costs": {}}
+            if self.autodesk_api_on:
+                autodesk["api"] = self.autodesk_api_entry()
+            cfg["autodesk"] = autodesk
         return cfg
 
     def yaml_text(self, generated_at: str = "") -> str:
-        header = ("# HeptagonesLM - configuration générée par l'assistant d'installation"
+        return self.header_text(generated_at) + self.dump_config(self.config_dict())
+
+    @staticmethod
+    def dump_config(cfg: dict) -> str:
+        body = yaml.safe_dump(cfg, allow_unicode=True, sort_keys=False, default_flow_style=False, width=120)
+        return body.replace("products: []\n",
+                            "products: []   # règles feature -> produit (voir heptagoneslm.example.yaml)\n")
+
+    def header_text(self, generated_at: str = "") -> str:
+        return ("# HeptagonesLM - configuration générée par l'assistant d'installation"
                   + (f" le {generated_at}" if generated_at else "") + "\n"
                   "# Référence de tous les paramètres : heptagoneslm.example.yaml / dossier d'exploitation (DEX).\n"
                   "# Après modification des règles « products » : HeptagonesLM.exe apply-products\n"
                   "# Les mots de passe sont dans des variables d'environnement machine (${VAR}) ou chiffrés\n"
-                  "# par Windows (DPAPI) dans le dossier secrets (dpapi:) : jamais dans ce fichier.\n\n")
-        body = yaml.safe_dump(self.config_dict(), allow_unicode=True, sort_keys=False, default_flow_style=False,
-                              width=120)
-        body = body.replace("products: []\n", "products: []   # règles feature -> produit (voir heptagoneslm.example.yaml)\n")
-        return header + body
+                  "# par Windows (DPAPI) dans le dossier secrets (dpapi:) : jamais dans ce fichier.\n"
+                  "# Les réglages ajoutés à la main (products, sites, coûts Autodesk, rôles…) sont conservés\n"
+                  "# quand l'assistant réécrit ce fichier.\n\n")
 
     def check_config(self) -> str | None:
         """Valide la configuration générée avec le chargeur réel de HeptagonesLM."""
