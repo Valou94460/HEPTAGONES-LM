@@ -7,6 +7,8 @@
 
 * ``POST /api/login`` · ``POST /api/logout`` · ``GET /api/me``   authentification (mode ldap)
 * ``GET|POST /api/admin/servers`` · ``POST /api/admin/autodesk-import``   administration (rôle admin)
+* ``GET|POST /api/admin/costs`` · ``GET /api/admin/projects`` · ``POST /api/admin/projects-import``
+* ``GET|POST /api/admin/subscriptions``                       rapports planifiés (rôle admin)
 
 Hors administration (rôle admin, voir web/admin.py), l'interface est en lecture seule. Par défaut le
 serveur n'écoute que sur ``127.0.0.1`` (poste local). Pour un usage partagé
@@ -356,6 +358,17 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                     products = [x["name"] for x in named.meta_extend(db, api.meta(db))["products"]
                                 if named.SERVER in x.get("servers", [])]
                 return self._json(admin.list_costs(self.config_path, products))
+            if url.path in ("/api/admin/projects", "/api/admin/subscriptions"):
+                if not self._is_admin(access):
+                    return self._forbidden(url.path, "Réservé aux administrateurs de HeptagonesLM")
+                if url.path == "/api/admin/subscriptions":
+                    return self._json(admin.list_subscriptions(self.config_path))
+                from heptagoneslm import projects
+
+                with self._db() as db:
+                    return self._json({"projects": [{**r, "updated_at": api._iso(r["updated_at"])}
+                                                    for r in projects.summary(db)],
+                                       "rules": [r.project for r in self.config.projects]})
             if url.path == "/api/report":
                 params = roles.restrict(api.params_from_config(query, self.config), access)
                 with self._db() as db:
@@ -423,16 +436,56 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                     return self._json({"ok": True})
                 raise admin.AdminError("Action inconnue")
             if path == "/api/admin/costs":
-                count = admin.save_costs(self.config_path, (self._read_json() or {}).get("costs") or {}, backups)
-                try:                 # rapports suivants : nouveaux coûts sans redémarrer l'interface
-                    from heptagoneslm.config import load_config
-
-                    type(self).config = load_config(self.config_path)
-                except (ConfigError, OSError):
-                    log.warning("Configuration non relue après l'enregistrement des coûts", exc_info=True)
+                body = self._read_json() or {}
+                count = admin.save_costs(self.config_path, body.get("costs") or {}, backups,
+                                         body.get("renewals") if isinstance(body.get("renewals"), dict) else None)
+                self._reload_config()
                 audit.info("Administration : coûts des licences Autodesk enregistrés (%d produits) par %s depuis %s",
                            count, user.username, self.client_ip)
                 return self._json({"ok": True, "count": count})
+            if path == "/api/admin/subscriptions":
+                body = self._read_json() or {}
+                action, entry = body.get("action"), body.get("subscription") or {}
+                if action == "save":
+                    saved = admin.save_subscription(self.config_path, entry, body.get("original") or None, backups)
+                    self._reload_config()
+                    audit.info("Administration : rapport planifié « %s » %s par %s depuis %s", saved["name"],
+                               "modifié" if body.get("original") else "ajouté", user.username, self.client_ip)
+                    return self._json({"ok": True, "subscription": saved})
+                if action == "delete":
+                    admin.delete_subscription(self.config_path, str(body.get("original") or ""), backups)
+                    self._reload_config()
+                    audit.info("Administration : rapport planifié « %s » supprimé par %s depuis %s", body.get("original"),
+                               user.username, self.client_ip)
+                    return self._json({"ok": True})
+                if action == "test":
+                    from heptagoneslm import mailer
+
+                    to = admin._list(body.get("to"))
+                    if not to or not all(admin.EMAIL_RE.match(x) for x in to):
+                        raise admin.AdminError("Adresse d'essai invalide")
+                    sub = admin.subscription_from_entry(self.config_path, entry)
+                    try:
+                        with self._db() as db:
+                            result = mailer.deliver(self.config, db, sub, override_to=to)
+                    except ImportError as exc:
+                        raise admin.AdminError(f"Module manquant : {exc.name}") from None
+                    except Exception as exc:          # données, classeur… : message affiché, détail au journal
+                        log.exception("Essai du rapport « %s » impossible", sub.name)
+                        raise admin.AdminError(f"Rapport non préparé : {exc}") from None
+                    audit.info("Administration : essai du rapport « %s » vers %s par %s (%s)", sub.name, ", ".join(to),
+                               user.username, result.status)
+                    return self._json({"ok": result.status == "SENT", "message": result.detail})
+                raise admin.AdminError("Action inconnue")
+            if path == "/api/admin/projects-import":
+                length = self._upload_length()
+                name = unquote(self.headers.get("X-Filename") or "")
+                data = self.rfile.read(length)
+                with self._db() as db:
+                    result = admin.import_projects(db, name, data, self.headers.get("X-Replace") == "1")
+                audit.info("Administration : projets importés (%s, %d utilisateurs) par %s depuis %s", result["file"],
+                           result["users"], user.username, self.client_ip)
+                return self._json(result)
             if path == "/api/admin/autodesk-import":
                 try:
                     length = int(self.headers.get("Content-Length") or 0)
@@ -450,6 +503,24 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             return self._json({"error": "Introuvable"}, HTTPStatus.NOT_FOUND)
         except admin.AdminError as exc:
             return self._json({"error": str(exc)}, HTTPStatus.UNPROCESSABLE_ENTITY)
+
+    def _upload_length(self) -> int:
+        try:
+            length = int(self.headers.get("Content-Length") or 0)
+        except ValueError:
+            length = -1
+        if not 0 < length <= admin.UPLOAD_MAX:
+            raise admin.AdminError("Fichier vide ou trop volumineux (25 Mo au plus)")
+        return length
+
+    def _reload_config(self) -> None:
+        """Rapports suivants : configuration enregistrée prise en compte sans redémarrer l'interface."""
+        try:
+            from heptagoneslm.config import load_config
+
+            type(self).config = load_config(self.config_path)
+        except (ConfigError, OSError):
+            log.warning("Configuration non relue après son enregistrement", exc_info=True)
 
     def _static(self, name: str) -> None:
         path = STATIC_DIR / name

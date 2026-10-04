@@ -312,6 +312,21 @@ def cmd_import_autodesk(cfg: AppConfig, args) -> int:
     return 2 if failed else 0
 
 
+def cmd_import_projects(cfg: AppConfig, args) -> int:
+    from heptagoneslm.projects import import_projects
+
+    path = Path(args.file)
+    with _open_db(cfg) as db:
+        try:
+            r = import_projects(db, path.name, path.read_bytes(), replace=args.replace)
+        except (ValueError, OSError) as exc:
+            print(f"{path} : non importé : {exc}", file=sys.stderr)
+            return 2
+    print(f"{r['file']} : {r['users']} utilisateur(s) affecté(s) à {r['projects']} projet(s)"
+          + (" (affectations précédentes remplacées)" if args.replace else ""))
+    return 0
+
+
 def cmd_parse_lmstat(args) -> int:
     from heptagoneslm.collectors.flexlm.lmstat import parse_lmstat
 
@@ -525,6 +540,10 @@ def build_parser() -> argparse.ArgumentParser:
     iu = sub.add_parser("import-users", help="importe nom complet et service des utilisateurs (CSV AD/RH)")
     iu.add_argument("file", help="CSV avec colonnes username;display_name;department (ou utilisateur;nom;service)")
 
+    ip = sub.add_parser("import-projects", help="importe l'affectation des utilisateurs aux projets (CSV)")
+    ip.add_argument("file", help="CSV avec colonnes utilisateur;projet (ex. export des membres d'un groupe AD)")
+    ip.add_argument("--replace", action="store_true", help="effacer d'abord les affectations existantes")
+
     ia = sub.add_parser("import-autodesk",
                         help="importe un export « Usage report » du portail Autodesk Account (licences nommées)")
     ia.add_argument("files", nargs="+", help="export CSV ou Excel (manage.autodesk.com › Reporting › Usage report)")
@@ -592,6 +611,7 @@ WITH_CONFIG = {
     "test-server": cmd_test_server,
     "import-users": cmd_import_users,
     "import-autodesk": cmd_import_autodesk,
+    "import-projects": cmd_import_projects,
     "autodesk-login": cmd_autodesk_login,
     "autodesk-sync": cmd_autodesk_sync,
     "send-report": cmd_send_report,

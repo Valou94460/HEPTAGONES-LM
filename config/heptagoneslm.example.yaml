@@ -54,7 +54,9 @@ servers:
 # Motifs fnmatch (* et ?), insensibles à la casse ; la première règle trouvée gagne.
 # Après modification : `heptagoneslm apply-products` pour réappliquer à l'historique.
 # annual_cost (optionnel) : coût annuel d'un jeton, dans la devise reporting.currency.
-# Active le chiffrage : coût du parc, économies potentielles, refacturation par service.
+# Active le chiffrage : coût du parc, économies potentielles, refacturation par service et par projet.
+# renewal (optionnel) : échéance du contrat AAAA-MM-JJ, pour les licences permanentes sous maintenance
+# (rapport « Renouvellements » ; sinon la date d'expiration lue dans le fichier de licence est utilisée).
 products:
   - { pattern: "87545ACD_2024_*",   product: "AutoCAD 2024",            publisher: Autodesk, annual_cost: 2300 }
   - { pattern: "87048INVPROSA_*",   product: "Inventor Professional",   publisher: Autodesk, annual_cost: 3900 }
@@ -71,6 +73,13 @@ products:
 #   - { pattern: "par-*", site: "Paris" }
 #   - { pattern: "lyo-*", site: "Lyon" }
 #   - { pattern: "*",     site: "Autres sites" }
+
+# Projets (refacturation par projet : Répartition / Croisement « par Projet »).
+# L'affectation importée en CSV (heptagoneslm import-projects, ou Administration › Projets) prime ;
+# sinon la première règle qui correspond : motifs sur le poste (hosts) ou l'utilisateur (users), service exact.
+# projects:
+#   - { project: "A12 Viaduc", hosts: ["CAO-A12-*"] }
+#   - { project: "Atelier",    departments: ["Production"] }
 
 reporting:
   output_dir: "C:/HeptagonesLM/reports"
@@ -129,7 +138,13 @@ web:
 #   subscriptions:
 #     - name: Direction
 #       recipients: [dsi@entreprise.local, achats@entreprise.local]
-#       period: last-month       # last-month | last-week | last-7d | this-month | last-year
+#       period: last-month       # last-month | last-week | last-quarter | last-7d | this-month | last-year
+#     - name: Achats             # rapport sur mesure : vues de l'interface, une feuille Excel par vue
+#       recipients: [achats@entreprise.local]
+#       period: last-quarter
+#       views: [forecast, renewal, optimization, breakdown]
+#       dimension: project       # axe de la Répartition / du Croisement (user, department, project, site…)
+#       # users / departments / sites / servers / products : filtres de l'abonnement
 #     - name: Simulation
 #       recipients: [responsable.simulation@entreprise.local]
 #       servers: [ANSYS]
@@ -191,6 +206,8 @@ web:
 #     "AutoCAD LT": 560
 #     "Revit": 3100
 #     "Product Design*": 3500
+#   renewals:                                      # fin d'abonnement (rapport « Renouvellements »)
+#     "Product Design*": 2027-03-31
 #   api:                                           # API Autodesk Business Success Plan (docs/AUTODESK_API.md)
 #     client_id: VOTRE_CLIENT_ID                    # application aps.autodesk.com, URL de rappel :
 #                                                  #   http://localhost:8770/autodesk/callback

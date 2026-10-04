@@ -19,11 +19,11 @@ selon les priorités des premiers clients.
 | Licences sous-utilisées | Oui | ✅ Alerte « sous-utilisé », efficacité des jetons, recommandation | — |
 | Licences **inutilisées** (aucun usage sur la période) | Oui | ✅ Vue dédiée avec coût annuel (26.3) | — |
 | Alertes | Oui | ✅ Tableau de bord + e-mail immédiat (collecte, refus, saturation, échéances) | — |
-| Reporting, tableaux de bord, exports | Oui | ✅ 16 vues, Excel / CSV / JSON, rapport mensuel par e-mail | — |
+| Reporting, tableaux de bord, exports | Oui | ✅ 18 vues, Excel / CSV / JSON, rapports planifiés sur mesure par e-mail | — |
 | Heatmaps | Oui | ✅ Profil horaire (jour × heure) | — |
-| Analytics avancées : **prévision** | Oui | ❌ | 26.4 |
-| Optimisation des achats / renouvellements | Oui | 🟡 Jetons recommandés, coûts, économies · pas de rapport de renouvellement | 26.4 |
-| Chargeback (coût par service) | Oui | ✅ Refacturation par service · ❌ par projet | 26.4 |
+| Analytics avancées : **prévision** | Oui | ✅ Prévision à 3 / 6 / 12 mois, fourchette à 90 % (26.4) | — |
+| Optimisation des achats / renouvellements | Oui | ✅ Jetons recommandés, coûts, économies, rapport de renouvellement (26.4) | — |
+| Chargeback (coût par service) | Oui | ✅ Refacturation par service et par projet (26.4) | — |
 | **Idle session monitoring** (inactivité réelle sur le poste) | Oui | 🟡 Seulement les fermetures « INACTIVE » du démon FlexLM | 27.1 |
 | **License harvesting** automatique | Oui | ❌ (nécessite un agent sur les postes) | 27.1 |
 | **Allocation** de licences (quotas par groupe) | Oui | ❌ | 27.1 |
@@ -34,14 +34,14 @@ selon les priorités des premiers clients.
 | Gestionnaires de licences | 70+ | 🟡 FlexLM + RLM · ❌ DSLS, Sentinel RMS/HASP, LM-X, LUM… | 26.5 |
 | Autodesk, Ansys, MATLAB (FlexLM) | Oui | ✅ | — |
 | **ServiceNow, Jira, GLPI, tickets ITSM automatiques** | Oui / selon intégration | ✅ Connecteurs natifs + webhook Teams / Slack (26.3) | — |
-| **Rôles fins par service** | Oui | ✅ Administrateur, lecteur, responsable de service (26.3) · administration en ligne : ❌ | 27.2 |
+| **Rôles fins par service** | Oui | ✅ Administrateur, lecteur, responsable de service (26.3) · page Administration : serveurs, imports, coûts, rapports planifiés (26.3.3, 26.4) · gestion des rôles en ligne : ❌ | 27.2 |
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
 | **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1), API Autodesk Business Success Plan validée sur un compte réel, usage quotidien dans toutes les rubriques (26.3.3) : licences inactives / jamais utilisées, coût récupérable | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
-| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.10, environ 72 pages), plan de test, guide d'installation | — |
+| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.11, environ 75 pages), plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
 > Le comparatif corrigé (version 26.3.0) reprend ce tableau : les intégrations ITSM, les rôles
@@ -95,14 +95,14 @@ Server 2025 (8 features identiques à `lmstat`, refus hors du groupe, PV produit
 | Exploitation ✅ | Setup sans console, bouton « Quitter », icône sur le bureau, relance automatique de l'interface, garde-fou contre le simulateur en production. | 1 j |
 | Setup signé (procédure prête) | Signature de code de `HeptagonesLM-Setup.exe` (plus d'alerte SmartScreen) dès qu'un certificat de signature de code est disponible. | ½ j |
 
-### 26.4.0 — Analytics et achats (cible : fin novembre 2026, ~8 j)
+### 26.4.0 — Analytics et achats (développée, à publier)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
-| Prévision | Projection 3 / 6 / 12 mois du pic et des jetons nécessaires par produit (tendance + saisonnalité hebdomadaire et mensuelle), intervalle de confiance. | 3 j |
-| Rapport de renouvellement | Pour chaque échéance à venir : usage réel, jetons recommandés, économie ou besoin chiffré — prêt pour les achats. | 2 j |
-| Chargeback par projet | Projet déduit du groupe AD, du poste ou d'un import CSV ; refacturation par projet. | 2 j |
-| Rapports planifiés sur mesure | Choix des vues et filtres par abonnement e-mail. | 1 j |
+| Prévision ✅ | Projection 3 / 6 / 12 mois du pic et des jetons nécessaires par produit, sur les pics hebdomadaires (le creux du week-end ne pèse pas) : tendance linéaire dès 8 semaines, saisonnalité mensuelle dès 12 mois, fourchette à 90 %. Autodesk Cloud compris. | 3 j |
+| Rapport de renouvellement ✅ | Pour chaque échéance à venir (fichier de licence, contrat déclaré, abonnement Autodesk) : usage réel, jetons recommandés, besoin prévu, quantité à renouveler, économie ou besoin chiffré — prêt pour les achats. | 2 j |
+| Chargeback par projet ✅ | Projet déduit d'un import CSV (export des membres d'un groupe AD), du poste ou du service ; refacturation par projet, licences Autodesk nommées comprises. | 2 j |
+| Rapports planifiés sur mesure ✅ | Choix des vues, filtres, axe et période (trimestre compris) par abonnement e-mail, une feuille Excel par vue ; gestion et envoi d'essai depuis l'Administration. | 1 j |
 
 ### 26.5.0 — Couverture des gestionnaires (cible : fin décembre 2026, ~10 j)
 

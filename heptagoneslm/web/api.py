@@ -41,6 +41,7 @@ DIMENSIONS = {
     "server": "Serveur",
     "publisher": "Éditeur",
     "site": "Site",
+    "project": "Projet",
 }
 MAX_CHART_SERIES = 8   # au-delà, les séries restent dans le tableau (règle de lisibilité)
 MAX_BAR_ITEMS = 15
@@ -69,6 +70,9 @@ class ReportParams:
     target_coverage: float = 0.95
     named_inactive_days: int = 30      # licences nommées Autodesk : seuil d'inactivité
     named_costs: dict[str, float] = field(default_factory=dict)   # coût annuel d'une licence nommée
+    renewals: dict[str, date] = field(default_factory=dict)       # échéance de contrat par produit
+    named_renewals: dict[str, date] = field(default_factory=dict) # échéance Autodesk par motif de produit
+    projects: list = field(default_factory=list)   # règles « projects » de la configuration
     scoped: bool = False               # périmètre imposé par le rôle (responsable de service)
 
     def describe(self) -> str:
@@ -88,6 +92,9 @@ def params_from_config(query: dict[str, list[str]], config, today: date | None =
     p.target_coverage = config.reporting.target_coverage
     p.named_inactive_days = config.autodesk.inactive_days
     p.named_costs = dict(config.autodesk.annual_costs)
+    p.renewals = config.product_renewals()
+    p.named_renewals = dict(config.autodesk.renewals)
+    p.projects = list(config.projects)
     return p
 
 
@@ -251,8 +258,18 @@ def _result(type_: str, title: str, description: str, columns: list[dict], rows:
 
 
 def _data(db: Database, p: ReportParams):
-    return build_report_data(db, p.start, p.end, servers=p.servers or None,
+    data = build_report_data(db, p.start, p.end, servers=p.servers or None,
                              business_hours=p.business_hours, products=p.products or None)
+    res = project_resolver(db, p)
+    for s in data.sessions:
+        s["project"] = res.of(s["username"], s["hostname"], s["department"]) if res else None
+    return data
+
+
+def project_resolver(db: Database, p: ReportParams):
+    from heptagoneslm import projects
+
+    return projects.resolver(db, p.projects)
 
 
 def _filter_sessions(sessions: list[dict], p: ReportParams) -> list[dict]:
@@ -445,8 +462,8 @@ def report_timeseries(db: Database, p: ReportParams) -> dict:
 
 
 def _dimension_value(s: dict, dimension: str) -> str:
-    key = {"user": "username", "host": "hostname", "department": "department",
-           "product": "product", "server": "server", "publisher": "publisher", "site": "site"}[dimension]
+    key = {"user": "username", "host": "hostname", "department": "department", "product": "product",
+           "server": "server", "publisher": "publisher", "site": "site", "project": "project"}[dimension]
     return s.get(key) or NOT_SET
 
 
@@ -463,12 +480,21 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         g["products"].add(s["product"])
         g["hosts"].add(s["hostname"])
     nd = named.load(db, p)
-    named_dims = {"user", "department", "product", "server", "publisher"}
+    named_dims = {"user", "department", "product", "server", "publisher", "project"}
+    res = project_resolver(db, p) if p.dimension == "project" else None
+
+    def named_key(user: str, prod: str) -> str:
+        dept = nd.departments.get(user)
+        return {"user": user, "department": dept or NOT_SET, "product": prod, "server": named.SERVER,
+                "publisher": named.PUBLISHER,
+                "project": (res.of(user, None, dept) if res else None) or NOT_SET}[p.dimension]
+
+    def group(key: str) -> dict:
+        return groups.setdefault(key, {"hours": 0.0, "sessions": 0, "users": set(), "products": set(), "hosts": set()})
+
     if nd and p.dimension in named_dims:     # licences nommées Autodesk : jours d'utilisation
         for (user, prod), days in nd.user_days.items():
-            key = {"user": user, "department": nd.departments.get(user) or NOT_SET, "product": prod,
-                   "server": named.SERVER, "publisher": named.PUBLISHER}[p.dimension]
-            g = groups.setdefault(key, {"hours": 0.0, "sessions": 0, "users": set(), "products": set(), "hosts": set()})
+            g = group(named_key(user, prod))
             g["days"] = g.get("days", 0) + days
             g["users"].add(user)
             g["products"].add(prod)
@@ -488,6 +514,20 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
             share = s["hours_in_period"] / hours_by_product[s["product"]]
             g = groups[_dimension_value(s, p.dimension)]
             g["cost"] = g.get("cost", 0.0) + unit * issued_by_product[s["product"]] * years * share
+    named_costed = False
+    if nd and p.named_costs and p.dimension in named_dims:   # licence nommée : imputée à son titulaire
+        from heptagoneslm.autodesk import annual_cost
+
+        years = max((p.end - p.start).days, 1) / 365.0
+        for user, prod in nd.user_seats:
+            unit = annual_cost(prod, p.named_costs)
+            if unit is None:
+                continue
+            g = group(named_key(user, prod))
+            g["users"].add(user)
+            g["products"].add(prod)
+            g["cost"] = g.get("cost", 0.0) + unit * years
+            named_costed = True
     total = sum(g["hours"] for g in groups.values()) or 1.0
     rows = [
         {"key": k, "hours": round(g["hours"], 2), "share": g["hours"] / total, "sessions": g["sessions"],
@@ -516,11 +556,16 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
     ]
     if nd and p.dimension in named_dims:
         columns.insert(3, _col("days", "Jours d'utilisation (Autodesk)", "int"))
-    if p.costs:
+    if p.costs or named_costed:
         columns.append(_col("cost", "Coût refacturé (période)", "money"))
     if p.costs:
         notes.append("Coût refacturé : coût annuel des jetons de chaque produit ramené à la période, "
                      "réparti au prorata des heures d'utilisation.")
+    if named_costed:
+        notes.append(f"{named.SERVER} : chaque licence nommée est refacturée à son titulaire (coût annuel ramené à la période).")
+    if p.dimension == "project" and not project_resolver(db, p):
+        notes.append("Aucun projet défini : importer l'affectation des utilisateurs (Administration › Projets, ou "
+                     "heptagoneslm import-projects) ou déclarer des règles projects: dans la configuration.")
     result = _result("breakdown", f"Répartition par {label.lower()}", p.describe(), columns, rows, chart, notes=notes)
     result["currency"] = p.currency
     return result
@@ -536,10 +581,12 @@ def report_matrix(db: Database, p: ReportParams) -> dict:
         cells[_dimension_value(s, dimension)][s["product"]] += s["hours_in_period"]
     nd = named.load(db, p)
     ncells: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    if nd and dimension in ("user", "department", "server", "publisher"):
+    if nd and dimension in ("user", "department", "server", "publisher", "project"):
+        res = project_resolver(db, p) if dimension == "project" else None
         for (user, prod), days in nd.user_days.items():
-            key = {"user": user, "department": nd.departments.get(user) or NOT_SET, "server": named.SERVER,
-                   "publisher": named.PUBLISHER}[dimension]
+            dept = nd.departments.get(user)
+            key = {"user": user, "department": dept or NOT_SET, "server": named.SERVER, "publisher": named.PUBLISHER,
+                   "project": (res.of(user, None, dept) if res else None) or NOT_SET}[dimension]
             ncells[key][prod] += days
     nproducts = sorted({prod for per in ncells.values() for prod in per})
     rows = []
@@ -673,6 +720,15 @@ def _insight(name: str) -> Callable[[Database, ReportParams], dict]:
     return run
 
 
+def _module(module: str, name: str) -> Callable[[Database, ReportParams], dict]:
+    def run(db: Database, p: ReportParams) -> dict:
+        import importlib
+
+        return getattr(importlib.import_module(f"heptagoneslm.web.{module}"), name)(db, p)
+
+    return run
+
+
 REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
     "dashboard": ("Tableau de bord", _insight("report_dashboard")),
     "live": ("En direct", _insight("report_live")),
@@ -688,6 +744,8 @@ REPORTS: dict[str, tuple[str, Callable[[Database, ReportParams], dict]]] = {
     "unused": ("Licences inutilisées", _insight("report_unused")),
     "reservations": ("Réservations", _insight("report_reservations")),
     "named": ("Autodesk · utilisateurs nommés", _insight("report_named")),
+    "forecast": ("Prévision", _module("forecast", "report_forecast")),
+    "renewal": ("Renouvellements", _module("renewal", "report_renewal")),
     "sessions": ("Sessions", report_sessions),
     "collections": ("Collectes", report_collections),
 }
@@ -738,21 +796,24 @@ def export_json(result: dict) -> bytes:
     return json.dumps(result, ensure_ascii=False, indent=2, default=str).encode("utf-8")
 
 
-def export_xlsx(result: dict) -> bytes:
-    """Classeur d'une feuille reprenant le rapport affiché (+ graphique Excel natif)."""
-    from openpyxl import Workbook
-    from openpyxl.chart import BarChart, LineChart, Reference
-    from openpyxl.formatting.rule import ColorScaleRule
-    from openpyxl.styles import Font
-    from openpyxl.utils import get_column_letter
+def _sheet_title(title: str, taken: set[str]) -> str:
+    base = "".join(c for c in title if c not in '[]:*?/\\')[:31] or "Rapport"
+    name, i = base, 2
+    while name.lower() in taken:
+        suffix = f" ({i})"
+        name, i = base[:31 - len(suffix)] + suffix, i + 1
+    taken.add(name.lower())
+    return name
 
-    from heptagoneslm.reporting.excel import _autosize, _show_axes, _write_table
+
+def _fill_sheet(ws, result: dict, table_name: str) -> tuple[int, int, list]:
+    """Titre, description, tableau et notes d'un rapport ; renvoie (ligne d'en-tête, dernière ligne, lignes)."""
+    from openpyxl.styles import Font
+
+    from heptagoneslm.reporting.excel import _autosize, _write_table
 
     formats = {"pct": "0.0%", "float": "0.00", "hours": "0.0", "int": "0", "datetime": "dd/mm/yyyy hh:mm",
                "date": "dd/mm/yyyy", "money": '#,##0 "' + result.get("currency", "€").replace('"', "") + '"'}
-    wb = Workbook()
-    ws = wb.active
-    ws.title = result["title"][:31].replace("/", "-").replace(":", "")
     ws["A1"] = f"HeptagonesLM — {result['title']}"
     ws["A1"].font = Font(size=14, bold=True)
     ws["A2"] = result["description"]
@@ -771,11 +832,46 @@ def export_xlsx(result: dict) -> bytes:
 
     rows = [[cell_value(r.get(c["key"]), c["type"]) for c in cols] for r in result["rows"]]
     fmt = {i + 1: formats[c["type"]] for i, c in enumerate(cols) if c["type"] in formats}
-    top, last = _write_table(ws, 4, [c["label"] for c in cols], rows, "tRapport", fmt)
+    top, last = _write_table(ws, 4, [c["label"] for c in cols], rows, table_name, fmt)
     ws.freeze_panes = "B5"
     for note_row, note in enumerate(result.get("notes", []), start=last + 2):
         ws.cell(row=note_row, column=1, value=note).font = Font(italic=True, color="666666")
     _autosize(ws)
+    return top, last, rows
+
+
+def export_workbook(results: list[dict]) -> bytes:
+    """Classeur d'une feuille par rapport (rapports planifiés sur mesure)."""
+    from openpyxl import Workbook
+    from openpyxl.formatting.rule import ColorScaleRule
+
+    wb = Workbook()
+    taken: set[str] = set()
+    for i, result in enumerate(results):
+        ws = wb.active if i == 0 else wb.create_sheet()
+        ws.title = _sheet_title(result["title"], taken)
+        top, last, rows = _fill_sheet(ws, result, f"tVue{i + 1}")
+        if (result.get("chart") or {}).get("kind") == "heatmap" and rows:
+            ws.conditional_formatting.add(f"B{top + 1}:H{last}", ColorScaleRule(
+                start_type="num", start_value=0, start_color="F8F8F8", end_type="num", end_value=1, end_color="2A78D6"))
+    buf = io.BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
+
+
+def export_xlsx(result: dict) -> bytes:
+    """Classeur d'une feuille reprenant le rapport affiché (+ graphique Excel natif)."""
+    from openpyxl import Workbook
+    from openpyxl.chart import BarChart, LineChart, Reference
+    from openpyxl.formatting.rule import ColorScaleRule
+    from openpyxl.utils import get_column_letter
+
+    from heptagoneslm.reporting.excel import _show_axes
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = _sheet_title(result["title"], set())
+    top, last, rows = _fill_sheet(ws, result, "tRapport")
 
     chart = result.get("chart")
     if chart and chart["kind"] == "heatmap" and rows:

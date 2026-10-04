@@ -18,7 +18,7 @@ const fs = require("fs");
     page.on("console", m => { if (m.type() === "error") failures.push(`[${scheme}] console: ${m.text()}`); });
     page.on("pageerror", e => failures.push(`[${scheme}] erreur JS : ${e.message}`));
     const tabs = scheme === "light"
-      ? ["summary", "timeseries", "breakdown", "matrix", "heatmap", "contention", "denials", "efficiency", "optimization", "named", "sessions", "collections"]
+      ? ["summary", "timeseries", "breakdown", "matrix", "heatmap", "contention", "denials", "efficiency", "optimization", "named", "forecast", "renewal", "sessions", "collections"]
       : ["summary", "timeseries", "heatmap"];
     // Tableau de bord (page d'accueil) : alertes, 6 KPI cliquables avec micro-courbes, graphiques.
     await page.goto(`${base}/#preset=all`);

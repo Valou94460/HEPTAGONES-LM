@@ -43,16 +43,17 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
-| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
+| **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service et **par projet**, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
+| **Achats** | **Prévision** du pic et des jetons nécessaires à 3, 6 et 12 mois (tendance, saisonnalité, fourchette à 90 %) et **rapport de renouvellement** : pour chaque échéance, usage réel, quantité à renouveler, économie ou budget chiffrés. |
 | **Autodesk nominatif** | Licences Autodesk « utilisateur nommé » (sans serveur de licences) : usage lu par l'API Autodesk (Business Success Plan) ou import des exports « Usage report » du portail Autodesk Account, licences inactives ou jamais utilisées à réaffecter, coût annuel récupérable. |
 | **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
-| **Rapports** | 16 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
+| **Rapports** | 18 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **HeptagonesLM-Setup.exe** | **Seul fichier à télécharger.** Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. Il installe l'application (`HeptagonesLM.exe` : collecte, interface, rapports) dans `C:\HeptagonesLM`. Aucun Python requis ; rien à installer sur les postes utilisateurs (navigateur). |
 | **Connexion Windows / AD** | Page de connexion avec les identifiants Windows (LDAPS), restriction par groupe AD, ou authentification unique derrière IIS. HTTPS intégré, journal d'audit des connexions et des exports. |
 | **Rôles** | Administrateur, lecteur, responsable de service (ne voit que ses services, exports compris), attribués par groupe AD ou par compte, contrôlés par le serveur. |
 | **Alertes et tickets** | Dès la collecte suivante : collecte en échec ou arrêtée (puis « rétablie »), nouveaux refus, plus aucun jeton disponible, licence qui expire (J-30, J-7, expirée). Par e-mail et / ou ticket automatique ServiceNow, Jira, GLPI, Teams / Slack (ouvert, complété, résolu). |
-| **Rapport par e-mail** | Abonnements (destinataires, période, serveurs, produits) : résumé HTML + classeur Excel joint, envoyé une fois par mois. |
+| **Rapports par e-mail** | Abonnements (destinataires, période mensuelle, hebdomadaire ou trimestrielle, filtres) : résumé HTML + classeur Excel joint ; rapports sur mesure avec les vues choisies (prévision, renouvellements, répartition par projet…), gérés depuis la page Administration. |
 | **Automatisation** | Tâches planifiées Windows (collecte toutes les 5 min, rapport mensuel, envoi des e-mails, purge, interface permanente). |
 | **Référentiel** | Correspondance feature technique → produit lisible (`87545ACD_2024_0F` → AutoCAD 2024), services et noms importés de l'AD. |
 | **Extensible** | Architecture à collecteurs : d'autres gestionnaires (DSLS, LM-X…) s'ajoutent sans toucher au reste, comme RLM. |
@@ -81,6 +82,14 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 <tr>
 <td align="center"><em>Autodesk nominatif : licences à récupérer</em></td>
 <td align="center"><em>Recette : HeptagonesLM comparé à lmstat en direct</em></td>
+</tr>
+<tr>
+<td><img src="docs/images/prevision.png" alt="Prévision du besoin"></td>
+<td><img src="docs/images/renouvellements.png" alt="Rapport de renouvellement"></td>
+</tr>
+<tr>
+<td align="center"><em>Prévision : jetons nécessaires à 3, 6 et 12 mois</em></td>
+<td align="center"><em>Renouvellements : quantité à renouveler, économie chiffrée</em></td>
 </tr>
 </table>
 
@@ -218,7 +227,7 @@ Options globales : `-c heptagoneslm.yaml` (ou variable `HEPTAGONESLM_CONFIG`), `
 heptagoneslm -c heptagoneslm.yaml web --open
 ```
 
-Navigation par la barre latérale, en quatre groupes :
+Navigation par la barre latérale, en cinq groupes (plus *Administration* pour les administrateurs) :
 
 | Vue | Contenu |
 |---|---|
@@ -226,13 +235,15 @@ Navigation par la barre latérale, en quatre groupes :
 | **En direct** | Dernier sondage : jetons utilisés / libres par produit, utilisateurs connectés (poste, service, durée), file d'attente ; actualisation automatique |
 | Synthèse | Indicateurs clés, taux d'occupation par produit (moyen, au pic, heures ouvrées) |
 | Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
-| Répartition | Heures par utilisateur, poste, service, produit, serveur ou éditeur |
-| Croisement | Tableau croisé (utilisateur, poste ou service) × produit |
+| Répartition | Heures par utilisateur, poste, service, produit, serveur, éditeur, site ou projet ; coût refacturé |
+| Croisement | Tableau croisé (utilisateur, poste, service ou projet) × produit |
 | Profil horaire | Carte de chaleur heure × jour de semaine |
 | Contention | Jours avec saturation des jetons et/ou refus |
 | Refus | Détail des refus (DENIED) issus des logs |
 | **Efficacité** | Part du temps ouvré où au moins N jetons sont utilisés ; jetons recommandés pour couvrir 95 % du temps, excédent, jetons jamais utilisés |
 | **Optimisation & coûts** | Coût annuel par produit, économies potentielles, coût par heure d'usage, recommandation (réduire, adapté, pénurie) |
+| **Prévision** | Pic prévu à 3, 6 et 12 mois par produit, jetons nécessaires, marge à 90 %, écart et impact budgétaire |
+| **Renouvellements** | Échéances des 12 mois à venir : usage réel, recommandé, besoin prévu, quantité à renouveler, économie ou budget |
 | Sessions | Données brutes filtrables |
 | Collectes | Journal et état de santé des collectes |
 
@@ -281,6 +292,19 @@ email:
 Chaque abonné reçoit un résumé (indicateurs clés, produits en pénurie — avec refus ou
 saturés plus de 5 % des heures ouvrées —, produits sous-utilisés, détail par produit,
 lien vers l'interface) et le classeur Excel complet en pièce jointe.
+
+**Rapport sur mesure** : avec `views`, le message reprend les vues choisies (indicateurs et premières lignes)
+et le classeur joint contient une feuille par vue ; filtres `servers`, `products`, `users`, `departments`,
+`sites`, axe `dimension` (Répartition / Croisement) et période `last-quarter` pour un envoi trimestriel.
+Les abonnements se gèrent aussi depuis *Administration › Rapports planifiés* (avec un envoi d'essai).
+
+```yaml
+    - name: Achats
+      recipients: [achats@entreprise.local]
+      period: last-quarter
+      views: [forecast, renewal, optimization, breakdown]
+      dimension: project
+```
 
 ```powershell
 HeptagonesLM.exe -c heptagoneslm.yaml send-report --dry-run apercu      # .eml à ouvrir dans Outlook, rien n'est envoyé

@@ -17,6 +17,7 @@
     ["Pilotage", ["dashboard", "live"]],
     ["Analyse", ["summary", "timeseries", "breakdown", "matrix", "heatmap"]],
     ["Optimisation", ["efficiency", "optimization", "unused", "named", "reservations", "contention", "denials"]],
+    ["Achats", ["forecast", "renewal"]],
     ["Données", ["sessions", "collections"]],
   ];
   const ICONS = {
@@ -34,6 +35,8 @@
     optimization: '<circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.6-1-1.7-1.5-3-1.5-1.7 0-3 .9-3 2s1 1.7 3 2 3 .9 3 2-1.3 2-3 2c-1.3 0-2.4-.5-3-1.5M12 6.5V8M12 16v1.5"/>',
     contention: '<path d="M12 3l9 16H3z"/><path d="M12 10v4M12 17h.01"/>',
     denials: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+    forecast: '<path d="M3 17l5-5 4 3 4-5"/><path d="M16 10l5-4" stroke-dasharray="2 2.5"/><path d="M3 21h18"/>',
+    renewal: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/><path d="M12 8v4l2.5 1.5"/>',
     sessions: '<path d="M4 6h16M4 12h16M4 18h10"/>',
     collections: '<path d="M4 7c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z"/><path d="M4 7v10c0 1.7 3.6 3 8 3s8-1.3 8-3V7M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
     admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
@@ -473,7 +476,7 @@
   async function renderAdmin() {
     shownType = "admin";
     const view = $("view");
-    $("page-desc").textContent = "Serveurs de licences interrogés par la collecte et import des exports Autodesk.";
+    $("page-desc").textContent = "Serveurs de licences, imports (Autodesk, projets), coûts et échéances, rapports planifiés par e-mail.";
     let data;
     try { data = await fetchJSON("api/admin/servers"); showError(""); }
     catch (e) { showError(e.message); view.innerHTML = ""; return; }
@@ -516,9 +519,26 @@
           <button type="button" class="btn primary" id="adsk-import">Importer</button></div>
         <p id="adsk-result" class="muted" style="margin-top:10px"></p>
         </div></section>
-      <section class="card" style="margin-top:16px" id="costs-card"><div class="card-head"><div><h2>Coûts des licences Autodesk</h2>
-        <div class="sub">Coût annuel d'une licence nommée par produit : chiffre les économies dans « Optimisation &amp; coûts ».</div></div></div>
-        <div class="card-body" id="costs-body"><p class="muted">Chargement…</p></div></section>`;
+      <section class="card" style="margin-top:16px" id="costs-card"><div class="card-head"><div><h2>Coûts et échéances des licences Autodesk</h2>
+        <div class="sub">Coût annuel d'une licence nommée par produit (« Optimisation &amp; coûts », refacturation) et date de fin d'abonnement (« Renouvellements »).</div></div></div>
+        <div class="card-body" id="costs-body"><p class="muted">Chargement…</p></div></section>
+      <section class="card" style="margin-top:16px" id="projects-card"><div class="card-head"><div><h2>Projets</h2>
+        <div class="sub">Refacturation par projet : « Répartition » ou « Croisement », par Projet.</div></div></div>
+        <div class="card-body">
+        <ol class="notes" style="margin-bottom:12px">
+          <li>Fichier CSV avec deux colonnes : <b>utilisateur</b> (identifiant Windows) et <b>projet</b>. Par exemple, export des membres d'un groupe AD :
+            <code>Get-ADGroupMember "GG-Projet-A12" | Select SamAccountName, @{n="project";e={"A12"}} | Export-Csv projets.csv -NoTypeInformation -Encoding UTF8</code></li>
+          <li>Un utilisateur absent du fichier est rangé par les règles <code>projects:</code> de la configuration (nom du poste, service), sinon sous « (non renseigné) ».</li>
+        </ol>
+        <div id="projects-list" class="muted">Chargement…</div>
+        <div class="options" style="gap:8px;margin-top:10px"><input type="file" id="proj-file" accept=".csv,.txt">
+          <label class="field inline"><input type="checkbox" id="proj-replace"> <span>Remplacer toutes les affectations</span></label>
+          <button type="button" class="btn primary" id="proj-import">Importer</button></div>
+        <p id="proj-result" class="muted" style="margin-top:10px"></p>
+        </div></section>
+      <section class="card" style="margin-top:16px" id="subs-card"><div class="card-head"><div><h2>Rapports planifiés</h2>
+        <div class="sub">Envoyés par e-mail chaque jour, semaine, mois ou trimestre selon la période : vues choisies, filtres, classeur Excel joint (une feuille par vue).</div></div></div>
+        <div class="card-body" id="subs-body"><p class="muted">Chargement…</p></div></section>`;
     const form = () => ({ name: $("srv-name").value.trim(), port_at_host: $("srv-target").value.trim(),
       license_type: $("srv-type").value, enabled: $("srv-enabled").checked });
     const say = (id, msg, ok) => { const e = $(id); e.textContent = msg; e.style.color = ok === false ? "var(--critical)" : ok ? "var(--good)" : ""; };
@@ -553,17 +573,31 @@
       const body = $("costs-body");
       if (!c.costs.length) body.innerHTML = '<p class="muted">Aucun produit Autodesk connu : importer un export ou configurer la synchronisation par l\'API Autodesk.</p>';
       else {
-        body.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Produit</th><th>Coût annuel / licence (${esc(meta.currency || "€")})</th></tr></thead><tbody>
-          ${c.costs.map((x, i) => `<tr><td>${esc(x.product)}</td><td><input type="text" inputmode="decimal" data-cost="${i}" value="${x.cost ?? ""}" ${c.readonly ? "disabled" : ""} style="width:140px"></td></tr>`).join("")}
-          </tbody></table></div>${c.readonly ? "" : `<div class="options" style="margin-top:10px"><button type="button" class="btn primary" id="costs-save">Enregistrer les coûts</button></div><p id="costs-result" class="muted"></p>`}`;
+        body.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Produit</th><th>Coût annuel / licence (${esc(meta.currency || "€")})</th><th>Fin d'abonnement</th></tr></thead><tbody>
+          ${c.costs.map((x, i) => `<tr><td>${esc(x.product)}</td><td><input type="text" inputmode="decimal" data-cost="${i}" value="${x.cost ?? ""}" ${c.readonly ? "disabled" : ""} style="width:140px" aria-label="Coût annuel ${esc(x.product)}"></td>
+            <td><input type="date" data-renewal="${i}" value="${esc(x.renewal || "")}" ${c.readonly ? "disabled" : ""} aria-label="Fin d'abonnement ${esc(x.product)}"></td></tr>`).join("")}
+          </tbody></table></div>${c.readonly ? "" : `<div class="options" style="margin-top:10px"><button type="button" class="btn primary" id="costs-save">Enregistrer</button></div><p id="costs-result" class="muted"></p>`}`;
         $("costs-save")?.addEventListener("click", async () => {
-          const costs = {};
+          const costs = {}, renewals = {};
           body.querySelectorAll("[data-cost]").forEach(inp => { costs[c.costs[+inp.dataset.cost].product] = inp.value.trim(); });
-          try { const r = await postAdmin("api/admin/costs", { costs }); say("costs-result", `Enregistré : ${r.count} produit(s) chiffré(s).`, true); }
+          body.querySelectorAll("[data-renewal]").forEach(inp => { renewals[c.costs[+inp.dataset.renewal].product] = inp.value; });
+          try { const r = await postAdmin("api/admin/costs", { costs, renewals }); say("costs-result", `Enregistré : ${r.count} produit(s) chiffré(s).`, true); }
           catch (e) { say("costs-result", e.message, false); }
         });
       }
     } catch (e) { $("costs-body").innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
+    loadProjects();
+    loadSubscriptions(say);
+    $("proj-import").addEventListener("click", async () => {
+      const f = $("proj-file").files[0];
+      if (!f) { say("proj-result", "Choisir d'abord un fichier CSV utilisateur ; projet.", false); return; }
+      try {
+        const r = await postAdmin("api/admin/projects-import", null, await f.arrayBuffer(),
+          { "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(f.name), "X-Replace": $("proj-replace").checked ? "1" : "0" });
+        say("proj-result", `Importé : ${r.users} utilisateur(s) répartis sur ${r.projects} projet(s).`, true);
+        loadProjects();
+      } catch (e) { say("proj-result", e.message, false); }
+    });
     $("adsk-import").addEventListener("click", async () => {
       const f = $("adsk-file").files[0];
       if (!f) { say("adsk-result", "Choisir d'abord un fichier exporté du portail Autodesk.", false); return; }
@@ -574,6 +608,91 @@
         say("adsk-result", r.status === "importé" ? `Importé : ${r.rows} licence(s) nommée(s), rapport du ${fmt(r.report_date, "date")}.`
           : `Ce fichier a déjà été importé (${r.file}).`, true);
       } catch (e) { say("adsk-result", e.message, false); }
+    });
+  }
+
+  async function loadProjects() {
+    const box = $("projects-list");
+    try {
+      const d = await fetchJSON("api/admin/projects");
+      box.classList.remove("muted");
+      const rows = d.projects.map(p => `<tr><td>${esc(p.project)}</td><td>${fmt(p.users, "int")}</td><td>${esc(fmt(p.updated_at, "datetime"))}</td></tr>`).join("");
+      box.innerHTML = (rows ? `<div class="table-wrap"><table><thead><tr><th>Projet (import)</th><th>Utilisateurs</th><th>Mis à jour</th></tr></thead><tbody>${rows}</tbody></table></div>`
+        : "<p class=\"muted\">Aucune affectation importée.</p>") +
+        (d.rules.length ? `<p class="muted">Règles de la configuration : ${d.rules.map(esc).join(", ")}.</p>` : "");
+    } catch (e) { box.textContent = e.message; }
+  }
+  let subEdit = null;        // rapport planifié en cours de modification
+  async function loadSubscriptions(say) {
+    const body = $("subs-body");
+    let d;
+    try { d = await fetchJSON("api/admin/subscriptions"); } catch (e) { body.innerHTML = `<p class="muted">${esc(e.message)}</p>`; return; }
+    const viewLabel = Object.fromEntries(d.views.map(v => [v.key, v.label]));
+    const periodLabel = Object.fromEntries(d.periods.map(v => [v.key, v.label]));
+    const ro = d.readonly || (!d.smtp && "Serveur SMTP non configuré : renseigner l'envoi d'e-mails dans HeptagonesLM-Setup.exe pour planifier des rapports.");
+    const list = d.subscriptions.length ? `<div class="table-wrap"><table><thead><tr><th>Rapport</th><th>Période</th><th>Vues</th><th>Destinataires</th><th></th></tr></thead><tbody>
+      ${d.subscriptions.map(s => `<tr><td><b>${esc(s.name)}</b></td><td>${esc(periodLabel[s.period || "last-month"] || s.period)}</td>
+        <td>${(s.views || []).length ? s.views.map(v => esc(viewLabel[v] || v)).join(", ") : '<span class="muted">Rapport standard</span>'}</td>
+        <td>${esc([].concat(s.recipients || []).join(", "))}</td>
+        <td style="white-space:nowrap">${ro ? "" : `<button type="button" class="btn small ghost" data-sedit="${esc(s.name)}">Modifier</button><button type="button" class="btn small ghost" data-sdel="${esc(s.name)}">Supprimer</button>`}</td></tr>`).join("")}
+      </tbody></table></div>` : '<p class="muted">Aucun rapport planifié.</p>';
+    const filters = LIST_KEYS.filter(k => state[k].length).map(k => `${k} : ${state[k].join(", ")}`).join(" · ");
+    body.innerHTML = (ro ? `<div class="alert sev-warning"><span class="sev-icon" aria-hidden="true">!</span><div class="alert-body"><div class="alert-detail">${esc(ro)}</div></div></div>` : "") + list +
+      (ro ? "" : `<h3 id="sub-form-title" style="margin:18px 0 8px">Nouveau rapport planifié</h3>
+      <div class="options" style="flex-wrap:wrap;gap:12px">
+        <label class="field"><span>Nom</span><input type="text" id="sub-name" maxlength="100" placeholder="Achats mensuel"></label>
+        <label class="field" style="min-width:320px;flex:1"><span>Destinataires (séparés par des virgules)</span><input type="text" id="sub-to" placeholder="achats@entreprise.fr, dsi@entreprise.fr"></label>
+        <label class="field"><span>Période</span><select id="sub-period">${d.periods.map(p => `<option value="${p.key}">${esc(p.label)}</option>`).join("")}</select></label>
+        <label class="field"><span>Répartition par</span><select id="sub-dim">${d.dimensions.map(p => `<option value="${p.key}">${esc(p.label)}</option>`).join("")}</select></label>
+      </div>
+      <fieldset class="checks" style="border:0;padding:0;margin:12px 0 0"><legend class="muted" style="margin-bottom:6px">Vues du rapport (aucune : rapport standard par produit)</legend>
+        <div style="display:flex;flex-wrap:wrap;gap:6px 16px">${d.views.map(v => `<label class="field inline"><input type="checkbox" data-view="${v.key}"> <span>${esc(v.label)}</span></label>`).join("")}</div></fieldset>
+      <label class="field inline" style="margin-top:10px"><input type="checkbox" id="sub-filters"> <span>Reprendre les filtres actuels de l'interface${filters ? ` (${esc(filters)})` : " (aucun filtre actif)"}</span></label>
+      <label class="field inline" style="margin-top:6px"><input type="checkbox" id="sub-excel" checked> <span>Joindre le classeur Excel</span></label>
+      <div class="options" style="gap:8px;margin-top:12px;flex-wrap:wrap">
+        <button type="button" class="btn primary" id="sub-save">Enregistrer</button>
+        <button type="button" class="btn ghost" id="sub-cancel" hidden>Annuler</button>
+        <label class="field inline"><span>Essai vers</span><input type="email" id="sub-test-to" placeholder="moi@entreprise.fr"></label>
+        <button type="button" class="btn" id="sub-test">Envoyer un essai</button>
+      </div>
+      <p id="sub-result" class="muted" style="margin-top:10px"></p>`);
+    if ($("sub-dim")) $("sub-dim").value = "department";
+    let kept = {};           // filtres d'un rapport modifié (conservés tant que la case n'est pas cochée)
+    const entry = () => {
+      const e = { name: $("sub-name").value.trim(), recipients: $("sub-to").value, period: $("sub-period").value,
+        dimension: $("sub-dim").value, attach_excel: $("sub-excel").checked,
+        views: [...body.querySelectorAll("[data-view]")].filter(c => c.checked).map(c => c.dataset.view) };
+      const src = $("sub-filters").checked ? { servers: state.server, products: state.product, users: state.user, departments: state.department, sites: state.site } : kept;
+      return { ...e, ...src };
+    };
+    const setEdit = s => {
+      subEdit = s ? s.name : null;
+      kept = s ? { servers: s.servers || [], products: s.products || [], users: s.users || [], departments: s.departments || [], sites: s.sites || [] } : {};
+      $("sub-form-title").textContent = s ? `Modifier « ${s.name} »` : "Nouveau rapport planifié";
+      $("sub-name").value = s ? s.name : ""; $("sub-to").value = s ? [].concat(s.recipients || []).join(", ") : "";
+      $("sub-period").value = s ? (s.period || "last-month") : "last-month"; $("sub-dim").value = s ? (s.dimension || "department") : "department";
+      $("sub-excel").checked = s ? s.attach_excel !== false : true; $("sub-filters").checked = false;
+      body.querySelectorAll("[data-view]").forEach(c => { c.checked = !!(s && (s.views || []).includes(c.dataset.view)); });
+      $("sub-cancel").hidden = !s; say("sub-result", "");
+    };
+    body.querySelectorAll("[data-sedit]").forEach(b => b.addEventListener("click", () => setEdit(d.subscriptions.find(s => s.name === b.dataset.sedit))));
+    body.querySelectorAll("[data-sdel]").forEach(b => b.addEventListener("click", async () => {
+      if (!confirm(`Supprimer le rapport planifié « ${b.dataset.sdel} » ?`)) return;
+      try { await postAdmin("api/admin/subscriptions", { action: "delete", original: b.dataset.sdel }); subEdit = null; loadSubscriptions(say); }
+      catch (e) { showError(e.message); }
+    }));
+    $("sub-cancel")?.addEventListener("click", () => setEdit(null));
+    $("sub-save")?.addEventListener("click", async () => {
+      try {
+        await postAdmin("api/admin/subscriptions", { action: "save", subscription: entry(), original: subEdit });
+        subEdit = null; await loadSubscriptions(say);
+        say("sub-result", "Enregistré : envoyé par la tâche « HeptagonesLM - Envoi des rapports » (chaque jour, une fois par période).", true);
+      } catch (e) { say("sub-result", e.message, false); }
+    });
+    $("sub-test")?.addEventListener("click", async () => {
+      say("sub-result", "Préparation et envoi…");
+      try { const r = await postAdmin("api/admin/subscriptions", { action: "test", subscription: entry(), to: $("sub-test-to").value }); say("sub-result", r.ok ? `Essai envoyé : ${r.message}` : r.message, r.ok); }
+      catch (e) { say("sub-result", e.message, false); }
     });
   }
 
