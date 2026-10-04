@@ -110,10 +110,16 @@ class SetupApp:
         self.recette_job: Job | None = None
         self.autodesk_job: Job | None = None
         self.autodesk_url: str | None = None
+        self.last_seen = time.monotonic()          # dernière requête du navigateur (arrêt automatique)
         self.recette_run: recette.RecetteRun | None = None
         self.recette_installed: recette.Installed | None = None
 
     # -- recette -------------------------------------------------------------------------------------
+
+    def busy(self) -> bool:
+        """Installation, mise à jour, vérification des prérequis, recette ou connexion Autodesk en cours."""
+        jobs = [self.check_job, self.recette_job, self.autodesk_job]
+        return bool(self.installer and self.installer.status == "running") or any(j and j.running for j in jobs)
     def installed_config(self) -> str | None:
         return recette.find_installed(self.system, self.answers.install_dir)
 
@@ -340,6 +346,10 @@ class SetupHandler(BaseHTTPRequestHandler):
         if not self._host_ok():
             return self._json({"error": "Hôte non autorisé"}, HTTPStatus.MISDIRECTED_REQUEST)
         url = urlparse(self.path)
+        if self._authorized():
+            self.app.last_seen = time.monotonic()
+        if url.path == "/api/ping":
+            return self._json({"ok": self._authorized()})
         if url.path == "/":
             token = (parse_qs(url.query).get("token") or [""])[0]
             if token and secrets.compare_digest(token, self.app.token):
@@ -400,6 +410,7 @@ class SetupHandler(BaseHTTPRequestHandler):
             return self._json({"error": "Hôte non autorisé"}, HTTPStatus.MISDIRECTED_REQUEST)
         if not self._authorized() or self.headers.get("X-HeptagonesLM-Setup") != "1":
             return self._json({"error": "Session invalide"}, HTTPStatus.FORBIDDEN)
+        self.app.last_seen = time.monotonic()
         try:
             body = self._body()
         except ValueError as exc:
@@ -472,6 +483,9 @@ class SetupHandler(BaseHTTPRequestHandler):
                 app.verification = verify(app.system, app.installer.a if app.installer else a)
                 return self._json(app.verification)
             if path == "/api/shutdown":
+                if app.busy():
+                    return self._json({"error": "Opération en cours : attendre la fin avant de quitter l'assistant",
+                                       "busy": True}, HTTPStatus.CONFLICT)
                 threading.Thread(target=self.server.shutdown, daemon=True).start()
                 return self._json({"stopped": True})
         except SetupError as exc:
@@ -549,6 +563,9 @@ class SetupHandler(BaseHTTPRequestHandler):
         raise SetupError(f"Test inconnu : {kind}")
 
 
+IDLE_EXIT_S = 30 * 60      # sans onglet ouvert ni tâche en cours pendant 30 min : l'assistant s'arrête seul
+
+
 def make_server(system: System, port: int = 0, token: str | None = None) -> tuple[ThreadingHTTPServer, SetupApp]:
     app = SetupApp(system, token)
     handler = type("BoundSetupHandler", (SetupHandler,), {"app": app})
@@ -566,6 +583,15 @@ def serve(system: System, port: int = 0, open_browser: bool = True, token: str |
     print("Laisser cette fenêtre ouverte pendant l'installation (Ctrl+C pour quitter).")
     if open_browser:
         threading.Timer(0.6, lambda: webbrowser.open(url)).start()
+
+    def idle_watch():      # fenêtre console masquée : ne pas laisser un assistant oublié tourner en arrière-plan
+        while True:
+            time.sleep(30)
+            if time.monotonic() - app.last_seen > IDLE_EXIT_S and not app.busy():
+                print("Assistant arrêté après 30 minutes sans activité.")
+                httpd.shutdown()
+                return
+    threading.Thread(target=idle_watch, daemon=True).start()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

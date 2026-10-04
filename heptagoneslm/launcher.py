@@ -33,12 +33,51 @@ def find_config() -> Path | None:
     return None
 
 
+def hide_own_console() -> bool:
+    """Masque la fenêtre console ouverte par Windows au double-clic sur HeptagonesLM-Setup.exe.
+
+    Seulement si la console appartient à ce programme : lancé depuis une invite de commandes, la sortie
+    reste visible. Renvoie True si la fenêtre a été masquée."""
+    if os.name != "nt":
+        return False
+    try:
+        import ctypes
+
+        kernel32 = ctypes.windll.kernel32
+        hwnd = kernel32.GetConsoleWindow()
+        if not hwnd:
+            return False
+        procs = (ctypes.c_uint * 16)()
+        attached = kernel32.GetConsoleProcessList(procs, 16)
+        own = 2 if getattr(sys, "frozen", False) else 1     # exécutable PyInstaller : chargeur + programme
+        if attached > own:
+            return False                                     # console partagée (invite de commandes)
+        ctypes.windll.user32.ShowWindow(hwnd, 0)             # SW_HIDE
+        return True
+    except Exception:
+        return False
+
+
+def show_console() -> None:
+    try:
+        import ctypes
+
+        hwnd = ctypes.windll.kernel32.GetConsoleWindow()
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 5)          # SW_SHOW : message d'erreur et « Entrée pour fermer »
+    except Exception:
+        pass
+
+
 def main() -> int:
     if len(sys.argv) > 1:
         return cli_main()
     if "setup" in Path(sys.executable).stem.lower():
+        hidden = hide_own_console()          # double-clic : seul le navigateur s'affiche (bouton « Quitter »)
         code = cli_main(["setup"])
         if code:
+            if hidden:
+                show_console()
             input("\nAppuyez sur Entrée pour fermer…")
         return code
     config = find_config()

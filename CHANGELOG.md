@@ -5,6 +5,16 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+### 26.3.3 (en cours)
+- **Bouton « Quitter l'assistant »** en fin d'installation, de mise à jour, de vérification et de recette
+  (refusé tant qu'une opération est en cours) ; l'assistant s'arrête aussi seul après 30 minutes sans onglet
+  ouvert.
+- **Fenêtre console masquée** au double-clic sur `HeptagonesLM-Setup.exe` : seul le navigateur s'affiche
+  (elle reste visible quand le Setup est lancé depuis une invite de commandes, et réapparaît en cas d'erreur).
+- **PV de recette, rapport Excel et rapport d'installation relus** : pluriels corrects, serveur sans
+  licence (rapport vide attendu, pas de tableau vide), nom réel du serveur et statuts en français dans le
+  rapport d'installation, « page X sur Y », cases à cocher affichées.
+
 ### Ajouté
 - **Icône HeptagonesLM sur le bureau** (et dans le menu Démarrer) en fin d'installation ou de mise à jour :
   ouvre le tableau de bord.

@@ -42,6 +42,22 @@
     if (!r.ok) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; throw e; }
     return data;
   }
+  /* Bouton « Quitter l'assistant » (fin d'installation, de vérification ou de recette) : arrête le petit
+     serveur local de l'assistant ; la fenêtre console étant masquée, c'est la façon normale de le fermer. */
+  const quitBtn = (cls = "btn") => `<button type="button" class="${cls}" data-quit>Quitter l'assistant</button>`;
+  function bindQuit() {
+    document.querySelectorAll("[data-quit]").forEach(b => b.addEventListener("click", async () => {
+      try { await api("/api/shutdown", {}); }
+      catch (e) { if (e.data && e.data.busy) { showError(e.message); return; } /* sinon : déjà arrêté */ }
+      clearInterval(heartbeat);
+      try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }
+      document.querySelector(".setup-foot").hidden = true;
+      $("step-body").innerHTML = `<div class="panel"><h2>Assistant fermé</h2><p class="muted">Vous pouvez fermer cet onglet. HeptagonesLM continue de fonctionner : icône « HeptagonesLM » sur le bureau. Pour modifier la configuration ou mettre à jour, relancez HeptagonesLM-Setup.exe.</p></div>`;
+      window.close();      // fonctionne si l'onglet a été ouvert par l'assistant ; sinon le message reste affiché
+    }));
+  }
+  // Signal de présence : sans onglet ouvert pendant 30 min (et sans installation en cours), l'assistant s'arrête seul
+  const heartbeat = setInterval(() => fetch("/api/ping", { credentials: "same-origin" }).catch(() => {}), 60000);
   function showError(msg) { const e = $("error"); e.textContent = msg || ""; e.hidden = !msg; }
   function save() {
     try {
@@ -806,7 +822,7 @@
           <a class="btn" href="/api/report">Télécharger le rapport d'installation</a>
           <button type="button" class="btn" id="reverify">Relancer la vérification</button>
           <button type="button" class="btn primary" id="to-recette">Passer à la recette</button>
-          <button type="button" class="btn ghost" id="close">Fermer l'assistant</button>
+          ${quitBtn()}
         </div></div>
       ${v.access_url ? `<div class="panel"><h2>Test depuis un poste utilisateur</h2>
         <p class="muted">Depuis le poste d'un utilisateur membre du groupe autorisé, ouvrir l'adresse ci-dessous : la page indique sous quel nom il est reconnu (Kerberos ou NTLM) et lui demande s'il a dû saisir un mot de passe. Le résultat apparaît ici après « Relancer la vérification ».</p>
@@ -831,11 +847,7 @@
       }
       await runVerify();
     }));
-    $("close")?.addEventListener("click", async () => {
-      try { await api("/api/shutdown", {}); } catch (e) { /* déjà arrêté */ }
-      try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }
-      $("step-body").innerHTML = `<div class="panel"><h2>Assistant fermé</h2><p class="muted">Vous pouvez fermer cet onglet. Pour modifier la configuration plus tard, relancez HeptagonesLM-Setup.exe.</p></div>`;
-    });
+    bindQuit();
   };
 
   /* 12. Recette */
@@ -916,7 +928,7 @@
           <label class="f"><span>Mot de passe</span><input type="password" data-ropt="outsider_password" value="${esc(ropt.outsider_password)}" autocomplete="new-password"></label>
           <label class="f"><span>Compte membre du groupe</span><input type="text" data-ropt="member_user" value="${esc(ropt.member_user)}" placeholder="ENTREPRISE\\utilisateur" autocomplete="off"></label>
           <label class="f"><span>Mot de passe</span><input type="password" data-ropt="member_password" value="${esc(ropt.member_password)}" autocomplete="new-password"></label>` : ""}
-        </div><div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="start-recette">Lancer la recette</button></div></div>`;
+        </div><div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="start-recette">Lancer la recette</button>${quitBtn("btn ghost")}</div></div>`;
     }
     if (running) html += recetteProgress(rjob);
     if (rjob && rjob.status === "error") html += `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>Recette interrompue</h2><p>${esc(rjob.error)}</p></div></div>
@@ -938,7 +950,8 @@
           </div>
           <div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="make-pv">Télécharger le PV de recette (Word)</button>
             <a class="btn" href="/api/recette/preuves.zip">Télécharger les preuves (.zip)</a>
-            <button type="button" class="btn ghost" id="start-recette">Relancer la recette</button></div>
+            <button type="button" class="btn ghost" id="start-recette">Relancer la recette</button>
+            ${quitBtn("btn primary")}</div>
           <div class="result" id="pv-result">${rpv ? `${dot("ok")}<div><b>PV généré : <a href="${esc(rpv.url)}">${esc(rpv.file)}</a></b></div>` : ""}</div></div>`;
     }
     return html;
@@ -950,6 +963,7 @@
     }));
     root.querySelectorAll("[data-pv]").forEach(el => el.addEventListener("input", () => { pvMeta[el.dataset.pv] = el.value; }));
     root.querySelectorAll("#start-recette").forEach(b => b.addEventListener("click", startRecette));
+    bindQuit();
     root.querySelectorAll("[data-rconfirm]").forEach(b => b.addEventListener("click", async () => {
       try {
         const r = await api("/api/recette/confirm", { id: b.dataset.rconfirm, confirmed: b.dataset.val === "1" });
