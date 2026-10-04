@@ -6,6 +6,11 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 ## [Non publié]
 
 ### 26.3.3 (en cours)
+- **Licences Autodesk nommées dans toutes les rubriques** : usage quotidien lu par l'API Autodesk (table
+  `named_usage_day`, schéma v8, synchronisation incrémentale) ; produits Autodesk (Vault, collections…) en
+  serveur « Autodesk Cloud » dans la Synthèse, l'Usage dans le temps, la Répartition, le Croisement,
+  l'Efficacité, l'Optimisation & coûts et les filtres, en licences affectées et jours d'utilisation (aucune
+  heure inventée). Coûts annuels par produit saisis dans *Administration › Coûts des licences Autodesk*.
 - **Rubrique « Administration » de l'interface web**, réservée au groupe AD des administrateurs (nouveau champ
   de l'assistant, ou accueil du Setup › « Administrateurs de l'interface web » pour une installation
   existante) : ajout, modification, suppression et test en direct des serveurs de licences, et import d'un

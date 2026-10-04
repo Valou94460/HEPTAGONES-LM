@@ -185,6 +185,47 @@ def test_server(path: str, entry: dict) -> dict:
             "features": [{"name": f.name, "in_use": f.in_use, "issued": f.issued} for f in status.features[:50]]}
 
 
+def list_costs(path: str, products: list[str]) -> dict:
+    """Coût annuel d'une licence nommée par produit Autodesk (autodesk.annual_costs)."""
+    _, raw = _load(path)
+    costs = ((raw.get("autodesk") or {}).get("annual_costs") or {}) if isinstance(raw.get("autodesk"), dict) else {}
+    names = sorted(set(products) | {str(k) for k in costs})
+    return {"costs": [{"product": n, "cost": costs.get(n)} for n in names], "readonly": editable(path)}
+
+
+def save_costs(path: str, costs: dict, backup_dir: str | None) -> int:
+    reason = editable(path)
+    if reason:
+        raise AdminError(reason)
+    clean = {}
+    for product, value in (costs or {}).items():
+        name = str(product).strip()
+        if not name or len(name) > 255:
+            raise AdminError("Nom de produit invalide")
+        if value in (None, ""):
+            continue                                  # champ vidé : coût retiré
+        try:
+            amount = round(float(str(value).replace(",", ".").replace(" ", "")), 2)
+        except ValueError:
+            raise AdminError(f"Coût invalide pour {name} : nombre attendu") from None
+        if not 0 <= amount <= 10_000_000:
+            raise AdminError(f"Coût hors limites pour {name}")
+        clean[name] = amount
+    previous, raw = _load(path)
+    section = raw.get("autodesk") if isinstance(raw.get("autodesk"), dict) else {}
+    section = dict(section)
+    if clean:
+        section["annual_costs"] = clean
+    else:
+        section.pop("annual_costs", None)
+    if section:
+        raw["autodesk"] = section
+    else:
+        raw.pop("autodesk", None)
+    _write(path, previous, raw, backup_dir)
+    return len(clean)
+
+
 def import_autodesk(db, filename: str, data: bytes) -> dict:
     """Export « Usage report » du portail Autodesk Account déposé depuis le navigateur."""
     from heptagoneslm.autodesk import import_report

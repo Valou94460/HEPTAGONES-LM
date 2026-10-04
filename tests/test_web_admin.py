@@ -1,6 +1,5 @@
 """26.3.3 : page Administration de l'interface (serveurs de licences, import des exports Autodesk)."""
 
-import dataclasses
 import json
 import tempfile
 import threading
@@ -70,6 +69,15 @@ class AdminModuleTest(unittest.TestCase):
         with self.assertRaises(admin.AdminError):
             admin.delete_server(self.path, names[0], None)
 
+    def test_costs(self):
+        self.assertEqual(admin.save_costs(self.path, {"Vault Professional": "1 250,50", "Revit": ""}, self.backups), 1)
+        cfg = load_config(self.path)
+        self.assertEqual(cfg.autodesk.annual_costs, {"Vault Professional": 1250.5})
+        listed = {c["product"]: c["cost"] for c in admin.list_costs(self.path, ["Revit"])["costs"]}
+        self.assertEqual(listed, {"Revit": None, "Vault Professional": 1250.5})
+        with self.assertRaises(admin.AdminError):
+            admin.save_costs(self.path, {"Vault": "beaucoup"}, None)
+
     def test_test_server_with_simulator(self):
         r = admin.test_server(self.path, {"name": "T", "port_at_host": "27000@licsrv-adsk"})   # faux lmutil de la démo
         self.assertTrue(r["ok"], r)
@@ -83,8 +91,10 @@ class AdminRoutesTest(unittest.TestCase):
         cls.tmp = tempfile.TemporaryDirectory()
         result = run_demo(cls.tmp.name, days=2, end=datetime(2024, 9, 25), make_report=False)
         cls.path = str(result.config_path)
-        cfg = load_config(cls.path)
-        cls.cfg = dataclasses.replace(cfg, web=dataclasses.replace(cfg.web, demo=False))
+        raw = yaml.safe_load(Path(cls.path).read_text(encoding="utf-8"))
+        raw.setdefault("web", {})["demo"] = False          # installation réelle (pas de démonstration)
+        Path(cls.path).write_text(yaml.safe_dump(raw, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        cls.cfg = load_config(cls.path)
         cls.httpd = make_server(cls.cfg, port=0, config_path=cls.path)
         cls.base = f"http://127.0.0.1:{cls.httpd.server_address[1]}"
         threading.Thread(target=cls.httpd.serve_forever, daemon=True).start()
@@ -127,6 +137,13 @@ class AdminRoutesTest(unittest.TestCase):
         code, body = self.req("/api/admin/servers", {"action": "save", "server": {"name": "bad name", "port_at_host": "1@x"}})
         self.assertEqual(code, 422)
         self.req("/api/admin/servers", {"action": "delete", "original": "R1"})
+
+    def test_costs_route_reloads_configuration(self):
+        code, body = self.req("/api/admin/costs", {"costs": {"Vault Professional": "900"}})
+        self.assertEqual(code, 200, body)
+        self.assertEqual(self.httpd.RequestHandlerClass.config.autodesk.annual_costs.get("Vault Professional"), 900.0)
+        code, body = self.req("/api/admin/costs")
+        self.assertIn("Vault Professional", [c["product"] for c in body["costs"]])
 
     def test_autodesk_upload(self):
         code, body = self.req("/api/admin/autodesk-import", raw=CSV,

@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 7
+-- Version du schéma : 8
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -206,6 +206,17 @@ CREATE TABLE dbo.named_seat (
 )
 GO
 
+IF OBJECT_ID(N'dbo.named_usage_day', N'U') IS NULL
+CREATE TABLE dbo.named_usage_day (
+    id BIGINT IDENTITY(1,1) PRIMARY KEY,
+    vendor NVARCHAR(30) NOT NULL,
+    product NVARCHAR(255) NOT NULL,
+    email NVARCHAR(255) NOT NULL,
+    usage_date DATE NOT NULL,
+    imported_at DATETIME2(0) NOT NULL
+)
+GO
+
 IF OBJECT_ID(N'dbo.named_import', N'U') IS NULL
 CREATE TABLE dbo.named_import (
     id INT IDENTITY(1,1) PRIMARY KEY,
@@ -268,6 +279,10 @@ GO
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_named_seat_report')
 CREATE INDEX ix_named_seat_report ON dbo.named_seat (vendor, report_date)
+GO
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = N'ix_named_usage_day')
+CREATE INDEX ix_named_usage_day ON dbo.named_usage_day (usage_date, product)
 GO
 
 CREATE OR ALTER VIEW dbo.v_session_detail AS

@@ -188,6 +188,11 @@ def cmd_autodesk_sync(cfg: AppConfig, args) -> int:
     print(f"{r.users} ligne(s) utilisateur × produit lues, {r.carried} licence(s) reprise(s) du dernier état, "
           f"{r.stored} enregistrée(s)" + (" — simulation, rien n'est écrit" if args.dry_run else "")
           + (" — identifiants hachés (données personnelles masquées chez Autodesk)" if r.hashed else ""))
+    if r.daily is not None:
+        print(f"Usage quotidien : {r.daily} ligne(s) utilisateur × produit × jour (Synthèse, Usage dans le temps, "
+              "Répartition, Optimisation…)")
+    else:
+        print(f"Usage quotidien indisponible : {r.daily_error} (rapport « utilisateurs nommés » seul)")
     return 0
 
 

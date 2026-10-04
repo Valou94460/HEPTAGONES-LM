@@ -31,7 +31,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 from heptagoneslm import __version__
 from heptagoneslm.config import AppConfig, ConfigError
 from heptagoneslm.storage.db import Database
-from heptagoneslm.web import access, admin, api
+from heptagoneslm.web import access, admin, api, named
 from heptagoneslm.web import roles
 from heptagoneslm.web.auth import COOKIE_NAME, Auth, AuthError, UserInfo
 
@@ -338,7 +338,8 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
             query = parse_qs(url.query, keep_blank_values=True)
             if url.path == "/api/meta":
                 with self._db() as db:
-                    return self._json({**roles.filter_meta(api.meta(db), access), "version": __version__,
+                    return self._json({**roles.filter_meta(named.meta_extend(db, api.meta(db)), access),
+                                       "version": __version__,
                                        "demo": self.config.web.demo, "access": access.as_dict(),
                                        "admin": self._is_admin(access),
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
@@ -348,6 +349,13 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                 with self._db() as db:
                     collections = api.collections_status(db)
                 return self._json(admin.list_servers(self.config_path, collections))
+            if url.path == "/api/admin/costs":
+                if not self._is_admin(access):
+                    return self._forbidden(url.path, "Réservé aux administrateurs de HeptagonesLM")
+                with self._db() as db:
+                    products = [x["name"] for x in named.meta_extend(db, api.meta(db))["products"]
+                                if named.SERVER in x.get("servers", [])]
+                return self._json(admin.list_costs(self.config_path, products))
             if url.path == "/api/report":
                 params = roles.restrict(api.params_from_config(query, self.config), access)
                 with self._db() as db:
@@ -414,6 +422,17 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                                user.username, self.client_ip)
                     return self._json({"ok": True})
                 raise admin.AdminError("Action inconnue")
+            if path == "/api/admin/costs":
+                count = admin.save_costs(self.config_path, (self._read_json() or {}).get("costs") or {}, backups)
+                try:                 # rapports suivants : nouveaux coûts sans redémarrer l'interface
+                    from heptagoneslm.config import load_config
+
+                    type(self).config = load_config(self.config_path)
+                except (ConfigError, OSError):
+                    log.warning("Configuration non relue après l'enregistrement des coûts", exc_info=True)
+                audit.info("Administration : coûts des licences Autodesk enregistrés (%d produits) par %s depuis %s",
+                           count, user.username, self.client_ip)
+                return self._json({"ok": True, "count": count})
             if path == "/api/admin/autodesk-import":
                 try:
                     length = int(self.headers.get("Content-Length") or 0)

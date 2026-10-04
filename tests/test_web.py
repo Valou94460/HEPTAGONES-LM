@@ -74,7 +74,7 @@ class WebServerTest(unittest.TestCase):
     def test_meta(self):
         status, meta = self.get_json("/api/meta")
         self.assertEqual(status, 200)
-        self.assertEqual(meta["servers"], ["ANSYS", "AUTODESK", "MATLAB"])
+        self.assertEqual(meta["servers"], ["ANSYS", "AUTODESK", "Autodesk Cloud", "MATLAB"])   # licences nommées
         self.assertIn("Simulation & calcul", meta["departments"])
         self.assertEqual(len(meta["collections"]), 3)  # un collecteur « simulation » par serveur
         self.assertIn("summary", meta["reports"])
@@ -95,7 +95,8 @@ class WebServerTest(unittest.TestCase):
         _, eff = self.get_json(f"/api/report?type=efficiency&{self.period}")
         for row in eff["rows"]:
             self.assertLessEqual(row["recommended"], row["issued"], row)
-            self.assertLessEqual(row["recommended"], row["peak"], row)
+            if row["server"] != "Autodesk Cloud":       # licences nommées : recommandé = licences actives
+                self.assertLessEqual(row["recommended"], row["peak"], row)
         self.assertEqual(eff["chart"]["xType"], "share")
         _, one = self.get_json(f"/api/report?type=efficiency&{self.period}&product=AutoCAD%202024")
         self.assertEqual(one["chart"]["xType"], "tokens")

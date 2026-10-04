@@ -515,7 +515,10 @@
         <div class="options" style="gap:8px"><input type="file" id="adsk-file" accept=".csv,.xlsx,.txt">
           <button type="button" class="btn primary" id="adsk-import">Importer</button></div>
         <p id="adsk-result" class="muted" style="margin-top:10px"></p>
-        </div></section>`;
+        </div></section>
+      <section class="card" style="margin-top:16px" id="costs-card"><div class="card-head"><div><h2>Coûts des licences Autodesk</h2>
+        <div class="sub">Coût annuel d'une licence nommée par produit : chiffre les économies dans « Optimisation &amp; coûts ».</div></div></div>
+        <div class="card-body" id="costs-body"><p class="muted">Chargement…</p></div></section>`;
     const form = () => ({ name: $("srv-name").value.trim(), port_at_host: $("srv-target").value.trim(),
       license_type: $("srv-type").value, enabled: $("srv-enabled").checked });
     const say = (id, msg, ok) => { const e = $(id); e.textContent = msg; e.style.color = ok === false ? "var(--critical)" : ok ? "var(--good)" : ""; };
@@ -545,6 +548,22 @@
         say("srv-result", "Enregistré : pris en compte par la prochaine collecte.", true);
       } catch (e) { say("srv-result", e.message, false); }
     });
+    try {
+      const c = await fetchJSON("api/admin/costs");
+      const body = $("costs-body");
+      if (!c.costs.length) body.innerHTML = '<p class="muted">Aucun produit Autodesk connu : importer un export ou configurer la synchronisation par l\'API Autodesk.</p>';
+      else {
+        body.innerHTML = `<div class="table-wrap"><table><thead><tr><th>Produit</th><th>Coût annuel / licence (${esc(meta.currency || "€")})</th></tr></thead><tbody>
+          ${c.costs.map((x, i) => `<tr><td>${esc(x.product)}</td><td><input type="text" inputmode="decimal" data-cost="${i}" value="${x.cost ?? ""}" ${c.readonly ? "disabled" : ""} style="width:140px"></td></tr>`).join("")}
+          </tbody></table></div>${c.readonly ? "" : `<div class="options" style="margin-top:10px"><button type="button" class="btn primary" id="costs-save">Enregistrer les coûts</button></div><p id="costs-result" class="muted"></p>`}`;
+        $("costs-save")?.addEventListener("click", async () => {
+          const costs = {};
+          body.querySelectorAll("[data-cost]").forEach(inp => { costs[c.costs[+inp.dataset.cost].product] = inp.value.trim(); });
+          try { const r = await postAdmin("api/admin/costs", { costs }); say("costs-result", `Enregistré : ${r.count} produit(s) chiffré(s).`, true); }
+          catch (e) { say("costs-result", e.message, false); }
+        });
+      }
+    } catch (e) { $("costs-body").innerHTML = `<p class="muted">${esc(e.message)}</p>`; }
     $("adsk-import").addEventListener("click", async () => {
       const f = $("adsk-file").files[0];
       if (!f) { say("adsk-result", "Choisir d'abord un fichier exporté du portail Autodesk.", false); return; }

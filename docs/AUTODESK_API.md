@@ -109,6 +109,32 @@ surveillé pour mettre à jour la liste des affectations, nouvelles ou retirées
 Si l'administrateur Autodesk a activé le masquage des données personnelles, l'API refuse les noms
 et les e-mails. HeptagonesLM utilise alors l'identifiant haché (`hashedUserId`) et le signale.
 
+### Dans toutes les rubriques (26.3.3)
+
+La synchronisation lit aussi l'**usage jour par jour**, avec une ligne par utilisateur, produit et jour.
+Elle le stocke dans la table `named_usage_day` : la première fois sur `lookback_days`, puis seulement les
+derniers jours. Les produits Autodesk (Vault, Product Design & Manufacturing Collection…) apparaissent
+alors comme un serveur **« Autodesk Cloud »**, dans ces rubriques :
+
+| Rubrique | Ce qui apparaît pour Autodesk Cloud |
+|---|---|
+| Synthèse | Licences affectées (colonne « Jetons émis »), pic et moyenne d'utilisateurs par jour ouvré, taux, utilisateurs, jours d'utilisation |
+| Usage dans le temps | Utilisateurs distincts par jour, semaine ou mois. Rien avec le pas Heure, car Autodesk ne donne pas d'heures |
+| Répartition, Croisement | Jours d'utilisation par utilisateur, service ou produit |
+| Efficacité | Recommandé = licences actives ; excédent = licences inactives ou jamais utilisées |
+| Optimisation & coûts | Coût du parc et économies (licences inactives × coût annuel) |
+| Filtres | Serveur « Autodesk Cloud », ses produits et ses utilisateurs |
+
+**Unités** : Autodesk ne fournit ni jetons ni heures pour une licence nommée. HeptagonesLM n'invente
+aucune heure, et ces colonnes restent vides pour Autodesk Cloud. Les utilisateurs sont rapprochés du
+référentiel par la partie de l'adresse e-mail qui précède le « @ » (`jean.dupont@…` → `jean.dupont`).
+
+**Coûts** : saisis dans l'interface (*Administration › Coûts des licences Autodesk*) ou dans
+`autodesk.annual_costs`.
+
+Si l'API refuse l'usage quotidien, la synchronisation continue : seul le rapport « utilisateurs
+nommés » est alimenté, et `autodesk-sync` affiche « Usage quotidien indisponible ».
+
 ## 6. Validation sur votre compte (recette)
 
 Le connecteur est testé contre un faux serveur Autodesk qui reproduit le contrat de l'exemple
