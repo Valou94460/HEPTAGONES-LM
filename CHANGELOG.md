@@ -5,6 +5,35 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+### 26.3.3 (en cours)
+- **Licences Autodesk nommées dans toutes les rubriques** : usage quotidien lu par l'API Autodesk (table
+  `named_usage_day`, schéma v8, synchronisation incrémentale) ; produits Autodesk (Vault, collections…) en
+  serveur « Autodesk Cloud » dans la Synthèse, l'Usage dans le temps, la Répartition, le Croisement,
+  l'Efficacité, l'Optimisation & coûts et les filtres, en licences affectées et jours d'utilisation (aucune
+  heure inventée). Coûts annuels par produit saisis dans *Administration › Coûts des licences Autodesk*.
+- **Rubrique « Administration » de l'interface web**, réservée au groupe AD des administrateurs (nouveau champ
+  de l'assistant, ou accueil du Setup › « Administrateurs de l'interface web » pour une installation
+  existante) : ajout, modification, suppression et test en direct des serveurs de licences, et import d'un
+  export Autodesk depuis le navigateur. Configuration validée avant écriture, sauvegarde et journal d'audit.
+- **Garde-fou contre le simulateur en production** : si `heptagoneslm.yaml` pointe vers le faux `lmutil` des
+  tests (`fake-lmutil`), la vérification et la recette passent en erreur, et le PV ne peut pas être conforme. Sur un
+  environnement de test, `HEPTAGONESLM_ALLOW_SIMULATOR=1` ramène ce contrôle à un avertissement, qui reste une
+  réserve dans le PV.
+- **Licences Autodesk sur une installation existante** : bouton « Configurer les licences Autodesk » sur
+  l'accueil du Setup (exports du portail et API Autodesk, connexion comprise). Seule la section `autodesk` de
+  `heptagoneslm.yaml` est écrite, sauvegarde `.bak` faite avant ; le Client Secret est chiffré (DPAPI),
+  l'interface est redémarrée et une collecte lancée, sans réinstaller ni ressaisir de mot de passe.
+- **Bouton « Quitter l'assistant »** en fin d'installation, de mise à jour, de vérification et de recette
+  (refusé tant qu'une opération est en cours) ; l'assistant s'arrête aussi seul après 30 minutes sans onglet
+  ouvert.
+- **Plus aucune fenêtre console** au double-clic sur `HeptagonesLM-Setup.exe` : le Setup devient une application
+  fenêtrée et seul le navigateur s'affiche. En cas d'échec au démarrage, une boîte de message s'affiche. En ligne
+  de commande, la sortie est reprise dans l'invite ou dans le fichier de redirection ; pour récupérer le code
+  retour du mode silencieux, lancer avec `start /wait` ou `Start-Process -Wait`, comme pour un `.msi`.
+- **PV de recette, rapport Excel et rapport d'installation relus** : pluriels corrects, serveur sans
+  licence (rapport vide attendu, pas de tableau vide), nom réel du serveur et statuts en français dans le
+  rapport d'installation, « page X sur Y », cases à cocher affichées.
+
 ### Ajouté
 - **Icône HeptagonesLM sur le bureau** (et dans le menu Démarrer) en fin d'installation ou de mise à jour :
   ouvre le tableau de bord.

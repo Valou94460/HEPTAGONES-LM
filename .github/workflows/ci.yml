@@ -214,8 +214,9 @@ jobs:
 
       - name: Construction de HeptagonesLM-Setup.exe
         run: |
-          # Assistant d'installation : élévation administrateur, HeptagonesLM.exe (signé) embarqué
-          pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
+          # Assistant d'installation : application fenêtrée (aucune console au double-clic), élévation
+          # administrateur, HeptagonesLM.exe (signé) embarqué
+          pyinstaller --noconfirm --onefile --windowed --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
 
@@ -239,7 +240,10 @@ jobs:
           curl -sf "localhost:8799/api/export?type=full&format=xlsx" -o complet.xlsx
           test -s complet.xlsx
           taskkill //F //IM HeptagonesLM.exe || true
-          ./HeptagonesLM-Setup.exe --version
+          # Setup fenêtré (aucune console au double-clic) : sous-système Windows GUI (2), sortie de la ligne de
+          # commande toujours lisible
+          python -c "import struct,sys;d=open('HeptagonesLM-Setup.exe','rb').read(4096);o=struct.unpack_from('<I',d,0x3c)[0];v=struct.unpack_from('<H',d,o+0x5c)[0];print('sous-système PE :',v);sys.exit(v!=2)"
+          ./HeptagonesLM-Setup.exe --version | grep -q "HeptagonesLM"
           ./HeptagonesLM-Setup.exe setup --simulate --no-open --port 8791 --token ci > setup.log 2>&1 &
           for i in $(seq 1 60); do curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info > /dev/null && break; sleep 1; done
           curl -sf -b "heptagoneslm_setup=ci" localhost:8791/api/info | grep -q '"simulated": true'
@@ -272,6 +276,7 @@ jobs:
       run:
         shell: pwsh
     env:
+      HEPTAGONESLM_ALLOW_SIMULATOR: "1"   # faux lmutil de la CI : signalé en avertissement, pas en erreur
       SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # compte local jetable, propre à la CI
     steps:
       - uses: actions/checkout@v4
@@ -313,7 +318,7 @@ jobs:
       - name: Installation silencieuse (HeptagonesLM-Setup.exe --answers)
         timeout-minutes: 30
         run: |
-          .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json
+          ./tests/windows/setup_cli.ps1 setup --answers answers.json
           if ($LASTEXITCODE -ne 0) { throw "Installation : code $LASTEXITCODE" }
 
       - name: Contrôles après installation
@@ -347,9 +352,9 @@ jobs:
         run: |
           # Réglage ajouté à la main par l'exploitant : doit survivre à la réinstallation
           Add-Content C:\HeptagonesLM\heptagoneslm.yaml "sites:`n- pattern: PC-LYO*`n  site: Lyon" -Encoding utf8
-          $lines = & .\livrables\dist\HeptagonesLM-Setup.exe setup --answers answers.json 2>&1
+          ./tests/windows/setup_cli.ps1 setup --answers answers.json
           $code = $LASTEXITCODE
-          $lines | ForEach-Object { Write-Host $_ }
+          $lines = Get-Content setup-last.txt -Encoding utf8
           if ($code -ne 0) { throw "Réinstallation : code $code" }
           # La vérification finale reprend le test d'accès enregistré depuis le « poste » ci_lecteur
           if (-not ($lines -match "ci_lecteur.*NTLM.*sans saisie")) { throw "test d'accès absent de la vérification finale" }
@@ -368,9 +373,8 @@ jobs:
           $saved._version = "26.3.0"
           $saved | ConvertTo-Json -Depth 6 | Set-Content $answersFile -Encoding utf8
           $before = (Get-FileHash C:\HeptagonesLM\heptagoneslm.yaml).Hash
-          $lines = & .\livrables\dist\HeptagonesLM-Setup.exe setup --update 2>&1
+          ./tests/windows/setup_cli.ps1 setup --update
           $code = $LASTEXITCODE
-          $lines | ForEach-Object { Write-Host $_ }
           if ($code -ne 0) { throw "Mise à jour : code $code" }
           if ((Get-FileHash C:\HeptagonesLM\heptagoneslm.yaml).Hash -ne $before) { throw "configuration modifiée par la mise à jour" }
           $backup = Get-ChildItem C:\HeptagonesLM\backup -Recurse -Filter heptagoneslm.yaml | Select-Object -First 1
@@ -405,6 +409,7 @@ jobs:
       run:
         shell: pwsh
     env:
+      HEPTAGONESLM_ALLOW_SIMULATOR: "1"   # faux lmutil de la CI : signalé en avertissement, pas en erreur
       SVC_PWD: "Xk7#pQ2v-Lm9z!Ct4"     # comptes locaux jetables, propres à la CI
       PUBLIC_HOST: heptagoneslm.ci.local
       TOUR_USER: ci_lecteur

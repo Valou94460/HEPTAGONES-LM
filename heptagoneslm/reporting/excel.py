@@ -181,7 +181,8 @@ def _sheet_daily(wb: Workbook, data: ReportData, top_n: int) -> None:
     while datetime.combine(d, datetime.min.time()) < data.end:
         days.append(d)
         d += timedelta(days=1)
-    rows = [[day] + [data.daily_peak.get(day, {}).get(lab) for lab in labels] for day in days]
+    # Aucune feature : pas de colonne à tracer, le message « Aucune donnée » remplace un tableau de dates vides
+    rows = [[day] + [data.daily_peak.get(day, {}).get(lab) for lab in labels] for day in days] if labels else []
     top, last = _write_table(ws, 4, ["Date", *labels], rows, "tQuotidien", {1: DATE})
     ws.freeze_panes = "B5"
     if rows and labels:
@@ -266,6 +267,8 @@ def _sheet_hour_profile(wb: Workbook, data: ReportData) -> None:
     ws.freeze_panes = "B5"
     for c in range(2, 9):
         ws.column_dimensions[get_column_letter(c)].width = 11
+    if not data.hour_profile:
+        ws.cell(row=4, column=10, value="Aucune donnée sur la période").font = SUBTITLE_FONT
 
 
 def _sheet_contention(wb: Workbook, data: ReportData) -> None:

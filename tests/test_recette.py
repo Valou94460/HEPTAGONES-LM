@@ -249,6 +249,32 @@ class RecetteRunTest(unittest.TestCase):
             self.assertIn(text, doc)
 
 
+class WordingTest(unittest.TestCase):
+    """Retours de recette 26.3.2 : pluriels, serveur sans licence, sous-titre sans client."""
+
+    def test_plural(self):
+        self.assertEqual(recette.plural(0, "contrôle"), "0 contrôle")
+        self.assertEqual(recette.plural(1, "heure"), "1 heure")
+        self.assertEqual(recette.plural(3, "point conforme", "points conformes"), "3 points conformes")
+
+    def test_pv_for_server_without_license(self):
+        state = {"version": "26.3.3", "host": "VMTEST", "started": "2026-10-04T10:01:50", "hours": 1,
+                 "verdict": {"level": "ok", "label": "Conforme", "counts": {"ok": 1, "warning": 0, "error": 0,
+                                                                             "info": 2}, "pending": 0},
+                 "items": [{"id": "srv:VMTEST", "category": "Comparaison", "label": "VMTEST (27000@VMTEST)",
+                            "status": "ok", "detail": "0 feature", "details": [],
+                            "table": {"columns": recette.COMPARE_COLUMNS, "rows": []}}]}
+        doc = zipfile.ZipFile(io.BytesIO(build_pv(state))).read("word/document.xml").decode("utf-8")
+        self.assertIn("Aucune feature déclarée par ce serveur", doc)
+        self.assertNotIn("Émis · serveur", doc)                        # pas de tableau vide
+        self.assertIn(">1 heure<", doc)
+        self.assertIn("1 point conforme, 0 réserve, 0 non-conformité, 2 informations.", doc)
+        self.assertNotIn("(s)", doc)
+        self.assertNotIn("· Client ·", doc)                            # sous-titre sans client fictif
+        self.assertIn("Segoe UI Symbol", doc)                          # cases à cocher affichées
+        footer = zipfile.ZipFile(io.BytesIO(build_pv(state))).read("word/footer1.xml").decode("utf-8")
+        self.assertIn("NUMPAGES", footer)
+
 class NoAnswersFileTest(unittest.TestCase):
     def test_installations_before_2631(self):
         s, a = installed_system()

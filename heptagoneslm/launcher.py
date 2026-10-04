@@ -33,13 +33,58 @@ def find_config() -> Path | None:
     return None
 
 
+def attach_console_io() -> bool:
+    """HeptagonesLM-Setup.exe est une application fenêtrée (aucune fenêtre console au double-clic).
+
+    En ligne de commande (``setup --answers``, ``setup --update``, ``--version``), la sortie est rebranchée :
+    sur les canaux hérités s'ils sont redirigés (fichier, tube : CI, ``Start-Process -RedirectStandardOutput``),
+    sinon sur la console de l'invite qui l'a lancé. Renvoie True si une sortie est disponible."""
+    if os.name != "nt" or sys.stdout is not None:
+        return sys.stdout is not None
+    import ctypes
+    import msvcrt
+
+    kernel32 = ctypes.windll.kernel32
+    kernel32.GetStdHandle.restype = ctypes.c_void_p
+    streams = {}
+    for name, std in (("stdout", -11), ("stderr", -12)):
+        handle = kernel32.GetStdHandle(std)
+        if handle not in (None, 0, ctypes.c_void_p(-1).value) and kernel32.GetFileType(ctypes.c_void_p(handle)) != 0:
+            try:
+                fd = msvcrt.open_osfhandle(handle, os.O_WRONLY)
+                streams[name] = open(fd, "w", encoding="utf-8", errors="replace", buffering=1)
+            except OSError:
+                pass
+    if len(streams) < 2 and kernel32.AttachConsole(-1):          # ATTACH_PARENT_PROCESS : invite de commandes
+        kernel32.SetConsoleOutputCP(65001)
+        for name in ("stdout", "stderr"):
+            streams.setdefault(name, open("CONOUT$", "w", encoding="utf-8", errors="replace", buffering=1))
+    sys.stdout = streams.get("stdout") or open(os.devnull, "w", encoding="utf-8")
+    sys.stderr = streams.get("stderr") or open(os.devnull, "w", encoding="utf-8")
+    return "stdout" in streams
+
+
+def message_box(text: str, title: str = "HeptagonesLM-Setup") -> None:
+    """Message d'erreur visible sans console (application fenêtrée)."""
+    try:
+        import ctypes
+
+        ctypes.windll.user32.MessageBoxW(None, text, title, 0x10)   # MB_ICONERROR
+    except Exception:
+        print(text, file=sys.stderr)
+
+
 def main() -> int:
+    setup = "setup" in Path(sys.executable).stem.lower()
+    if setup:
+        attach_console_io()                  # Setup fenêtré : sortie de la ligne de commande rebranchée
     if len(sys.argv) > 1:
         return cli_main()
-    if "setup" in Path(sys.executable).stem.lower():
+    if setup:                                # double-clic : seul le navigateur s'affiche (bouton « Quitter »)
         code = cli_main(["setup"])
         if code:
-            input("\nAppuyez sur Entrée pour fermer…")
+            message_box(f"L'assistant d'installation n'a pas pu démarrer (code {code}).\n\nPour voir le détail, lancer "
+                        "« HeptagonesLM-Setup.exe setup » depuis une invite de commandes administrateur.")
         return code
     config = find_config()
     if config:

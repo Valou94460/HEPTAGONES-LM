@@ -341,7 +341,7 @@ class SetupServerTest(unittest.TestCase):
         v = json.loads(self.req("/api/verify", {})[1])
         self.assertTrue(v["success"])
         status, report = self.req("/api/report")
-        self.assertIn(b"Statut : done", report)
+        self.assertIn("Statut : terminé".encode(), report)
         self.assertNotIn(b"Secret-1", report)
 
 

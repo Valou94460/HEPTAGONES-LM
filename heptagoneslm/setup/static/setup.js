@@ -4,13 +4,15 @@
 (() => {
   const $ = id => document.getElementById(id);
   const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  // « 0 contrôle », « 1 contrôle », « 2 contrôles » (règle française : pluriel à partir de 2)
+  const pl = (n, one, many) => `${n} ${Math.abs(n) < 2 ? one : (many || one + "s")}`;
   const SECRETS = ["service_password", "db_password", "smtp_password", "itsm_password", "itsm_app_token", "autodesk_client_secret"];
   const BASE = {
     install_dir: "C:\\HeptagonesLM", service_account: "", service_password: "", collect_interval: 5,
     db_mode: "sqlserver", db_server: "", db_name: "HeptagonesLM", db_driver: "ODBC Driver 18 for SQL Server", db_auth: "windows",
     db_user: "", db_password: "", db_encrypt: true, db_trust_cert: false, db_create: true,
     lmutil_path: "", rlmutil_path: "", servers: [],
-    web_mode: "iis", web_port: 8765, public_host: "", access_group: "", iis_site: "HeptagonesLM", iis_port: 443,
+    web_mode: "iis", web_port: 8765, public_host: "", access_group: "", admin_group: "", iis_site: "HeptagonesLM", iis_port: 443,
     iis_cert_thumbprint: "", tls_cert: "", tls_key: "", ldap_servers: [], base_dn: "", upn_suffix: "", open_firewall: true,
     email_enabled: false, smtp_host: "", smtp_port: 25, smtp_security: "starttls", smtp_user: "", smtp_password: "",
     sender: "", recipients: [], email_alerts: true,
@@ -40,6 +42,22 @@
     if (!r.ok) { const e = new Error(data.error || `HTTP ${r.status}`); e.data = data; throw e; }
     return data;
   }
+  /* Bouton « Quitter l'assistant » (fin d'installation, de vérification ou de recette) : arrête le petit
+     serveur local de l'assistant ; la fenêtre console étant masquée, c'est la façon normale de le fermer. */
+  const quitBtn = (cls = "btn") => `<button type="button" class="${cls}" data-quit>Quitter l'assistant</button>`;
+  function bindQuit() {
+    document.querySelectorAll("[data-quit]").forEach(b => b.addEventListener("click", async () => {
+      try { await api("/api/shutdown", {}); }
+      catch (e) { if (e.data && e.data.busy) { showError(e.message); return; } /* sinon : déjà arrêté */ }
+      clearInterval(heartbeat);
+      try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }
+      document.querySelector(".setup-foot").hidden = true;
+      $("step-body").innerHTML = `<div class="panel"><h2>Assistant fermé</h2><p class="muted">Vous pouvez fermer cet onglet. HeptagonesLM continue de fonctionner : icône « HeptagonesLM » sur le bureau. Pour modifier la configuration ou mettre à jour, relancez HeptagonesLM-Setup.exe.</p></div>`;
+      window.close();      // fonctionne si l'onglet a été ouvert par l'assistant ; sinon le message reste affiché
+    }));
+  }
+  // Signal de présence : sans onglet ouvert pendant 30 min (et sans installation en cours), l'assistant s'arrête seul
+  const heartbeat = setInterval(() => fetch("/api/ping", { credentials: "same-origin" }).catch(() => {}), 60000);
   function showError(msg) { const e = $("error"); e.textContent = msg || ""; e.hidden = !msg; }
   function save() {
     try {
@@ -166,6 +184,19 @@
   const SUMMARY = at("summary"), INSTALL = at("install"), VERIFY = at("verify"), RECETTE = at("recette");
   let recetteMode = false;            // recette d'une installation existante, ouverte depuis la page d'accueil
   let updateMode = false;             // mise à jour en place d'une installation existante
+  let autodeskMode = false;           // licences Autodesk ajoutées à une installation existante
+  let adminsMode = false;             // groupe des administrateurs de l'interface (installation existante)
+  let adminsForm = null;              // formulaire de l'accueil : null (fermé) | {group}
+  const AUTODESK = at("autodesk");
+  // Libellés de la page de progression selon l'opération (installation, mise à jour, configuration Autodesk)
+  const op = () => adminsMode ? { name: "Administrateurs de l'interface", done: "Administrateurs enregistrés",
+      stopped: "Enregistrement interrompu", failed: "L'enregistrement des administrateurs s'est arrêté" }
+    : autodeskMode ? { name: "Configuration Autodesk", done: "Configuration Autodesk terminée",
+      stopped: "Configuration Autodesk interrompue", failed: "La configuration Autodesk s'est arrêtée" }
+    : updateMode ? { name: "Mise à jour", done: "Mise à jour terminée", stopped: "Mise à jour interrompue",
+      failed: "La mise à jour s'est arrêtée" }
+    : { name: "Installation", done: "Installation terminée", stopped: "Installation interrompue",
+      failed: "L'installation s'est arrêtée" };
 
   function renderStepper() {
     const locked = install.status === "running";
@@ -174,6 +205,8 @@
       let reachable = !locked && i <= maxStep && i !== step && (i < INSTALL || install.status === "done") && !(step >= INSTALL && i < INSTALL && install.status === "done");
       if (recetteMode) reachable = !locked && i !== step && (i === 0 || i === RECETTE);
       if (updateMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
+      if (adminsMode) reachable = !locked && i !== step && (i === 0 || (i >= INSTALL && i <= maxStep));
+      if (autodeskMode) reachable = !locked && i !== step && (i === 0 || i === AUTODESK || (i >= INSTALL && i <= maxStep));
       return `<li class="${cls}"><button type="button" data-step="${i}" ${reachable ? "" : "disabled"}>
         <span class="num">${cls === "done" ? "✓" : i + 1}</span><span class="txt">${esc(s.title)}</span></button></li>`;
     }).join("");
@@ -183,9 +216,13 @@
   function render() {
     const s = STEPS[step];
     $("step-eyebrow").textContent = `Étape ${step + 1} sur ${STEPS.length}`;
-    $("step-title").textContent = updateMode && step === INSTALL ? "Mise à jour" : s.title;
+    $("step-title").textContent = (updateMode || autodeskMode || adminsMode) && step === INSTALL ? op().name : s.title;
     $("step-desc").textContent = updateMode && step === INSTALL
-      ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés." : s.desc;
+      ? "Ne fermez pas cette page pendant la mise à jour : configuration, mots de passe, tâches et site IIS sont conservés."
+      : adminsMode && step === INSTALL ? "Seuls les rôles de l'interface (et les groupes autorisés par IIS) changent : rien d'autre n'est modifié."
+      : autodeskMode && step === INSTALL ? "Seule la section Autodesk de la configuration change : base, tâches, site IIS et mots de passe restent tels quels."
+      : autodeskMode && step === AUTODESK ? "Installation existante : seule la partie Autodesk de la configuration sera modifiée, sans réinstaller ni ressaisir de mot de passe."
+      : s.desc;
     const body = $("step-body");
     body.innerHTML = s.render();
     bind(body);
@@ -194,9 +231,10 @@
     const prev = $("prev"), next = $("next");
     prev.hidden = step === 0 || step >= INSTALL;
     next.hidden = step >= INSTALL;
-    next.textContent = s.next || "Suivant";
+    next.textContent = autodeskMode && step === AUTODESK ? "Enregistrer la configuration Autodesk" : (s.next || "Suivant");
+    prev.textContent = autodeskMode && step === AUTODESK ? "Retour à l'accueil" : "Précédent";
     next.disabled = step === SUMMARY && (!preview || preview.errors.length > 0 || blockingCount > 0 || checksBusy);
-    $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${blockingCount} prérequis bloquant(s) à corriger` : "";
+    $("foot-msg").textContent = step === SUMMARY && blockingCount > 0 ? `${pl(blockingCount, "prérequis bloquant", "prérequis bloquants")} à corriger` : "";
     // dernières étapes : boutons propres à la page, barre du bas inutile (elle masquait la fin de la page)
     document.querySelector(".setup-foot").hidden = prev.hidden && next.hidden;
     document.title = `${s.title} — Installation de HeptagonesLM`;
@@ -235,9 +273,16 @@
         <p class="muted">Configuration <code>${esc(inst)}</code>${iv && !/^\d/.test(iv) ? ` · version ${esc(iv)}` : ""}.
           ${newer ? `La <b>mise à jour vers ${esc(info.version)}</b> remplace le programme et met à jour la base, sans rien ressaisir : configuration, réglages personnalisés, mots de passe, tâches planifiées et site IIS sont conservés (sauvegarde préalable).` : "Cette installation est à jour."}
           La recette compare HeptagonesLM aux serveurs de licences et produit un PV.</p></div></div>
-        <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>` : ""}
+        <div class="actions">${newer ? `<button type="button" class="btn primary" id="go-update">Mettre à jour vers ${esc(info.version)}</button>`
+          : `<button type="button" class="btn" id="go-update" title="Même numéro de version : réinstalle le programme de ce Setup (correctifs), configuration conservée">Réappliquer la mise à jour</button>`}
           <button type="button" class="btn ${newer ? "" : "primary"}" id="go-recette">Faire la recette de cette installation</button>
-          <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div></div>` : ""}
+          <button type="button" class="btn" id="go-autodesk">Configurer les licences Autodesk</button>
+          <button type="button" class="btn" id="go-admins">Administrateurs de l'interface web</button>
+          <button type="button" class="btn ghost" id="go-install">Réinstaller (assistant complet)</button></div>
+        ${adminsForm ? `<div class="form-grid" style="margin-top:14px">
+          <label class="f full"><span>Groupe AD des administrateurs</span><input type="text" id="admin-group" value="${esc(adminsForm.group)}" placeholder="ENTREPRISE\\GG_HeptagonesLM_Admins">
+            <small class="hint">Ses membres voient la page « Administration » de l'interface (serveurs de licences, import des exports Autodesk). Vide : aucune administration depuis le navigateur.</small></label></div>
+          <div class="actions"><button type="button" class="btn primary" id="save-admins">Enregistrer les administrateurs</button></div>` : ""}</div>` : ""}
       <div class="welcome-grid">${feats.map(([i, t, d]) => `<div class="feature"><span class="ico">${icon(i)}</span><b>${t}</b><span>${d}</span></div>`).join("")}</div>
       <div class="recap">
         <div class="panel"><h2>Ce serveur</h2><dl class="kv">
@@ -259,7 +304,15 @@
 
   STEPS[0].after = () => {
     $("go-recette")?.addEventListener("click", () => { recetteMode = true; step = RECETTE; render(); window.scrollTo({ top: 0 }); loadRecette(); });
-    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; go(1); });
+    $("go-install")?.addEventListener("click", () => { recetteMode = false; updateMode = false; autodeskMode = false; adminsMode = false; go(1); });
+    $("go-autodesk")?.addEventListener("click", openAutodeskConfig);
+    $("go-admins")?.addEventListener("click", async () => {
+      showError("");
+      try { const ctx = await api("/api/autodesk/context", {}); adminsForm = { group: ctx.answers.admin_group || "" }; }
+      catch (e) { showError(e.message); return; }
+      render();
+    });
+    $("save-admins")?.addEventListener("click", startAdminsConfig);
     $("go-update")?.addEventListener("click", startUpdate);
   };
 
@@ -300,8 +353,8 @@
     const fixes = [...new Map(list.filter(c => c.fix).map(c => [c.fix, c])).values()];
     return `
       <div class="summary-bar">
-        <span class="badge sev sev-good">${dot("ok")} ${count("ok")} conforme(s)</span>
-        ${count("warning") ? `<span class="badge sev sev-warning">${dot("warning")} ${count("warning")} avertissement(s)</span>` : ""}
+        <span class="badge sev sev-good">${dot("ok")} ${pl(count("ok"), "conforme")}</span>
+        ${count("warning") ? `<span class="badge sev sev-warning">${dot("warning")} ${pl(count("warning"), "avertissement")}</span>` : ""}
         ${count("error") ? `<span class="badge sev sev-critical">${dot("error")} ${count("error")} à corriger</span>` : ""}
         <span class="spacer"></span>
         <button type="button" class="btn small" id="recheck" ${checksBusy ? "disabled" : ""}>Relancer la vérification</button>
@@ -509,6 +562,7 @@
           ${input("iis_port", "Port HTTPS", { type: "number", min: 1, max: 65535 })}
           ${input("web_port", "Port interne de HeptagonesLM", { type: "number", min: 1024, max: 65535, hint: "Écoute locale uniquement (127.0.0.1)." })}
           ${input("access_group", "Groupe AD autorisé", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Lecteurs", hint: "Vide : tout utilisateur du domaine." })}
+          ${input("admin_group", "Groupe AD des administrateurs", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Admins", hint: "Page « Administration » de l'interface : ajout de serveurs, import des exports Autodesk. Vide : aucune administration depuis le navigateur." })}
         </div>
         ${testBlock("certificate", "certificate", "Vérifier le certificat")}${testBlock("group", "group", "Vérifier le groupe")}</div>`;
     } else if (mode === "https") {
@@ -522,6 +576,7 @@
           ${input("base_dn", "Base de recherche", { placeholder: "DC=entreprise,DC=local" })}
           ${input("upn_suffix", "Suffixe UPN", { placeholder: "entreprise.local" })}
           ${input("access_group", "Groupe AD autorisé", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Lecteurs", hint: "Vide : tout utilisateur du domaine." })}
+          ${input("admin_group", "Groupe AD des administrateurs", { placeholder: "ENTREPRISE\\GG_HeptagonesLM_Admins", hint: "Page « Administration » de l'interface : ajout de serveurs, import des exports Autodesk. Vide : aucune administration depuis le navigateur." })}
         </div>
         ${testBlock("ldap", "ldap", "Tester une connexion",
           `<input type="text" id="ldap-user" placeholder="identifiant de test" autocomplete="off" style="height:34px;width:180px">
@@ -610,7 +665,7 @@
     let login = "";
     if (adesk && adesk.busy) login = `<span class="spinner"></span><span>${esc(adesk.busy)}</span>`;
     else if (adesk && adesk.error) login = `${dot("error")}<div><b>${esc(adesk.error)}</b></div>`;
-    else if (adesk && adesk.status === "done") login = `${dot("ok")}<div><b>Connecté à Autodesk : ${teams.length} équipe(s)</b><ul><li>Jeton de renouvellement chiffré par Windows (DPAPI) dans le dossier data, renouvelé à chaque synchronisation.</li></ul></div>`;
+    else if (adesk && adesk.status === "done") login = `${dot("ok")}<div><b>Connecté à Autodesk : ${pl(teams.length, "équipe")}</b><ul><li>Jeton de renouvellement chiffré par Windows (DPAPI) dans le dossier data, renouvelé à chaque synchronisation.</li></ul></div>`;
     return `
       <div class="panel">${toggle("autodesk_enabled", "Suivre les licences Autodesk nommées", "Licences affectées à un utilisateur (Autodesk Account) : actives, inactives ou jamais utilisées, et coût récupérable, dans le rapport « Autodesk · utilisateurs nommés ».", { rerender: true })}</div>
       ${A.autodesk_enabled ? `
@@ -678,12 +733,12 @@
         <div class="actions">${[...new Map(blockers.filter(c => c.fix).map(c => [c.fix, c])).values()].map(c =>
           `<button type="button" class="btn primary" data-fix="${c.fix}" ${checksBusy ? "disabled" : ""}>${esc(c.fix_label || "Corriger")}${c.fix === "install_iis" ? "" : ` : ${esc(c.label)}`}</button>`).join("")}</div>
         <div class="result" id="fix-result">${renderResult(fixResult)}</div></div>`
-        : `<div class="panel">${dot("ok")} <b>Tous les prérequis sont satisfaits.</b> <span class="muted">${(checks || []).filter(c => c.status === "warning").length} avertissement(s) non bloquant(s).</span></div>`}
+        : `<div class="panel">${dot("ok")} <b>Tous les prérequis sont satisfaits.</b> <span class="muted">${pl((checks || []).filter(c => c.status === "warning").length, "avertissement non bloquant", "avertissements non bloquants")}.</span></div>`}
       <div class="recap">
         ${block("Emplacement", 2, [["Dossier", esc(a.install_dir)], ["Compte de service", esc(a.service_account)], ["Collecte", `toutes les ${esc(a.collect_interval)} min`]])}
         ${block("Base de données", 3, a.db_mode === "sqlite" ? [["Mode", "SQLite local"]] : [["Instance", esc(a.db_server)], ["Base", esc(a.db_name) + (a.db_create ? " (créée si absente)" : "")], ["Authentification", a.db_auth === "sql" ? "SQL : " + esc(a.db_user) : "Windows (compte de service)"], ["Chiffrement", a.db_encrypt ? "Oui" : "Non"]])}
         ${block("Serveurs de licences", 4, [...(a.servers.some(s => s.license_type !== "rlm") ? [["lmutil", esc(a.lmutil_path)]] : []), ...(a.servers.some(s => s.license_type === "rlm") ? [["rlmutil", esc(a.rlmutil_path)]] : []), ...a.servers.map(s => [s.name, (s.license_type === "rlm" ? "RLM · " : "") + esc(s.port_at_host) + (s.collectors.includes("log") ? " + log debug" : "")])])}
-        ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
+        ${block("Interface web", 5, [["Accès", esc(web)], a.access_group && a.web_mode !== "local" ? ["Groupe autorisé", esc(a.access_group)] : null, a.admin_group && a.web_mode !== "local" ? ["Administrateurs", esc(a.admin_group)] : null, a.web_mode === "iis" ? ["Site IIS", esc(a.iis_site)] : null, a.web_mode !== "local" ? ["Pare-feu", a.open_firewall ? "Port ouvert" : "Inchangé"] : null])}
         ${block("Tickets ITSM", at("itsm"), a.itsm_enabled ? [["Outil", esc((ITSM[a.itsm_type] || {}).label || a.itsm_type)], ["Adresse", esc(a.itsm_url)], a.itsm_user ? ["Compte", esc(a.itsm_user)] : null, a.itsm_type === "jira" ? ["Projet", esc(a.itsm_project)] : null, ["Secrets", a.itsm_type === "webhook" ? "Aucun" : "Chiffrés par Windows (DPAPI)"], ["Ticket de test", results.itsm && results.itsm.status === "ok" ? `${dot("ok")} réussi` : "non effectué"]] : [["Tickets automatiques", "Désactivés"]])}
         ${block("Licences Autodesk nommées", at("autodesk"), a.autodesk_enabled ? [["Exports du portail", esc(a.autodesk_import_dir || (a.install_dir + "\\autodesk"))], ["Inactive après", `${esc(a.autodesk_inactive_days)} jours`], ["API Autodesk", a.autodesk_api_enabled ? (a.autodesk_context_id ? `équipe ${esc(a.autodesk_context_id)}` : "connexion à faire") : "Non"]] : [["Suivi", "Désactivé"]])}
         ${block("E-mail", 6, a.email_enabled ? [["Relais", esc(a.smtp_host) + ":" + esc(a.smtp_port)], ["Destinataires", esc((a.recipients || []).join(", "))], ["Alertes immédiates", a.email_alerts ? "Activées" : "Désactivées"]] : [["Rapport par e-mail", "Désactivé"]])}
@@ -706,16 +761,16 @@
     return `
       <div class="panel progress-card">
         <div class="progress-top"><span class="pct" id="pct">${pct} %</span>
-          <span class="cur" id="cur">${st.status === "done" ? (updateMode ? "Mise à jour terminée" : "Installation terminée") : st.status === "failed" ? (updateMode ? "Mise à jour interrompue" : "Installation interrompue") : esc(st.current || "Démarrage…")}</span></div>
+          <span class="cur" id="cur">${st.status === "done" ? op().done : st.status === "failed" ? op().stopped : esc(st.current || "Démarrage…")}</span></div>
         <div class="bar ${cls}" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i style="width:${pct}%"></i></div>
         <ul class="steps-list" id="steps">${(st.steps || []).map(s => `<li class="${s.status}"><span class="ico">${s.status === "running" ? '<span class="spinner"></span>' : icons[s.status]}</span>
           <span>${esc(s.label)}${s.status === "failed" ? `<br><small style="color:var(--critical)">${esc(s.message)}</small>` : ""}</span>
           <small>${s.duration != null ? s.duration + " s" : ""}</small></li>`).join("")}</ul>
       </div>
-      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${updateMode ? "La mise à jour s'est arrêtée" : "L'installation s'est arrêtée"}</h2>
+      ${st.status === "failed" ? `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>${op().failed}</h2>
         <p>${esc(st.error || "")}</p></div></div>
         <div class="actions"><button type="button" class="btn primary" id="retry">Réessayer à partir de cette étape</button>
-          ${updateMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
+          ${updateMode || autodeskMode || adminsMode ? "" : `<button type="button" class="btn" id="back-summary">Modifier la configuration</button>`}
           <a class="btn ghost" href="/api/report">Télécharger le journal</a></div></div>` : ""}
       <div class="panel"><details ${st.status === "failed" ? "open" : ""} id="log-details"><summary>Journal détaillé</summary>
         <div class="console" id="console" style="margin-top:12px"></div></details></div>`;
@@ -735,6 +790,42 @@
     $("retry")?.addEventListener("click", () => startInstall(true));
     $("back-summary")?.addEventListener("click", () => { install = { status: "idle" }; go(SUMMARY); });
   };
+  /* Licences Autodesk sur l'installation existante : formulaire de l'étape Autodesk, puis seule la section
+     autodesk de heptagoneslm.yaml est écrite (plus le Client Secret chiffré et les dossiers). */
+  async function openAutodeskConfig() {
+    showError("");
+    let ctx;
+    try { ctx = await api("/api/autodesk/context", {}); } catch (e) { showError(e.message); return; }
+    A = { ...A, ...ctx.answers };
+    if (!A.autodesk_enabled) A.autodesk_enabled = true;
+    autodeskMode = true; updateMode = false; recetteMode = false; adesk = null;
+    step = AUTODESK; maxStep = Math.max(maxStep, AUTODESK);
+    render(); window.scrollTo({ top: 0 });
+  }
+  async function startAutodeskConfig() {
+    showError("");
+    try {
+      const res = await api("/api/validate", { answers: A, step: "autodesk" });
+      if (res.errors.length) { markErrors(res.errors); showError("Corrigez les champs signalés pour continuer."); return; }
+      await api("/api/autodesk/configure", { answers: A });
+    } catch (e) { showError(e.message); return; }
+    logCount = 0; consoleLines = []; poll.last = null;
+    install = { status: "running", steps: [] };
+    step = INSTALL; maxStep = INSTALL;
+    render(); window.scrollTo({ top: 0 });
+    poll();
+  }
+  async function startAdminsConfig() {
+    showError("");
+    try { await api("/api/admins/configure", { answers: { admin_group: $("admin-group").value.trim() } }); }
+    catch (e) { showError(e.message); return; }
+    adminsMode = true; autodeskMode = false; updateMode = false; recetteMode = false; adminsForm = null;
+    logCount = 0; consoleLines = []; poll.last = null;
+    install = { status: "running", steps: [] };
+    step = INSTALL; maxStep = INSTALL;
+    render(); window.scrollTo({ top: 0 });
+    poll();
+  }
   async function startUpdate() {
     showError("");
     try { await api("/api/update", {}); } catch (e) { showError(e.message); return; }
@@ -797,14 +888,14 @@
     return `
       <div class="panel"><div class="hero-result ${ok ? "sev-good" : "sev-critical"}"><span class="big">${ok ? "✓" : "!"}</span><div>
         <h2>${ok ? "HeptagonesLM est installé et opérationnel" : "Installation terminée avec des points à corriger"}</h2>
-        <p>${v.counts.ok} contrôle(s) conforme(s)${v.counts.warning ? `, ${v.counts.warning} avertissement(s)` : ""}${v.counts.error ? `, ${v.counts.error} erreur(s)` : ""}.
+        <p>${pl(v.counts.ok, "contrôle conforme", "contrôles conformes")}${v.counts.warning ? `, ${pl(v.counts.warning, "avertissement")}` : ""}${v.counts.error ? `, ${pl(v.counts.error, "erreur")}` : ""}.
           ${v.url ? `Adresse de l'interface : <b>${esc(v.url)}</b>` : ""}</p></div></div>
         <div class="actions">
           ${v.url ? `<a class="btn primary" href="${esc(v.url)}" target="_blank" rel="noopener">Ouvrir HeptagonesLM</a>` : ""}
           <a class="btn" href="/api/report">Télécharger le rapport d'installation</a>
           <button type="button" class="btn" id="reverify">Relancer la vérification</button>
           <button type="button" class="btn primary" id="to-recette">Passer à la recette</button>
-          <button type="button" class="btn ghost" id="close">Fermer l'assistant</button>
+          ${quitBtn()}
         </div></div>
       ${v.access_url ? `<div class="panel"><h2>Test depuis un poste utilisateur</h2>
         <p class="muted">Depuis le poste d'un utilisateur membre du groupe autorisé, ouvrir l'adresse ci-dessous : la page indique sous quel nom il est reconnu (Kerberos ou NTLM) et lui demande s'il a dû saisir un mot de passe. Le résultat apparaît ici après « Relancer la vérification ».</p>
@@ -829,11 +920,7 @@
       }
       await runVerify();
     }));
-    $("close")?.addEventListener("click", async () => {
-      try { await api("/api/shutdown", {}); } catch (e) { /* déjà arrêté */ }
-      try { sessionStorage.removeItem("heptagoneslm_setup"); } catch (e) { /* stockage indisponible */ }
-      $("step-body").innerHTML = `<div class="panel"><h2>Assistant fermé</h2><p class="muted">Vous pouvez fermer cet onglet. Pour modifier la configuration plus tard, relancez HeptagonesLM-Setup.exe.</p></div>`;
-    });
+    bindQuit();
   };
 
   /* 12. Recette */
@@ -914,7 +1001,7 @@
           <label class="f"><span>Mot de passe</span><input type="password" data-ropt="outsider_password" value="${esc(ropt.outsider_password)}" autocomplete="new-password"></label>
           <label class="f"><span>Compte membre du groupe</span><input type="text" data-ropt="member_user" value="${esc(ropt.member_user)}" placeholder="ENTREPRISE\\utilisateur" autocomplete="off"></label>
           <label class="f"><span>Mot de passe</span><input type="password" data-ropt="member_password" value="${esc(ropt.member_password)}" autocomplete="new-password"></label>` : ""}
-        </div><div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="start-recette">Lancer la recette</button></div></div>`;
+        </div><div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="start-recette">Lancer la recette</button>${quitBtn("btn ghost")}</div></div>`;
     }
     if (running) html += recetteProgress(rjob);
     if (rjob && rjob.status === "error") html += `<div class="panel"><div class="hero-result sev-critical"><span class="big">!</span><div><h2>Recette interrompue</h2><p>${esc(rjob.error)}</p></div></div>
@@ -924,7 +1011,7 @@
       const groups = {};
       res.items.forEach(it => (groups[it.category] = groups[it.category] || []).push(it));
       html += `<div class="panel"><div class="hero-result ${cls}"><span class="big">${v.level === "ok" ? "✓" : "!"}</span><div><h2>${esc(v.label)}</h2>
-        <p>${v.counts.ok} conforme(s), ${v.counts.warning} réserve(s), ${v.counts.error} non-conformité(s)${v.pending ? ` · <b>${v.pending} point(s) à confirmer ci-dessous</b>` : ""} · recette du ${esc(new Date(res.started).toLocaleString("fr-FR"))}</p>
+        <p>${pl(v.counts.ok, "conforme")}, ${pl(v.counts.warning, "réserve")}, ${pl(v.counts.error, "non-conformité")}${v.pending ? ` · <b>${pl(v.pending, "point")} à confirmer ci-dessous</b>` : ""} · recette du ${esc(new Date(res.started).toLocaleString("fr-FR"))}</p>
         <p class="muted">Preuves : <code>${esc(res.folder)}</code></p></div></div></div>
         ${Object.entries(groups).map(([g, items]) => `<div class="panel"><h2>${esc(g)}</h2><div class="ritems">${items.map(itemHtml).join("")}</div></div>`).join("")}
         <div class="panel"><h2>PV de recette</h2><p class="muted">Document Word reprenant chaque point, les comparaisons et un cadre de signature (rédacteur et client).</p>
@@ -936,7 +1023,8 @@
           </div>
           <div class="actions" style="margin-top:14px"><button type="button" class="btn primary" id="make-pv">Télécharger le PV de recette (Word)</button>
             <a class="btn" href="/api/recette/preuves.zip">Télécharger les preuves (.zip)</a>
-            <button type="button" class="btn ghost" id="start-recette">Relancer la recette</button></div>
+            <button type="button" class="btn ghost" id="start-recette">Relancer la recette</button>
+            ${quitBtn("btn primary")}</div>
           <div class="result" id="pv-result">${rpv ? `${dot("ok")}<div><b>PV généré : <a href="${esc(rpv.url)}">${esc(rpv.file)}</a></b></div>` : ""}</div></div>`;
     }
     return html;
@@ -948,6 +1036,7 @@
     }));
     root.querySelectorAll("[data-pv]").forEach(el => el.addEventListener("input", () => { pvMeta[el.dataset.pv] = el.value; }));
     root.querySelectorAll("#start-recette").forEach(b => b.addEventListener("click", startRecette));
+    bindQuit();
     root.querySelectorAll("[data-rconfirm]").forEach(b => b.addEventListener("click", async () => {
       try {
         const r = await api("/api/recette/confirm", { id: b.dataset.rconfirm, confirmed: b.dataset.val === "1" });
@@ -968,9 +1057,13 @@
   };
 
   /* -- Démarrage ------------------------------------------------------------------------------ */
-  $("prev").addEventListener("click", () => go(Math.max(0, step - 1)));
+  $("prev").addEventListener("click", () => {
+    if (autodeskMode) { autodeskMode = false; go(0); return; }          // retour à l'accueil
+    go(Math.max(0, step - 1));
+  });
   $("next").addEventListener("click", () => {
-    if (step === SUMMARY) startInstall(false);
+    if (autodeskMode && step === AUTODESK) startAutodeskConfig();
+    else if (step === SUMMARY) startInstall(false);
     else go(step + 1);
   });
 

@@ -84,7 +84,7 @@ jobs:
 
       - name: Construction de HeptagonesLM-Setup.exe
         run: |
-          pyinstaller --noconfirm --onefile --console --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
+          pyinstaller --noconfirm --onefile --windowed --uac-admin --name HeptagonesLM-Setup --icon packaging/heptagoneslm.ico \
             --collect-submodules heptagoneslm --add-data "heptagoneslm/web/static:heptagoneslm/web/static" \
             --add-data "heptagoneslm/setup/static:heptagoneslm/setup/static" --add-data "dist/HeptagonesLM.exe:." heptagoneslm/launcher.py
           ./dist/HeptagonesLM-Setup.exe --version

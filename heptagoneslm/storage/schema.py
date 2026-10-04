@@ -16,6 +16,7 @@ Vue d'ensemble ::
     itsm_ticket       (tickets ouverts dans ServiceNow, Jira, GLPI… pour chaque alerte)
     feature_reservation (jetons réservés par le fichier d'options : utilisateur, poste, groupe…)
     named_seat / named_import (licences « utilisateur nommé » Autodesk importées du portail)
+    named_usage_day (usage quotidien des licences nommées lu par l'API Autodesk : utilisateur × produit × jour)
 """
 
 from __future__ import annotations
@@ -24,7 +25,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -210,6 +211,14 @@ TABLES: dict[str, str] = {
         imported_at {DT} NOT NULL,
         source_file NVARCHAR(255) NULL
     """,
+    "named_usage_day": """
+        id {BIGID},
+        vendor NVARCHAR(30) NOT NULL,
+        product NVARCHAR(255) NOT NULL,
+        email NVARCHAR(255) NOT NULL,
+        usage_date DATE NOT NULL,
+        imported_at {DT} NOT NULL
+    """,
     "named_import": """
         id {ID},
         vendor NVARCHAR(30) NOT NULL,
@@ -233,6 +242,7 @@ INDEXES: dict[str, str] = {
     "ix_delivery_sub_period": "report_delivery (subscription, period_start)",
     "ix_itsm_open": "itsm_ticket (status, connector, alert_key)",
     "ix_named_seat_report": "named_seat (vendor, report_date)",
+    "ix_named_usage_day": "named_usage_day (usage_date, product)",
 }
 
 VIEWS: dict[str, str] = {

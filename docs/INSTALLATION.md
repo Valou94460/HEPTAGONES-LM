@@ -128,10 +128,20 @@ résolution DNS. Le rapport d'installation est aussi écrit dans `C:\HeptagonesL
 
 ## 5. Installation silencieuse (industrialisation)
 
+Depuis une invite **PowerShell administrateur** :
+
 ```powershell
 $env:SVC_PWD = Read-Host "Mot de passe du compte de service"
-HeptagonesLM-Setup.exe setup --answers reponses.json
+$p = Start-Process .\HeptagonesLM-Setup.exe -ArgumentList "setup", "--answers", "reponses.json" `
+       -Wait -PassThru -NoNewWindow
+$p.ExitCode
 ```
+
+En invite de commandes (cmd) : `start /wait HeptagonesLM-Setup.exe setup --answers reponses.json`, puis
+`echo %ERRORLEVEL%`. Le Setup est une application fenêtrée, sans console au double-clic : comme pour un
+`.msi`, il faut demander explicitement l'attente (`-Wait` ou `start /wait`) pour récupérer le code retour.
+La progression s'affiche dans l'invite ; elle peut aussi être écrite dans un fichier avec
+`-RedirectStandardOutput setup.log`.
 
 Mêmes contrôles, étapes et vérification que l'assistant, avec une progression en mode texte.
 Les valeurs `${VARIABLE}` sont remplacées par les variables d'environnement (mots de passe
@@ -198,8 +208,9 @@ notée dans `setup-reponses.json`.
 
 En mode silencieux (déploiement par script) :
 
-```
-HeptagonesLM-Setup.exe setup --update [--install-dir D:\HeptagonesLM]
+```powershell
+Start-Process .\HeptagonesLM-Setup.exe -ArgumentList "setup", "--update" -Wait -PassThru -NoNewWindow
+# option : "--install-dir", "D:\HeptagonesLM"
 ```
 
 Codes retour : 0 mise à jour vérifiée, 1 échec (la sauvegarde permet le retour arrière), 2 mise à jour
@@ -209,6 +220,36 @@ faite avec des erreurs de vérification.
 réponses, mais **conserve les réglages ajoutés à la main** (`products`, `sites`, `retention`, réglages de
 `reporting`, coûts Autodesk, rôles, abonnements e-mail supplémentaires, types d'alertes) ; l'ancien fichier
 est gardé en `heptagoneslm.yaml.<horodatage>.bak`.
+
+### Ajouter les licences Autodesk à une installation existante
+
+Sur la page d'accueil, **« Configurer les licences Autodesk »** ouvre l'étape Autodesk (exports du portail,
+API Autodesk). Seule la section `autodesk` de `heptagoneslm.yaml` est écrite. Le reste de l'installation
+est conservé et rien n'est ressaisi. Voir [AUTODESK_API.md](AUTODESK_API.md) § 2.
+
+### Administrer depuis l'interface web (26.3.3)
+
+Les membres du **groupe AD des administrateurs** voient la rubrique **Administration** de l'interface. Ce
+groupe se déclare à l'étape *Interface web et IIS* de l'assistant, ou sur une installation existante via
+l'accueil du Setup › *Administrateurs de l'interface web*. On y trouve deux fonctions :
+
+- **Serveurs de licences** : liste avec l'état de la dernière collecte, ajout, modification, suppression
+  et *Tester la connexion* (lmstat / rlmstat en direct). La collecte suivante prend en compte les
+  changements. Seuls le nom, `port@serveur`, le type (FlexLM / RLM) et l'état actif se modifient ici ; les
+  chemins de `lmutil` / `rlmutil` restent réservés à l'assistant ;
+- **Import d'un export Autodesk** : fichier CSV ou Excel du rapport d'utilisation d'Autodesk Account,
+  importé directement, sans passer par le dossier surveillé.
+
+`heptagoneslm.yaml` est validé avant chaque écriture, et l'ancienne version est gardée dans `logs\`.
+Chaque action est tracée dans le journal d'audit.
+
+![Administration](images/administration.png)
+
+### Fermer l'assistant
+
+Au double-clic, la fenêtre console du Setup est masquée : seul le navigateur s'affiche. En fin
+d'installation, de mise à jour ou de recette, cliquer sur **« Quitter l'assistant »**. Sans onglet ouvert
+pendant 30 minutes, l'assistant s'arrête aussi tout seul, sauf si une opération est en cours.
 
 ### Signature de l'exécutable
 
@@ -273,6 +314,7 @@ l'installation pour diagnostiquer le poste d'un utilisateur.
 | Serveur de licences injoignable au test | Vérifier `port@serveur`, le pare-feu (port lmgrd **et** port du démon éditeur) |
 | Échec à l'étape « Tâches planifiées » | Mot de passe du compte de service ; pour un gMSA : `Install-ADServiceAccount` sur le serveur |
 | Vérification : « IIS ne joint pas HeptagonesLM (502) » | La tâche « HeptagonesLM - Interface web » est arrêtée : consulter `C:\HeptagonesLM\logs\heptagoneslm.log` |
+| Vérification : « SIMULATEUR DE TEST branché, interdit en production » | `heptagoneslm.yaml` pointe vers le faux `lmutil` des tests (`fake-lmutil`). Remettre le vrai `lmutil_path` et les vrais serveurs. Sur un environnement de test uniquement, la variable machine `HEPTAGONESLM_ALLOW_SIMULATOR=1` ramène ce contrôle à un avertissement, qui reste une réserve dans le PV |
 | Tableau de bord injoignable après un redémarrage du serveur | La surveillance relance l'interface dans les 5 minutes. Sinon : `Get-ScheduledTask -TaskPath '\HeptagonesLM\' \| Get-ScheduledTaskInfo \| Format-Table TaskName, LastRunTime, LastTaskResult` et `C:\HeptagonesLM\logs\heptagoneslm.log` (installation antérieure à 26.3.2 : lancer la mise à jour) |
 | Navigateur : avertissement de certificat | Le certificat ne couvre pas le nom DNS choisi (test « Vérifier le certificat ») |
 | Connexion Windows qui redemande un mot de passe | Faire ouvrir `https://heptagoneslm.entreprise.local/acces` depuis le poste concerné, puis suivre les contrôles *SPN Kerberos* et *Zone Intranet local* de la vérification finale (§ 8) |

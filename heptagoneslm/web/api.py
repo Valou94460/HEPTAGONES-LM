@@ -29,6 +29,7 @@ from typing import Any, Callable
 from heptagoneslm.reporting.dataset import WEEKDAYS_FR, _server_filter, build_report_data, load_features
 from heptagoneslm.reporting.sanitize import csv_text, excel_row
 from heptagoneslm.storage.db import Database
+from heptagoneslm.web import named
 
 GRANULARITIES = ("hour", "day", "week", "month")
 METRICS = ("peak", "avg", "utilization")
@@ -298,16 +299,35 @@ def report_summary(db: Database, p: ReportParams) -> dict:
             "avg_utilization": s.avg_utilization, "peak_utilization": s.peak_utilization,
             "business_utilization": s.business_utilization, "saturated_hours": s.saturated_hours,
             "denials": s.denials, "users": s.distinct_users, "sessions": s.sessions,
-            "hours": round(s.usage_hours, 1),
+            "hours": round(s.usage_hours, 1), "days": None,
         })
+    nd = named.load(db, p)
+    named_users: set = set()
+    if nd:                     # licences nommées Autodesk : licences affectées, utilisateurs distincts par jour
+        for prod in nd.products:
+            issued_n, avg_n, peak_n = nd.seats.get(prod), nd.avg(prod), nd.peak(prod)
+            named_users |= nd.users(prod)
+            rows.append({
+                "server": named.SERVER, "publisher": named.PUBLISHER, "product": prod, "feature": prod,
+                "issued": issued_n, "peak": peak_n, "avg": round(avg_n, 2),
+                "avg_utilization": (avg_n / issued_n) if issued_n else None,
+                "peak_utilization": (peak_n / issued_n) if issued_n else None,
+                "business_utilization": (avg_n / issued_n) if issued_n else None,
+                "saturated_hours": None, "denials": None, "users": len(nd.users(prod)), "sessions": None,
+                "hours": None, "days": nd.total_days(prod),
+            })
+        rows.sort(key=lambda r: (-(r["avg_utilization"] or 0), r["product"]))
     issued = sum(s.issued or 0 for s in data.summaries)
     avg_sum = sum(s.avg_in_use for s in data.summaries if s.issued)
+    if nd:                     # licences affectées et utilisateurs moyens par jour ouvré
+        issued += sum(nd.seats.get(prod) or 0 for prod in nd.products)
+        avg_sum += sum(nd.avg(prod) for prod in nd.products if nd.seats.get(prod))
     kpis = [
-        {"label": "Produits suivis", "value": len(data.summaries), "type": "int"},
+        {"label": "Produits suivis", "value": len(data.summaries) + (len(nd.products) if nd else 0), "type": "int"},
         {"label": "Taux d'occupation moyen", "value": (avg_sum / issued) if issued else None, "type": "pct"},
         {"label": "Heures saturées", "value": sum(s.saturated_hours for s in data.summaries), "type": "int"},
         {"label": "Refus", "value": sum(s.denials for s in data.summaries), "type": "int"},
-        {"label": "Utilisateurs actifs", "value": len({s["username"] for s in sessions}), "type": "int"},
+        {"label": "Utilisateurs actifs", "value": len({s["username"] for s in sessions} | named_users), "type": "int"},
         {"label": "Heures d'utilisation", "value": round(sum(s["hours_in_period"] for s in sessions), 1), "type": "hours"},
     ]
     top = [r for r in rows if r["avg_utilization"] is not None][:MAX_BAR_ITEMS]
@@ -325,8 +345,10 @@ def report_summary(db: Database, p: ReportParams) -> dict:
         _col("users", "Utilisateurs", "int"), _col("sessions", "Sessions", "int"),
         _col("hours", "Heures d'utilisation", "hours"),
     ]
+    if nd:
+        columns.append(_col("days", "Jours d'utilisation", "int"))
     return _result("summary", "Synthèse par produit", p.describe(), columns, rows, chart, kpis,
-                   _user_filter_note(p))
+                   _user_filter_note(p) + named.notes(nd))
 
 
 def _bucket(dt: datetime, granularity: str) -> str:
@@ -371,6 +393,23 @@ def report_timeseries(db: Database, p: ReportParams) -> dict:
             "peak_utilization": (peak / issued) if issued else None,
         })
 
+    nd = named.load(db, p)
+    named_hourly = bool(nd) and p.granularity == "hour"
+    if nd and not named_hourly:        # Autodesk Cloud : utilisateurs distincts par jour (pas d'heures)
+        for prod in nd.products:
+            buckets: dict[str, list] = defaultdict(list)
+            for d in nd.days_in_period():
+                buckets[_bucket(datetime.combine(d, datetime.min.time()), p.granularity)].append(d)
+            issued_n = nd.seats.get(prod)
+            for bucket, days in buckets.items():
+                counts = [len(nd.daily.get(prod, {}).get(d, ())) for d in days]
+                work = [c for d, c in zip(days, counts) if d.weekday() < 5] or counts
+                peak_n, avg_n = max(counts, default=0), (sum(work) / len(work)) if work else 0.0
+                rows.append({"period": bucket, "server": named.SERVER, "product": prod, "issued": issued_n,
+                             "peak": peak_n, "avg": round(avg_n, 2),
+                             "utilization": (avg_n / issued_n) if issued_n else None,
+                             "peak_utilization": (peak_n / issued_n) if issued_n else None})
+        rows.sort(key=lambda r: (r["period"], r["product"]))
     metric_key = {"peak": "peak", "avg": "avg", "utilization": "utilization"}[p.metric]
     labels = sorted({r["product"] for r in rows})
     # Séries retenues : les plus utilisées en moyenne (lisibilité), ordre stable.
@@ -390,7 +429,9 @@ def report_timeseries(db: Database, p: ReportParams) -> dict:
         "xType": p.granularity,
         "series": [{"name": lab, "values": [index.get((b, lab)) for b in x]} for lab in shown],
     } if rows else None
-    notes = _user_filter_note(p)
+    notes = _user_filter_note(p) + named.notes(nd)
+    if named_hourly:
+        notes.append(f"{named.SERVER} : usage connu à la journée seulement, affiché avec le pas Jour, Semaine ou Mois.")
     if len(labels) > len(shown):
         notes.append(f"Graphique limité aux {len(shown)} produits les plus utilisés "
                      f"({len(labels)} au total) : filtrez par produit pour les autres. Le tableau contient tout.")
@@ -421,6 +462,16 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         g["users"].add(s["username"])
         g["products"].add(s["product"])
         g["hosts"].add(s["hostname"])
+    nd = named.load(db, p)
+    named_dims = {"user", "department", "product", "server", "publisher"}
+    if nd and p.dimension in named_dims:     # licences nommées Autodesk : jours d'utilisation
+        for (user, prod), days in nd.user_days.items():
+            key = {"user": user, "department": nd.departments.get(user) or NOT_SET, "product": prod,
+                   "server": named.SERVER, "publisher": named.PUBLISHER}[p.dimension]
+            g = groups.setdefault(key, {"hours": 0.0, "sessions": 0, "users": set(), "products": set(), "hosts": set()})
+            g["days"] = g.get("days", 0) + days
+            g["users"].add(user)
+            g["products"].add(prod)
     # Refacturation : coût de chaque produit sur la période, réparti au prorata des heures.
     if p.costs:
         years = max((p.end - p.start).days, 1) / 365.0
@@ -442,15 +493,19 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         {"key": k, "hours": round(g["hours"], 2), "share": g["hours"] / total, "sessions": g["sessions"],
          "users": len(g["users"]), "products": len(g["products"]), "hosts": len(g["hosts"]),
          "avg_session": round(g["hours"] / g["sessions"], 2) if g["sessions"] else None,
-         "cost": round(g["cost"], 2) if "cost" in g else None}
-        for k, g in sorted(groups.items(), key=lambda kv: -kv[1]["hours"])
+         "cost": round(g["cost"], 2) if "cost" in g else None, "days": g.get("days")}
+        for k, g in sorted(groups.items(), key=lambda kv: (-kv[1]["hours"], -kv[1].get("days", 0)))
     ]
+    by_days = bool(rows) and not any(r["hours"] for r in rows) and any(r["days"] for r in rows)
     label = DIMENSIONS[p.dimension]
     chart = {
-        "kind": "bar", "format": "hours", "title": f"Heures d'utilisation par {label.lower()}",
-        "items": [{"label": r["key"], "value": r["hours"]} for r in rows[:MAX_BAR_ITEMS]],
+        "kind": "bar", "format": "int" if by_days else "hours",
+        "title": f"{'Jours' if by_days else 'Heures'} d'utilisation par {label.lower()}",
+        "items": [{"label": r["key"], "value": r["days"] if by_days else r["hours"]} for r in rows[:MAX_BAR_ITEMS]],
     } if rows else None
-    notes = []
+    notes = named.notes(nd) if nd and p.dimension in named_dims else []
+    if nd and p.dimension not in named_dims:
+        notes.append(f"{named.SERVER} : poste et site inconnus pour les licences nommées (non comptées ici).")
     if len(rows) > MAX_BAR_ITEMS:
         notes.append(f"Graphique limité aux {MAX_BAR_ITEMS} premiers ({len(rows)} au total).")
     columns = [
@@ -459,6 +514,8 @@ def report_breakdown(db: Database, p: ReportParams) -> dict:
         _col("products", "Produits", "int"), _col("hosts", "Postes", "int"),
         _col("avg_session", "Durée moy. session (h)", "hours"),
     ]
+    if nd and p.dimension in named_dims:
+        columns.insert(3, _col("days", "Jours d'utilisation (Autodesk)", "int"))
     if p.costs:
         columns.append(_col("cost", "Coût refacturé (période)", "money"))
     if p.costs:
@@ -477,18 +534,36 @@ def report_matrix(db: Database, p: ReportParams) -> dict:
     cells: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
     for s in sessions:
         cells[_dimension_value(s, dimension)][s["product"]] += s["hours_in_period"]
+    nd = named.load(db, p)
+    ncells: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    if nd and dimension in ("user", "department", "server", "publisher"):
+        for (user, prod), days in nd.user_days.items():
+            key = {"user": user, "department": nd.departments.get(user) or NOT_SET, "server": named.SERVER,
+                   "publisher": named.PUBLISHER}[dimension]
+            ncells[key][prod] += days
+    nproducts = sorted({prod for per in ncells.values() for prod in per})
     rows = []
-    for key, per in sorted(cells.items(), key=lambda kv: -sum(kv[1].values())):
+    keys = sorted(set(cells) | set(ncells), key=lambda k: (-sum(cells[k].values()) if k in cells else 0,
+                                                            -sum(ncells[k].values()) if k in ncells else 0, k))
+    for key in keys:
+        per, nper = cells.get(key, {}), ncells.get(key, {})
         row: dict[str, Any] = {"key": key}
         for i, prod in enumerate(products):
             row[f"p{i}"] = round(per[prod], 2) if prod in per else None
-        row["total"] = round(sum(per.values()), 2)
+        row["total"] = round(sum(per.values()), 2) if per else None
+        for i, prod in enumerate(nproducts):
+            row[f"n{i}"] = nper.get(prod)
+        if nproducts:
+            row["total_days"] = sum(nper.values()) or None
         rows.append(row)
     label = DIMENSIONS[dimension]
     columns = ([_col("key", label)] + [_col(f"p{i}", prod, "hours") for i, prod in enumerate(products)]
-               + [_col("total", "Total (h)", "hours")])
-    return _result("matrix", f"Croisement {label.lower()} × produit (heures)", p.describe(), columns, rows,
-                   {"kind": "matrix"} if rows else None)
+               + [_col("total", "Total (h)", "hours")]
+               + [_col(f"n{i}", f"{prod} (jours)", "int") for i, prod in enumerate(nproducts)]
+               + ([_col("total_days", "Total (jours)", "int")] if nproducts else []))
+    return _result("matrix", f"Croisement {label.lower()} × produit (heures" + (", jours pour Autodesk Cloud)" if nproducts else ")"),
+                   p.describe(), columns, rows, {"kind": "matrix"} if rows else None,
+                   notes=named.notes(nd) if nproducts else None)
 
 
 def report_heatmap(db: Database, p: ReportParams) -> dict:
@@ -508,8 +583,12 @@ def report_heatmap(db: Database, p: ReportParams) -> dict:
     columns = [_col("hour", "Heure")] + [_col(f"d{i}", day, "pct") for i, day in enumerate(WEEKDAYS_FR)]
     chart = {"kind": "heatmap", "format": "pct", "title": "Taux d'occupation moyen par heure et jour",
              "rows": [r["hour"] for r in rows], "cols": WEEKDAYS_FR, "values": values} if has_data else None
+    notes = _user_filter_note(p)
+    if named.included(p) and named.load(db, p):
+        notes.append(f"{named.SERVER} : pas d'heures d'utilisation pour les licences nommées ; voir l'Usage dans le "
+                     "temps (pas Jour) pour leur profil par jour.")
     return _result("heatmap", "Profil horaire", p.describe(), columns, rows if has_data else [], chart,
-                   notes=_user_filter_note(p))
+                   notes=notes)
 
 
 def report_contention(db: Database, p: ReportParams) -> dict:

@@ -130,7 +130,7 @@ un assistant s'ouvre dans le navigateur et installe tout, en contrôlant chaque 
 
 ![Assistant d'installation](docs/images/installation-progression.png)
 
-Installation silencieuse (industrialisation) : `HeptagonesLM-Setup.exe setup --answers reponses.json`.
+Installation silencieuse (industrialisation) : `start /wait HeptagonesLM-Setup.exe setup --answers reponses.json` (voir le guide d'installation, § 5).
 Démonstration sans rien modifier : `HeptagonesLM-Setup.exe setup --simulate`.
 Tout est détaillé dans **[docs/INSTALLATION.md](docs/INSTALLATION.md)**.
 

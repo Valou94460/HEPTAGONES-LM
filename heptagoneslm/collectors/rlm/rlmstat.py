@@ -32,7 +32,7 @@ import re
 import subprocess
 from datetime import datetime
 
-from heptagoneslm.collectors.base import CollectorError, StatusCollector, register
+from heptagoneslm.collectors.base import NO_WINDOW, CollectorError, StatusCollector, register
 from heptagoneslm.collectors.flexlm.lmstat import _decode, _infer_start, parse_expiry
 from heptagoneslm.models import Checkout, FeatureStatus, ServerStatus
 
@@ -164,7 +164,7 @@ class RlmstatCollector(StatusCollector):
         cmd = self.command()
         log.debug("Exécution : %s", " ".join(cmd))
         try:
-            proc = subprocess.run(cmd, capture_output=True, timeout=self.server.timeout_s, check=False)
+            proc = subprocess.run(cmd, capture_output=True, timeout=self.server.timeout_s, check=False, **NO_WINDOW)
         except FileNotFoundError:
             raise CollectorError(f"rlmutil introuvable : {cmd[0]}") from None
         except subprocess.TimeoutExpired:

@@ -188,6 +188,11 @@ def cmd_autodesk_sync(cfg: AppConfig, args) -> int:
     print(f"{r.users} ligne(s) utilisateur × produit lues, {r.carried} licence(s) reprise(s) du dernier état, "
           f"{r.stored} enregistrée(s)" + (" — simulation, rien n'est écrit" if args.dry_run else "")
           + (" — identifiants hachés (données personnelles masquées chez Autodesk)" if r.hashed else ""))
+    if r.daily is not None:
+        print(f"Usage quotidien : {r.daily} ligne(s) utilisateur × produit × jour (Synthèse, Usage dans le temps, "
+              "Répartition, Optimisation…)")
+    else:
+        print(f"Usage quotidien indisponible : {r.daily_error} (rapport « utilisateurs nommés » seul)")
     return 0
 
 
@@ -448,7 +453,8 @@ def cmd_web(args) -> int:
     else:
         cfg = load_config(args.config)
     _setup_logging("DEBUG" if args.verbose else cfg.log_level, None)
-    serve(cfg, host=args.host, port=args.port, open_browser=args.open)
+    serve(cfg, host=args.host, port=args.port, open_browser=args.open,
+          config_path=None if args.demo else args.config)
     return 0
 
 

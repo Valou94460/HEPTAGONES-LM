@@ -29,7 +29,7 @@ USAGE = [  # fullName, emailAddress, productName, earliest, latest, jours
 
 class FakeAutodesk:
     def __init__(self, contexts=None, accepted_where: int | None = 0, hashed: bool = False, throttle_once=False,
-                 page_size: int = 2, polls_before_done: int = 1):
+                 page_size: int = 2, polls_before_done: int = 1, daily: bool = True):
         self.contexts = contexts if contexts is not None else [
             {"contextId": "TEAM-1", "alias": "Bureau d'études", "reportingBenefits": ["ReportingAPIAccess"]}]
         self.accepted_where = accepted_where     # index de la syntaxe de dates acceptée (None : aucune)
@@ -37,6 +37,7 @@ class FakeAutodesk:
         self.throttle_once = throttle_once
         self.page_size = page_size
         self.polls_before_done = polls_before_done
+        self.daily = daily                       # usage quotidien (champ usageDate) accepté
         self.codes: dict[str, dict] = {}
         self.access: set[str] = set()
         self.refresh: set[str] = set()
@@ -168,6 +169,18 @@ class FakeAutodesk:
                     return self.reply(403, {"detail": "No further detail provided"})
                 columns = fields + body.get("metrics", [])
                 rows = []
+                if "usageDate" in fields:
+                    if not fake.daily:
+                        return self.reply(400, {"detail": "usageDate is not a valid field"})
+                    for name, email, product, first, last, days in USAGE:     # premier et dernier jour d'usage
+                        for day in sorted({first, last}):
+                            values = {"emailAddress": email, "productName": product, "usageDate": day,
+                                      "hashedUserId": hashlib.sha1(email.lower().encode()).hexdigest()[:16],
+                                      "totalUniqueDays": 1}
+                            rows.append([values[c] for c in columns])
+                    qid = secrets.token_hex(6)
+                    fake.queries[qid] = {"columns": columns, "rows": rows, "polls": 0, "where": where}
+                    return self.reply(201, {"id": qid, "status": "SUBMITTED"})
                 for name, email, product, first, last, days in USAGE:
                     values = {"fullName": name, "emailAddress": email, "productName": product,
                               "hashedUserId": hashlib.sha1(email.lower().encode()).hexdigest()[:16],

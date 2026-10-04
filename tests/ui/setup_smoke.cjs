@@ -232,6 +232,7 @@ const { spawn } = require("child_process");
   check(heading.includes("opérationnel"), `vérification finale : ${heading}`);
   const verrors = await page.$$eval(".check-row .sev-critical", e => e.length);
   check(verrors === 0, `${verrors} contrôle(s) en erreur à la vérification`);
+  check(await page.$("[data-quit]"), "bouton « Quitter l'assistant » absent de la page de fin");
   // Authentification unique : test reçu d'un poste, SPN proposé puis déclaré
   const vtext = await page.textContent("#step-body");
   check(vtext.includes("Test depuis un poste utilisateur") && vtext.includes("PC-ETU-037"), "test d'accès depuis un poste absent de la vérification");
@@ -253,7 +254,7 @@ const { spawn } = require("child_process");
   const report = `${out}/${dl.suggestedFilename()}`;
   await dl.saveAs(report);
   const text = fs.readFileSync(report, "utf8");
-  check(text.includes("Statut : done") && text.includes("Vérification"), "rapport d'installation incomplet");
+  check(text.includes("Statut : terminé") && text.includes("Vérification"), "rapport d'installation incomplet");
   check(!/Secret-1/.test(text), "le mot de passe apparaît dans le rapport");
 
   // Mode sombre (vérification), puis retour au mode clair

@@ -33,6 +33,22 @@ SATURATION_SHARE = 0.05                    # saturé > 5 % des heures ouvrées :
 UNDERUSED_PEAK = 0.5
 
 
+def named_data(db: Database, p):
+    """Licences nommées Autodesk de la période (rubriques Efficacité, Optimisation), None si absentes."""
+    from heptagoneslm.web import named
+
+    return named.load(db, p)
+
+
+def named_notes(nd) -> list[str]:
+    from heptagoneslm.web import named
+
+    return named.notes(nd)
+
+
+SERVER = "Autodesk Cloud"
+
+
 def _api():
     from heptagoneslm.web import api  # import tardif (évite l'import circulaire)
 
@@ -178,8 +194,15 @@ def report_efficiency(db: Database, p) -> dict:
             "half_share": st["share_ge"][max(1, (issued + 1) // 2)] if issued else None,
             "saturated_share": st["saturated_share"],
         })
+    nd = named_data(db, p)
+    if nd:                      # licences nommées : une licence par utilisateur, les inactives sont en excédent
+        for prod in nd.products:
+            issued_n = nd.seats.get(prod) or 0
+            rows.append({"product": prod, "server": SERVER, "issued": issued_n, "peak": nd.peak(prod),
+                         "recommended": nd.active.get(prod, 0), "unused": nd.never.get(prod, 0),
+                         "surplus": nd.idle.get(prod, 0), "half_share": None, "saturated_share": None})
     chart = None
-    if rows:
+    if stats:
         single = len(stats) == 1
         shown = sorted(stats.values(), key=lambda s: -s["issued"])[:api.MAX_CHART_SERIES]
         shown.sort(key=lambda s: s["feature"]["label"])
@@ -206,6 +229,10 @@ def report_efficiency(db: Database, p) -> dict:
     if len(stats) > 1:
         notes.append("Graphique en part du parc (10 % à 100 % des jetons émis) pour comparer les produits ; "
                      "filtrez un seul produit pour l'afficher en nombre de jetons.")
+    if nd:
+        notes += named_notes(nd)
+        notes.append(f"{SERVER} : recommandé = licences actives (utilisées depuis moins de {p.named_inactive_days} jours) ; "
+                     "excédent = licences inactives ou jamais utilisées, à réaffecter ou à ne pas renouveler.")
     C = api._col
     columns = [
         C("product", "Produit"), C("server", "Serveur"), C("issued", "Jetons émis", "int"),
@@ -261,9 +288,33 @@ def optimization_rows(db: Database, p, data=None, stats=None) -> list[dict]:
     return rows
 
 
+def named_optimization_rows(nd, p) -> list[dict]:
+    """Licences nommées Autodesk : licences inactives ou jamais utilisées = économie (autodesk.annual_costs)."""
+    from heptagoneslm.autodesk import annual_cost
+
+    rows = []
+    for prod in nd.products:
+        issued = nd.seats.get(prod) or 0
+        idle, unit = nd.idle.get(prod, 0), annual_cost(prod, p.named_costs)
+        avg = nd.avg(prod)
+        rows.append({
+            "product": prod, "server": SERVER, "publisher": "Autodesk", "issued": issued, "peak": nd.peak(prod),
+            "recommended": nd.active.get(prod, 0), "surplus": idle,
+            "business_utilization": (avg / issued) if issued else None, "saturated_hours": None, "denials": None,
+            "unit_cost": unit, "annual_cost": unit * issued if unit is not None else None,
+            "savings": idle * unit if unit is not None else None, "cost_per_hour": None,
+            "advice": (f"Récupérer {idle} licence{'s' if idle > 1 else ''} inactive{'s' if idle > 1 else ''}"
+                       if idle else "Toutes les licences sont utilisées"),
+            "tension": False,
+        })
+    return rows
+
+
 def report_optimization(db: Database, p) -> dict:
     api = _api()
-    rows = sorted(optimization_rows(db, p), key=lambda r: (-(r["savings"] or 0), -r["surplus"], r["product"]))
+    nd = named_data(db, p)
+    rows = sorted(optimization_rows(db, p) + (named_optimization_rows(nd, p) if nd else []),
+                  key=lambda r: (-(r["savings"] or 0), -r["surplus"], r["product"]))
     has_costs = any(r["unit_cost"] is not None for r in rows)
     money = "money"
     C = api._col
@@ -292,6 +343,11 @@ def report_optimization(db: Database, p) -> dict:
                      "configuration pour chiffrer les coûts et les économies.")
     notes.append(f"Recommandation : jetons couvrant {round(p.target_coverage * 100)} % du temps ouvré ; "
                  "un produit avec refus ou saturations fréquentes n'est jamais proposé à la baisse.")
+    if nd:
+        notes += named_notes(nd)
+        if not any(r["unit_cost"] is not None for r in rows if r["server"] == SERVER):
+            notes.append(f"{SERVER} : renseignez le coût annuel de chaque produit Autodesk (Administration › Coûts "
+                         "des licences Autodesk, ou autodesk.annual_costs) pour chiffrer les économies.")
     result = api._result("optimization", "Optimisation et coûts", p.describe(), columns, rows, chart, kpis, notes)
     result["currency"] = p.currency
     return result

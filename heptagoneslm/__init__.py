@@ -11,4 +11,4 @@ Architecture en couches :
 * ``heptagoneslm.reporting``   : calcul des indicateurs et export Excel.
 """
 
-__version__ = "26.3.2"
+__version__ = "26.3.3"

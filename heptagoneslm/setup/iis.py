@@ -174,9 +174,10 @@ def web_config(a: Answers) -> str:
     """web.config du site : autorisation par groupe, module d'identité et relais vers HeptagonesLM."""
     auth = ""
     if a.access_group:
+        groups = a.access_group + (f",{a.admin_group}" if a.admin_group and a.admin_group != a.access_group else "")
         auth = (
             "    <security>\n      <authorization>\n        <clear />\n"
-            f"        <add accessType=\"Allow\" roles={quoteattr(a.access_group)} />\n"
+            f"        <add accessType=\"Allow\" roles={quoteattr(groups)} />\n"
             "      </authorization>\n    </security>\n")
     target = f"http://127.0.0.1:{a.web_port}/{{R:1}}"
     return (

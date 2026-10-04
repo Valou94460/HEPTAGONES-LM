@@ -132,6 +132,26 @@ class SyncTest(Base):
         self.assertFalse(sync_due(db, self.cfg))
         self.assertTrue(sync_due(db, self.cfg, datetime.now() + timedelta(hours=25)))
 
+    def test_daily_usage_stored_then_incremental(self):
+        db = make_db()
+        self.connect()
+        r = sync(db, self.client(), today=TODAY)
+        self.assertGreater(r.daily, 0)                                        # premier et dernier jour de chaque usage
+        days = db.query("SELECT product, email, usage_date FROM named_usage_day ORDER BY usage_date")
+        self.assertIn(("AutoCAD", "jean.dupont@exemple.fr"), {(p, e) for p, e, _ in days})
+        r2 = sync(db, self.client(), today=TODAY)                             # relecture des derniers jours seulement
+        self.assertLess(r2.daily, r.daily)
+        self.assertEqual(db.scalar("SELECT COUNT(*) FROM named_usage_day"), r.daily)   # pas de doublon
+
+    def test_daily_usage_refused_does_not_break_sync(self):
+        self.fake.daily = False
+        db = make_db()
+        self.connect()
+        r = sync(db, self.client(), today=TODAY)
+        self.assertIsNone(r.daily)
+        self.assertIn("usageDate", r.daily_error)
+        self.assertEqual(r.users, 4)                                          # licences nommées enregistrées quand même
+
     def test_dry_run_writes_nothing(self):
         db = make_db()
         self.connect()
@@ -236,7 +256,9 @@ class ConfigCliTest(Base):
         self.assertIn("simulation, rien n'est écrit", text)
         self.assertEqual(text.count("Autodesk (API) : 4 ligne(s) d'usage"), 1)
         self.assertTrue((self.tmp / "data" / "autodesk_token.dpapi").is_file())   # jeton à côté de la configuration
-        self.assertEqual(sum(1 for m, p in self.fake.calls if p == "/insights/v1/usage-queries"), 2)
+        # dry-run puis une collecte : requête d'usage et requête d'usage quotidien à chaque fois
+        self.assertEqual(sum(1 for m, p in self.fake.calls if p == "/insights/v1/usage-queries"), 4)
+        self.assertIn("Usage quotidien : 7 ligne(s)", text)        # un jour hors de la période écarté
 
 
 if __name__ == "__main__":

@@ -61,6 +61,10 @@ SPEC_USAGE = {"fields": ["fullName", "emailAddress", "productName"],
 # Données personnelles masquées par l'administrateur Autodesk : seul l'identifiant haché est disponible.
 SPEC_HASHED = {"fields": ["hashedUserId", "productName"],
                "metrics": ["earliestUsageDate", "latestUsageDate", "totalUniqueDays"]}
+# Usage quotidien (une ligne par utilisateur, produit et jour) : alimente toutes les rubriques de l'interface
+SPEC_DAILY = {"fields": ["emailAddress", "productName", "usageDate"], "metrics": ["totalUniqueDays"]}
+SPEC_DAILY_HASHED = {"fields": ["hashedUserId", "productName", "usageDate"], "metrics": ["totalUniqueDays"]}
+DAILY_OVERLAP_DAYS = 3        # jours relus à chaque synchronisation (usage remonté en retard chez Autodesk)
 # La requête n'a pas de paramètre de dates : la période passe par la clause where (syntaxes essayées dans l'ordre).
 WHERE_FORMS: list[Callable[[str, str], str]] = [
     lambda a, b: f"usageDate >= '{a}' AND usageDate <= '{b}'",
@@ -355,6 +359,8 @@ class SyncResult:
     window: tuple[date, date]
     hashed: bool = False
     where_filtered: bool = True
+    daily: int | None = None      # lignes d'usage quotidien enregistrées (None : non disponible)
+    daily_error: str | None = None
 
 
 def choose_context(contexts: list[dict], wanted: str | None) -> dict:
@@ -378,12 +384,13 @@ def _col(columns: list[str], name: str) -> int | None:
     return columns.index(name) if name in columns else None
 
 
-def fetch_usage(client: InsightsClient, context_id: str, start: date, end: date) -> tuple[list[SeatRow], bool, bool]:
-    """Usage par utilisateur et par produit sur la période : (lignes, identifiants hachés, période appliquée)."""
+def fetch_usage(client: InsightsClient, context_id: str, start: date, end: date
+                ) -> tuple[list[SeatRow], bool, int | None]:
+    """Usage par utilisateur et par produit : (lignes, identifiants hachés, syntaxe de dates acceptée ou None)."""
     a, b = start.isoformat(), end.isoformat()
     last_error: ApiError | None = None
     for spec, hashed in ((SPEC_USAGE, False), (SPEC_HASHED, True)):
-        for where in [f(a, b) for f in WHERE_FORMS] + [""]:
+        for index, where in enumerate([f(a, b) for f in WHERE_FORMS] + [""]):
             try:
                 query_id = client.submit_query(spec, context_id, where)
             except ApiError as exc:
@@ -394,8 +401,57 @@ def fetch_usage(client: InsightsClient, context_id: str, start: date, end: date)
             columns, raw = client.query_rows(query_id)
             if not where:
                 log.warning("Autodesk : aucun filtre de dates accepté, tout l'historique d'usage a été interrogé")
-            return [r for r in (_to_row(columns, x, hashed) for x in raw) if r], hashed, bool(where)
+            return [r for r in (_to_row(columns, x, hashed) for x in raw) if r], hashed, (index if where else None)
     raise last_error or ApiError("Autodesk : requête d'usage refusée")
+
+
+def fetch_daily(client: InsightsClient, context_id: str, start: date, end: date,
+                hashed: bool, where_index: int | None) -> list[tuple[str, str, date]]:
+    """Usage jour par jour : [(produit, utilisateur, jour)] sur la période (bornes incluses).
+
+    ``where_index`` : syntaxe de dates acceptée par la requête d'usage (sans filtre de dates, l'historique
+    complet jour par jour serait trop volumineux : usage quotidien non demandé)."""
+    if where_index is None:
+        raise ApiError("filtre de dates refusé par Autodesk : usage quotidien non demandé")
+    spec = SPEC_DAILY_HASHED if hashed else SPEC_DAILY
+    query_id = client.submit_query(spec, context_id, WHERE_FORMS[where_index](start.isoformat(), end.isoformat()))
+    columns, raw = client.query_rows(query_id)
+    out = []
+    iw, ip, idate = (_col(columns, "hashedUserId" if hashed else "emailAddress"), _col(columns, "productName"),
+                     _col(columns, "usageDate"))
+    if None in (iw, ip, idate):
+        raise ApiError("Autodesk : colonnes de l'usage quotidien absentes de la réponse")
+    for row in raw:
+        who, product, day = str(row[iw] or "").strip(), str(row[ip] or "").strip(), parse_date(row[idate])
+        if who and product and day and start <= day <= end:
+            out.append((product, who if hashed else who.lower(), day))
+    return out
+
+
+def store_daily(db: Database, rows: list[tuple[str, str, date]], start: date, end: date,
+                now: datetime | None = None) -> int:
+    """Remplace l'usage quotidien de la période (à appeler dans une transaction)."""
+    now = now or datetime.now().replace(microsecond=0)
+    db.execute("DELETE FROM named_usage_day WHERE vendor = ? AND usage_date >= ? AND usage_date <= ?",
+               [VENDOR, start, end])
+    seen = set()
+    for product, email, day in rows:
+        key = (product.lower(), email, day)
+        if key in seen:
+            continue
+        seen.add(key)
+        db.execute("INSERT INTO named_usage_day (vendor, product, email, usage_date, imported_at) VALUES (?, ?, ?, ?, ?)",
+                   [VENDOR, product[:255], email[:255], day, now])
+    return len(seen)
+
+
+def daily_start(db: Database, start: date) -> date:
+    """Synchronisations suivantes : seuls les derniers jours sont relus (usage quotidien déjà en base)."""
+    last = db.scalar("SELECT MAX(usage_date) FROM named_usage_day WHERE vendor = ?", [VENDOR])
+    if not last:
+        return start
+    last = last if isinstance(last, date) else date.fromisoformat(str(last)[:10])
+    return max(start, last - timedelta(days=DAILY_OVERLAP_DAYS))
 
 
 def _to_row(columns: list[str], raw: list, hashed: bool) -> SeatRow | None:
@@ -462,24 +518,37 @@ def sync(db: Database, client: InsightsClient, today: date | None = None, dry_ru
     context = choose_context(client.contexts(), cfg.context_id)
     cid = str(context.get("contextId"))
     start = today - timedelta(days=cfg.lookback_days)
-    rows, hashed, filtered = fetch_usage(client, cid, start, today)
+    rows, hashed, where_index = fetch_usage(client, cid, start, today)
+    filtered = where_index is not None
     # Dernier état connu, export du portail du jour compris
     merged, carried = merge_with_previous(rows, previous_rows(db, today + timedelta(days=1)))
     label = f"API Autodesk ({context.get('alias') or cid})"
     stored = len(merged)
+    # Usage jour par jour (rubriques Synthèse, Usage dans le temps, Répartition, Optimisation…) : non bloquant
+    daily_rows, daily_error, dstart = None, None, daily_start(db, start)
+    try:
+        daily_rows = fetch_daily(client, cid, dstart, today, hashed, where_index)
+    except ApiError as exc:
+        daily_error = str(exc)
+        log.warning("Autodesk : usage quotidien indisponible (%s) ; rapport « utilisateurs nommés » seul", exc)
+    daily_stored = None
     if not dry_run:
         now = datetime.now().replace(microsecond=0)
         with db.transaction():
             stored = store_rows(db, merged, today, label, now)
+            if daily_rows is not None:
+                daily_stored = store_daily(db, daily_rows, dstart, today, now)
             db.execute("INSERT INTO named_import (vendor, file_name, file_hash, report_date, rows_count, imported_at) "
                        "VALUES (?, ?, ?, ?, ?, ?)",
-                       [SYNC_VENDOR, label[:255], hashlib.sha256(f"api:{cid}:{now.isoformat()}".encode()).hexdigest(),
+                       [SYNC_VENDOR, label[:255], hashlib.sha256(f"api:{cid}:{now.isoformat()}:{secrets.token_hex(8)}".encode()).hexdigest(),
                         today, len(rows), now])
         log.info("Autodesk : %d lignes d'usage lues (%s), %d licences reprises du dernier état", len(rows), label,
                  carried)
     return SyncResult(context=context.get("alias") or cid, report_date=today, users=len(rows), carried=carried,
-                      stored=stored, window=(start, today), hashed=hashed, where_filtered=filtered)
+                      stored=stored, window=(start, today), hashed=hashed, where_filtered=filtered,
+                      daily=daily_stored if not dry_run else (len(daily_rows) if daily_rows is not None else None),
+                      daily_error=daily_error)
 
 
 __all__ = ["ApiError", "InsightsClient", "NotConnected", "SyncResult", "TokenStore", "VENDOR", "choose_context",
-           "default_token_file", "fetch_usage", "last_sync", "login", "merge_with_previous", "sync", "sync_due"]
+           "default_token_file", "fetch_daily", "fetch_usage", "store_daily", "last_sync", "login", "merge_with_previous", "sync", "sync_due"]
