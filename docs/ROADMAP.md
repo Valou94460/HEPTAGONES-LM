@@ -38,7 +38,7 @@ selon les priorités des premiers clients.
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
-| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1) et API Autodesk Business Success Plan (26.3.2, à valider sur un compte réel) : licences inactives / jamais utilisées, coût récupérable | — |
+| **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1), API Autodesk Business Success Plan validée sur un compte réel, usage quotidien dans toutes les rubriques (26.3.3) : licences inactives / jamais utilisées, coût récupérable | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
 | Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.10, environ 72 pages), plan de test, guide d'installation | — |
@@ -69,7 +69,7 @@ et mode silencieux : IIS, connexion Windows, tâches planifiées, collecte par l
 | Multi-sites | Site par poste (règles sur le nom ou import CSV) et par serveur ; filtre et répartition par site. | 1 j |
 | Licences inutilisées | Vue dédiée : features sans aucun usage sur la période, coût associé. | ½ j |
 
-### 26.3.1 — Recette sur le site client (développée, fusionnée le 02/10/2026, à publier)
+### 26.3.1 — Recette sur le site client (publiée avec 26.3.3 le 04/10/2026)
 
 Version de validation avant production. Installation réelle et recette validées par la CI sur Windows
 Server 2025 (8 features identiques à `lmstat`, refus hors du groupe, PV produit).
@@ -83,14 +83,17 @@ Server 2025 (8 features identiques à `lmstat`, refus hors du groupe, PV produit
 | Vérification du serveur plus rapide ✅ | L'étape « Vérification du serveur » prenait plus de 2 minutes sur un Windows Server neuf : lectures en parallèle, IIS absent détecté immédiatement, progression affichée (98,7 s → 10 s). | ½ j |
 | Licences Autodesk nommées (exports) ✅ | Import des exports « Usage report » du portail Autodesk Account (commande ou dossier surveillé), rapport « Autodesk · utilisateurs nommés » : actives, inactives, jamais utilisées, coût récupérable. | 1 j |
 
-### 26.3.2 — API Autodesk et industrialisation (cible : fin octobre 2026)
+### 26.3.2 et 26.3.3 — API Autodesk, mise à jour en place, administration (publiées le 04/10/2026)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
-| Connecteur API Autodesk ✅ (à valider sur un compte réel) | API Business Success Plan Reporting : connexion OAuth d'un administrateur, usage lu chaque jour sans export manuel, licences inactives et jamais utilisées conservées ([guide](AUTODESK_API.md)). | 2 j |
-| Étape « Licences Autodesk nommées » dans l'assistant ✅ | Dossier des exports, seuil d'inactivité, API avec « Se connecter à Autodesk » et choix de l'équipe. | 1 j |
-| Setup signé | Signature de code de `HeptagonesLM-Setup.exe` (plus d'alerte SmartScreen). Prérequis : certificat de signature de code. | ½ j |
-| Mise à jour en place | Nouvelle version installée sur l'ancienne sans perte de données ni de configuration (réponses de l'assistant reprises). | 1 j |
+| Connecteur API Autodesk ✅ (validé sur un compte réel) | API Business Success Plan Reporting : connexion OAuth d'un administrateur, usage lu chaque jour sans export manuel, licences inactives et jamais utilisées conservées ([guide](AUTODESK_API.md)). | 2 j |
+| Autodesk dans toutes les rubriques ✅ | Usage quotidien par l'API ; produits Autodesk en serveur « Autodesk Cloud » dans la Synthèse, l'Usage dans le temps, la Répartition, le Croisement, l'Efficacité, l'Optimisation & coûts et les filtres. | 2 j |
+| Étape « Licences Autodesk nommées » dans l'assistant ✅ | Dossier des exports, seuil d'inactivité, API avec « Se connecter à Autodesk » et choix de l'équipe ; aussi sur une installation existante. | 1 j |
+| Mise à jour en place ✅ | Nouvelle version installée sur l'ancienne sans perte de données ni de configuration ; réglages ajoutés à la main conservés ; « Réappliquer la mise à jour ». | 1 j |
+| Rubrique Administration ✅ | Serveurs de licences (ajout, test), import Autodesk et coûts depuis le navigateur, réservée au groupe AD des administrateurs. | 2 j |
+| Exploitation ✅ | Setup sans console, bouton « Quitter », icône sur le bureau, relance automatique de l'interface, garde-fou contre le simulateur en production. | 1 j |
+| Setup signé (procédure prête) | Signature de code de `HeptagonesLM-Setup.exe` (plus d'alerte SmartScreen) dès qu'un certificat de signature de code est disponible. | ½ j |
 
 ### 26.4.0 — Analytics et achats (cible : fin novembre 2026, ~8 j)
 

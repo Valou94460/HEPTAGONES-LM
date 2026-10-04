@@ -5,7 +5,11 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
-### 26.3.3 (en cours)
+## [26.3.3] — 2026-10-04
+
+Publie aussi le contenu de 26.3.1 et 26.3.2 (non publiées séparément).
+
+### Nouveautés 26.3.3
 - **Licences Autodesk nommées dans toutes les rubriques** : usage quotidien lu par l'API Autodesk (table
   `named_usage_day`, schéma v8, synchronisation incrémentale) ; produits Autodesk (Vault, collections…) en
   serveur « Autodesk Cloud » dans la Synthèse, l'Usage dans le temps, la Répartition, le Croisement,
@@ -287,7 +291,8 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.0...HEAD
+[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.3...HEAD
+[26.3.3]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.0...v26.3.3
 [26.3.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
 [26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
 [26.1.1]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.0...v26.1.1
