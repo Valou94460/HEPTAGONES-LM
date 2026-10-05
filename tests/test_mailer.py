@@ -164,6 +164,7 @@ class DeliveryTest(unittest.TestCase):
     def test_override_recipients(self):
         deliver(self.cfg, self.db, self.sub("Direction"), today=self.today, override_to=["moi@test.local"])
         self.assertEqual(self.smtp.messages[0][0], ["<moi@test.local>"])
+        self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM report_delivery"), 0)   # un essai ne compte pas
 
     def test_adhoc_subscription(self):
         r = deliver(self.cfg, self.db, Subscription(name="Test", recipients=["x@test.local"], attach_excel=False),

@@ -227,18 +227,27 @@ Sur la page d'accueil, **« Configurer les licences Autodesk »** ouvre l'étape
 API Autodesk). Seule la section `autodesk` de `heptagoneslm.yaml` est écrite. Le reste de l'installation
 est conservé et rien n'est ressaisi. Voir [AUTODESK_API.md](AUTODESK_API.md) § 2.
 
-### Administrer depuis l'interface web (26.3.3)
+### Administrer depuis l'interface web (26.3.3, 26.4)
 
 Les membres du **groupe AD des administrateurs** voient la rubrique **Administration** de l'interface. Ce
 groupe se déclare à l'étape *Interface web et IIS* de l'assistant, ou sur une installation existante via
-l'accueil du Setup › *Administrateurs de l'interface web*. On y trouve deux fonctions :
+l'accueil du Setup › *Administrateurs de l'interface web*. On y trouve :
 
 - **Serveurs de licences** : liste avec l'état de la dernière collecte, ajout, modification, suppression
   et *Tester la connexion* (lmstat / rlmstat en direct). La collecte suivante prend en compte les
   changements. Seuls le nom, `port@serveur`, le type (FlexLM / RLM) et l'état actif se modifient ici ; les
   chemins de `lmutil` / `rlmutil` restent réservés à l'assistant ;
 - **Import d'un export Autodesk** : fichier CSV ou Excel du rapport d'utilisation d'Autodesk Account,
-  importé directement, sans passer par le dossier surveillé.
+  importé directement, sans passer par le dossier surveillé ;
+- **Coûts et échéances des licences Autodesk** : coût annuel d'une licence nommée et date de fin
+  d'abonnement par produit (« Optimisation & coûts », refacturation, « Renouvellements ») ;
+- **Projets** (26.4) : import d'un CSV *utilisateur ; projet*, par exemple l'export des membres d'un groupe
+  AD, pour la refacturation par projet (« Répartition » ou « Croisement », par Projet). Équivalent en ligne de
+  commande : `heptagoneslm import-projects projets.csv [--replace]` ;
+- **Rapports planifiés** (26.4) : rapports envoyés par e-mail (mensuels, hebdomadaires, trimestriels…), avec
+  le choix des vues (Prévision, Renouvellements, Répartition par projet…), des filtres et un bouton *Envoyer un
+  essai*. L'envoi est fait par la tâche « HeptagonesLM - Envoi des rapports », une fois par période. Il faut
+  un serveur SMTP déclaré dans l'assistant.
 
 `heptagoneslm.yaml` est validé avant chaque écriture, et l'ancienne version est gardée dans `logs\`.
 Chaque action est tracée dans le journal d'audit.

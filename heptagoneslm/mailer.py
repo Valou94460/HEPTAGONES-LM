@@ -8,6 +8,11 @@ destinataires, une période (mois précédent par défaut) et des filtres
   produits saturés, produits sous-utilisés), avec un lien vers l'interface ;
 * le classeur Excel complet en pièce jointe (si ``attach_excel``).
 
+Rapport sur mesure : avec ``views`` (vues de l'interface : prévision, renouvellements, répartition
+par projet…), le message reprend chacune de ces vues (indicateurs et premières lignes) avec les
+filtres de l'abonnement (serveurs, produits, utilisateurs, services, sites), et le classeur joint
+contient une feuille par vue.
+
 Les envois sont enregistrés dans ``report_delivery`` : avec ``--skip-sent``, un
 abonnement n'est envoyé qu'une fois par période, même si la tâche planifiée
 tourne tous les jours (un 1er du mois manqué est rattrapé le lendemain).
@@ -92,9 +97,13 @@ def _hot_text(s) -> str:
 def report_link(public_url: str | None, sub: Subscription, start: datetime, end: datetime) -> str | None:
     if not public_url:
         return None
-    params = [("type", "summary"), ("preset", "custom"), ("start", start.date().isoformat()),
-              ("end", (end - timedelta(days=1)).date().isoformat())]
+    params = [("type", sub.views[0] if sub.views else "summary"), ("preset", "custom"),
+              ("start", start.date().isoformat()), ("end", (end - timedelta(days=1)).date().isoformat())]
     params += [("server", s) for s in sub.servers] + [("product", p) for p in sub.products]
+    params += [("user", u) for u in sub.users] + [("department", d) for d in sub.departments]
+    params += [("site", s) for s in sub.sites]
+    if sub.views:
+        params.append(("dimension", sub.dimension))
     return public_url.rstrip("/") + "/#" + urlencode(params)
 
 
@@ -111,7 +120,79 @@ def _kpis(data: ReportData) -> list[tuple[str, str]]:
     ]
 
 
-def render_html(sub: Subscription, data: ReportData, link: str | None, attached: bool, note: str | None) -> str:
+VIEW_ROWS = 15            # lignes de chaque vue reprises dans le message (le classeur joint contient tout)
+VIEW_COLUMNS = 8
+
+
+def _value(value, type_: str, currency: str) -> str:
+    if value is None or value == "":
+        return "—"
+    if type_ == "pct":
+        return _pct(value)
+    if type_ == "money":
+        return _nb(value) + " " + currency
+    if type_ in ("float", "hours"):
+        return _nb(value, 1 if type_ == "hours" else 2) + (" h" if type_ == "hours" else "")
+    if type_ == "int":
+        return _nb(value)
+    if type_ == "date":
+        return date.fromisoformat(str(value)[:10]).strftime("%d/%m/%Y")
+    if type_ == "datetime":
+        return datetime.fromisoformat(str(value)).strftime("%d/%m/%Y %H:%M")
+    return str(value)
+
+
+def _view_columns(result: dict) -> list[dict]:
+    cols = result["columns"]
+    if len(cols) <= VIEW_COLUMNS:
+        return cols
+    advice = [c for c in cols if c["key"] == "advice"]          # la recommandation reste visible
+    return [c for c in cols if c["key"] != "advice"][:VIEW_COLUMNS - len(advice)] + advice
+
+
+def render_views_html(results: list[dict]) -> str:
+    e = html.escape
+    cell = "padding:6px 10px;border-bottom:1px solid #e1e0d9;"
+    num = cell + "text-align:right;white-space:nowrap;"
+    out = []
+    for r in results:
+        cur = r.get("currency", "€")
+        cols = _view_columns(r)
+        kpis = " · ".join(f"{e(k['label'])} : <b>{e(_value(k['value'], k['type'], cur))}</b>" for k in r.get("kpis", [])[:6])
+        head = "".join(f"<th style='{num if c['type'] not in ('text',) else cell}'>{e(c['label'])}</th>" for c in cols)
+        body = "".join(
+            "<tr>" + "".join(f"<td style='{num if c['type'] not in ('text',) else cell}'>{e(_value(row.get(c['key']), c['type'], cur))}</td>"
+                             for c in cols) + "</tr>"
+            for row in r["rows"][:VIEW_ROWS]
+        ) or f"<tr><td colspan='{len(cols)}' style='{cell}color:#898781'>Aucune donnée sur la période.</td></tr>"
+        more = (f"<div style='color:#898781;font-size:12px;margin-top:4px'>{len(r['rows'])} lignes au total : "
+                "voir le classeur joint ou l'interface.</div>") if len(r["rows"]) > VIEW_ROWS else ""
+        notes = "".join(f"<li>{e(n)}</li>" for n in r.get("notes", [])[:3])
+        out.append(
+            f"<h3 style='font-size:15px;margin:24px 0 4px'>{e(r['title'])}</h3>"
+            + (f"<div style='color:#52514e;font-size:13px;margin-bottom:6px'>{kpis}</div>" if kpis else "")
+            + f"<table style='border-collapse:collapse;width:100%;font-size:13px'><tr style='background:#f3f2ee;color:#52514e;"
+            f"text-align:left'>{head}</tr>{body}</table>{more}"
+            + (f"<ul style='margin:6px 0 0;padding-left:18px;color:#52514e;font-size:12px'>{notes}</ul>" if notes else ""))
+    return "".join(out)
+
+
+def render_views_text(results: list[dict]) -> list[str]:
+    lines = []
+    for r in results:
+        cur = r.get("currency", "€")
+        lines += ["", r["title"] + " :"]
+        lines += [f"  {k['label']} : {_value(k['value'], k['type'], cur)}" for k in r.get("kpis", [])[:6]]
+        cols = _view_columns(r)
+        for row in r["rows"][:VIEW_ROWS]:
+            lines.append("  - " + " · ".join(f"{c['label']} {_value(row.get(c['key']), c['type'], cur)}" for c in cols))
+        if len(r["rows"]) > VIEW_ROWS:
+            lines.append(f"  … {len(r['rows'])} lignes au total (classeur joint ou interface)")
+    return lines
+
+
+def render_html(sub: Subscription, data: ReportData, link: str | None, attached: bool, note: str | None,
+                views: list[dict] | None = None) -> str:
     e = html.escape
     label = period_label(data.start, data.end)
     hot, cold = insights(data)
@@ -144,7 +225,7 @@ def render_html(sub: Subscription, data: ReportData, link: str | None, attached:
                                     f"({s.peak_in_use} jeton(s) sur {s.issued})"))
     footer_bits = []
     if attached:
-        footer_bits.append("Le classeur Excel complet est joint à ce message.")
+        footer_bits.append("Le classeur Excel est joint à ce message" + (" (une feuille par vue)." if views else "."))
     if note:
         footer_bits.append(e(note))
     if link:
@@ -154,6 +235,16 @@ def render_html(sub: Subscription, data: ReportData, link: str | None, attached:
         scope.append("serveurs : " + ", ".join(sub.servers))
     if sub.products:
         scope.append("produits : " + ", ".join(sub.products))
+    for what, values in (("utilisateurs", sub.users), ("services", sub.departments), ("sites", sub.sites)):
+        if values:
+            scope.append(f"{what} : " + ", ".join(values))
+    detail = render_views_html(views) if views else f"""<h3 style="font-size:15px;margin:22px 0 6px">Détail par produit</h3>
+<table style="border-collapse:collapse;width:100%;font-size:13px">
+<tr style="background:#f3f2ee;color:#52514e;text-align:left">
+<th style="{cell}">Produit</th><th style="{cell}">Serveur</th><th style="{num}">Jetons</th><th style="{num}">Pic</th>
+<th style="{num}">Taux moyen</th><th style="{num}">Taux h. ouvrées</th><th style="{num}">H. saturées</th><th style="{num}">Refus</th></tr>
+{rows}
+</table>"""
     return f"""<!doctype html>
 <html lang="fr"><head><meta charset="utf-8"><title>HeptagonesLM</title></head>
 <body style="margin:0;padding:24px;background:#f9f9f7;font-family:'Segoe UI',system-ui,sans-serif;color:#0b0b0b;font-size:14px">
@@ -163,19 +254,14 @@ def render_html(sub: Subscription, data: ReportData, link: str | None, attached:
 <div style="color:#52514e;font-size:13px">{e(' — '.join(scope) or 'Tous serveurs et produits')}</div>
 <table role="presentation" style="margin:18px 0;border-collapse:separate"><tr>{tiles}</tr></table>
 {attention}
-<h3 style="font-size:15px;margin:22px 0 6px">Détail par produit</h3>
-<table style="border-collapse:collapse;width:100%;font-size:13px">
-<tr style="background:#f3f2ee;color:#52514e;text-align:left">
-<th style="{cell}">Produit</th><th style="{cell}">Serveur</th><th style="{num}">Jetons</th><th style="{num}">Pic</th>
-<th style="{num}">Taux moyen</th><th style="{num}">Taux h. ouvrées</th><th style="{num}">H. saturées</th><th style="{num}">Refus</th></tr>
-{rows}
-</table>
+{detail}
 <p style="margin:18px 0 0;color:#52514e;font-size:13px">{'<br>'.join(footer_bits)}</p>
 <p style="margin:18px 0 0;color:#898781;font-size:11px">Message automatique HeptagonesLM {e(__version__)} — abonnement « {e(sub.name)} ».</p>
 </div></body></html>"""
 
 
-def render_text(sub: Subscription, data: ReportData, link: str | None, attached: bool, note: str | None) -> str:
+def render_text(sub: Subscription, data: ReportData, link: str | None, attached: bool, note: str | None,
+                views: list[dict] | None = None) -> str:
     lines = [f"HeptagonesLM — utilisation des licences — {period_label(data.start, data.end)} ({sub.name})", ""]
     lines += [f"{k} : {v}" for k, v in _kpis(data)]
     hot, cold = insights(data)
@@ -183,11 +269,14 @@ def render_text(sub: Subscription, data: ReportData, link: str | None, attached:
         lines += ["", "Produits à surveiller :"] + [f"  - {s.label} : {_hot_text(s)}" for s in hot[:10]]
     if cold:
         lines += ["", "Produits sous-utilisés :"] + [f"  - {s.label} : pic {_pct(s.peak_utilization)}" for s in cold[:10]]
-    lines += ["", "Détail par produit :"]
-    lines += [f"  - {s.label} ({s.server}) : pic {s.peak_in_use}/{s.issued}, taux moyen {_pct(s.avg_utilization)}"
-              for s in data.summaries]
+    if views:
+        lines += render_views_text(views)
+    else:
+        lines += ["", "Détail par produit :"]
+        lines += [f"  - {s.label} ({s.server}) : pic {s.peak_in_use}/{s.issued}, taux moyen {_pct(s.avg_utilization)}"
+                  for s in data.summaries]
     if attached:
-        lines += ["", "Classeur Excel complet en pièce jointe."]
+        lines += ["", "Classeur Excel en pièce jointe."]
     if note:
         lines += ["", note]
     if link:
@@ -201,7 +290,8 @@ def render_text(sub: Subscription, data: ReportData, link: str | None, attached:
 
 
 def build_message(sub: Subscription, data: ReportData, email_cfg: EmailConfig, public_url: str | None,
-                  xlsx: bytes | None, xlsx_name: str, recipients: list[str]) -> EmailMessage:
+                  xlsx: bytes | None, xlsx_name: str, recipients: list[str],
+                  views: list[dict] | None = None) -> EmailMessage:
     attached = xlsx is not None and len(xlsx) <= email_cfg.max_attachment_mb * 1024 * 1024
     note = None
     if xlsx is not None and not attached:
@@ -215,8 +305,8 @@ def build_message(sub: Subscription, data: ReportData, email_cfg: EmailConfig, p
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain="heptagoneslm")
     msg["X-Mailer"] = f"HeptagonesLM {__version__}"
-    msg.set_content(render_text(sub, data, link, attached, note))
-    msg.add_alternative(render_html(sub, data, link, attached, note), subtype="html")
+    msg.set_content(render_text(sub, data, link, attached, note, views))
+    msg.add_alternative(render_html(sub, data, link, attached, note, views), subtype="html")
     if attached:
         msg.add_attachment(xlsx, maintype=XLSX_TYPE[0], subtype=XLSX_TYPE[1], filename=xlsx_name)
     return msg
@@ -262,6 +352,17 @@ def _record(db: Database, sub: Subscription, start: datetime, end: datetime, rec
         })
 
 
+def run_views(config: AppConfig, db: Database, sub: Subscription, start: datetime, end: datetime) -> list[dict]:
+    """Vues choisies par l'abonnement, calculées avec ses filtres (mêmes résultats que l'interface)."""
+    from heptagoneslm.web import api
+
+    query = {"start": [start.date().isoformat()], "end": [(end - timedelta(days=1)).date().isoformat()],
+             "server": sub.servers, "product": sub.products, "user": sub.users, "department": sub.departments,
+             "site": sub.sites, "dimension": [sub.dimension], "granularity": ["day" if (end - start).days <= 62 else "week"]}
+    p = api.params_from_config(query, config, today=end.date())
+    return [api.run_report(db, v, p) for v in sub.views]
+
+
 def deliver(config: AppConfig, db: Database, sub: Subscription, today: date | None = None,
             dry_run_dir: str | Path | None = None, override_to: list[str] | None = None,
             skip_sent: bool = False, period: str | None = None, sender=send_message) -> DeliveryResult:
@@ -275,7 +376,12 @@ def deliver(config: AppConfig, db: Database, sub: Subscription, today: date | No
                              business_hours=config.reporting.business_hours, products=sub.products or None)
     xlsx = None
     xlsx_name = f"HeptagonesLM_{sub.name}_{start:%Y%m%d}_{(end - timedelta(seconds=1)):%Y%m%d}.xlsx".replace(" ", "_")
-    if sub.attach_excel:
+    views = run_views(config, db, sub, start, end) if sub.views else None
+    if views is not None and sub.attach_excel:
+        from heptagoneslm.web.api import export_workbook
+
+        xlsx = export_workbook(views)
+    elif sub.attach_excel:
         import io
 
         from heptagoneslm.reporting.excel import build_workbook
@@ -283,7 +389,7 @@ def deliver(config: AppConfig, db: Database, sub: Subscription, today: date | No
         buf = io.BytesIO()
         build_workbook(data, config.reporting.top_n_chart).save(buf)
         xlsx = buf.getvalue()
-    msg = build_message(sub, data, config.email, config.web.public_url, xlsx, xlsx_name, recipients)
+    msg = build_message(sub, data, config.email, config.web.public_url, xlsx, xlsx_name, recipients, views)
 
     if dry_run_dir:
         out = Path(dry_run_dir)
@@ -296,8 +402,10 @@ def deliver(config: AppConfig, db: Database, sub: Subscription, today: date | No
         sender(msg, config.email)
     except Exception as exc:
         log.error("Envoi « %s » impossible : %s", sub.name, exc)
-        _record(db, sub, start, end, recipients, "ERROR", str(exc))
+        if not override_to:
+            _record(db, sub, start, end, recipients, "ERROR", str(exc))
         return DeliveryResult(sub.name, "ERROR", str(exc))
-    _record(db, sub, start, end, recipients, "SENT", None)
+    if not override_to:      # essai vers d'autres destinataires : l'envoi planifié de la période reste à faire
+        _record(db, sub, start, end, recipients, "SENT", None)
     log.info("Rapport « %s » (%s) envoyé à %s", sub.name, period_label(start, end), ", ".join(recipients))
     return DeliveryResult(sub.name, "SENT", f"{period_label(start, end)} → {', '.join(recipients)}")

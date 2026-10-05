@@ -37,6 +37,7 @@ class NamedData:
     never: dict[str, int] = field(default_factory=dict)
     daily: dict[str, dict[date, set]] = field(default_factory=lambda: defaultdict(lambda: defaultdict(set)))
     user_days: dict[tuple[str, str], int] = field(default_factory=lambda: defaultdict(int))   # (user, produit)
+    user_seats: set = field(default_factory=set)                 # (user, produit) : licences affectées
     names: dict[str, str] = field(default_factory=dict)          # utilisateur -> nom complet
     departments: dict[str, str | None] = field(default_factory=dict)
     has_daily: bool = False
@@ -109,6 +110,7 @@ def load(db: Database, p) -> NamedData | None:
             continue
         prod = s["product"]
         data.seats[prod] = data.seats.get(prod, 0) + 1
+        data.user_seats.add((user, prod))
         if s["status"] == "active":
             data.active[prod] = data.active.get(prod, 0) + 1
         else:
@@ -129,7 +131,7 @@ def load(db: Database, p) -> NamedData | None:
                 data.daily[product][day].add(user)
                 data.user_days[(user, product)] += 1
             data.has_daily = True
-    for user, _ in data.user_days:
+    for user, _ in list(data.user_days) + list(data.user_seats):
         data.departments.setdefault(user, (known.get(user) or {}).get("department"))
     if not data.seats and not data.has_daily:
         return None

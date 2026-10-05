@@ -5,7 +5,11 @@
   actif sont modifiables : les chemins des outils (lmutil, rlmutil) et les journaux restent réservés
   à l'assistant d'installation, pour qu'aucun programme ne puisse être désigné depuis le navigateur ;
 * import d'un export « Usage report » du portail Autodesk Account (CSV ou Excel), sans passer par
-  le dossier surveillé.
+  le dossier surveillé ;
+* coût annuel et échéance des abonnements Autodesk (``autodesk.annual_costs``, ``autodesk.renewals``) ;
+* affectation des utilisateurs aux projets (import CSV, table ``user_project``) ;
+* rapports planifiés par e-mail (``email.subscriptions``) : vues, filtres, période, destinataires,
+  avec un envoi d'essai.
 
 ``heptagoneslm.yaml`` est réécrit en place (le compte de service n'a le droit de modifier que ce
 fichier, accordé par l'assistant quand un groupe d'administrateurs est déclaré), après validation
@@ -18,7 +22,7 @@ from __future__ import annotations
 import copy
 import os
 import re
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
@@ -187,17 +191,32 @@ def test_server(path: str, entry: dict) -> dict:
 
 
 def list_costs(path: str, products: list[str]) -> dict:
-    """Coût annuel d'une licence nommée par produit Autodesk (autodesk.annual_costs)."""
+    """Coût annuel et échéance d'une licence nommée par produit Autodesk (autodesk.annual_costs, autodesk.renewals)."""
     _, raw = _load(path)
-    costs = ((raw.get("autodesk") or {}).get("annual_costs") or {}) if isinstance(raw.get("autodesk"), dict) else {}
-    names = sorted(set(products) | {str(k) for k in costs})
-    return {"costs": [{"product": n, "cost": costs.get(n)} for n in names], "readonly": editable(path)}
+    section = raw.get("autodesk") if isinstance(raw.get("autodesk"), dict) else {}
+    costs = section.get("annual_costs") or {}
+    renewals = section.get("renewals") or {}
+    names = sorted(set(products) | {str(k) for k in costs} | {str(k) for k in renewals})
+    return {"costs": [{"product": n, "cost": costs.get(n),
+                       "renewal": str(renewals[n])[:10] if renewals.get(n) else None} for n in names],
+            "readonly": editable(path)}
 
 
-def save_costs(path: str, costs: dict, backup_dir: str | None) -> int:
+def save_costs(path: str, costs: dict, backup_dir: str | None, renewals: dict | None = None) -> int:
     reason = editable(path)
     if reason:
         raise AdminError(reason)
+    dates = {}
+    for product, value in (renewals or {}).items():
+        name = str(product).strip()
+        if not name or len(name) > 255:
+            raise AdminError("Nom de produit invalide")
+        if value in (None, ""):
+            continue
+        try:
+            dates[name] = date.fromisoformat(str(value).strip()[:10]).isoformat()
+        except ValueError:
+            raise AdminError(f"Échéance invalide pour {name} : date AAAA-MM-JJ attendue") from None
     clean = {}
     for product, value in (costs or {}).items():
         name = str(product).strip()
@@ -219,6 +238,11 @@ def save_costs(path: str, costs: dict, backup_dir: str | None) -> int:
         section["annual_costs"] = clean
     else:
         section.pop("annual_costs", None)
+    if renewals is not None:
+        if dates:
+            section["renewals"] = dates
+        else:
+            section.pop("renewals", None)
     if section:
         raw["autodesk"] = section
     else:
@@ -240,3 +264,150 @@ def import_autodesk(db, filename: str, data: bytes) -> dict:
         return import_report(db, name, data=data)
     except ValueError as exc:                     # colonnes introuvables, format inattendu
         raise AdminError(f"Export non reconnu : {exc}") from None
+
+
+def import_projects(db, filename: str, data: bytes, replace: bool) -> dict:
+    """Affectation des utilisateurs aux projets déposée depuis le navigateur (CSV utilisateur ; projet)."""
+    from heptagoneslm.projects import import_projects as run
+
+    name = Path(filename or "").name
+    if not name or Path(name).suffix.lower() not in (".csv", ".txt"):
+        raise AdminError("Fichier attendu : CSV avec les colonnes utilisateur et projet")
+    if not data:
+        raise AdminError("Fichier vide")
+    try:
+        return run(db, name, data, replace=replace)
+    except ValueError as exc:
+        raise AdminError(f"Fichier non reconnu : {exc}") from None
+
+
+# ---------------------------------------------------------------------------
+# Rapports planifiés (email.subscriptions)
+# ---------------------------------------------------------------------------
+
+PERIOD_LABELS = {"last-month": "Mois précédent (mensuel)", "last-week": "Semaine précédente (hebdomadaire)",
+                 "last-quarter": "Trimestre précédent (trimestriel)", "last-year": "Année précédente (annuel)",
+                 "this-month": "Mois en cours (quotidien)", "last-7d": "7 derniers jours (quotidien)"}
+SUB_NAME_RE = re.compile(r"^[^\x00-\x1f]{1,100}$")
+EMAIL_RE = re.compile(r"^[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+$")
+
+
+def list_subscriptions(path: str) -> dict:
+    from heptagoneslm.config import SUBSCRIPTION_DIMENSIONS, SUBSCRIPTION_VIEWS
+    from heptagoneslm.web import api
+
+    _, raw = _load(path)
+    email = raw.get("email") if isinstance(raw.get("email"), dict) else {}
+    subs = []
+    for s in email.get("subscriptions") or []:
+        if isinstance(s, dict):
+            subs.append({k: s.get(k) for k in ("name", "recipients", "period", "views", "servers", "products", "users",
+                                               "departments", "sites", "dimension", "attach_excel", "subject")})
+    return {"subscriptions": subs, "smtp": bool(email.get("smtp_host")), "readonly": editable(path),
+            "views": [{"key": v, "label": api.REPORTS[v][0]} for v in SUBSCRIPTION_VIEWS],
+            "periods": [{"key": k, "label": v} for k, v in PERIOD_LABELS.items()],
+            "dimensions": [{"key": d, "label": api.DIMENSIONS[d]} for d in SUBSCRIPTION_DIMENSIONS]}
+
+
+def _list(value) -> list[str]:
+    if value in (None, ""):
+        return []
+    if isinstance(value, str):
+        value = re.split(r"[;,\n]", value)
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def _clean_subscription(entry: dict) -> dict:
+    from heptagoneslm.config import PERIODS, SUBSCRIPTION_DIMENSIONS, SUBSCRIPTION_VIEWS
+
+    name = str(entry.get("name", "")).strip()
+    if not SUB_NAME_RE.match(name):
+        raise AdminError("Nom du rapport attendu (100 caractères au plus)")
+    recipients = _list(entry.get("recipients"))
+    if not recipients:
+        raise AdminError("Indiquer au moins un destinataire")
+    bad = [r for r in recipients if not EMAIL_RE.match(r)]
+    if bad:
+        raise AdminError(f"Adresse e-mail invalide : {bad[0]}")
+    period = str(entry.get("period") or "last-month")
+    if period not in PERIODS:
+        raise AdminError("Période inconnue")
+    views = [v for v in _list(entry.get("views")) if v in SUBSCRIPTION_VIEWS]
+    dimension = str(entry.get("dimension") or "department")
+    if dimension not in SUBSCRIPTION_DIMENSIONS:
+        raise AdminError("Axe d'analyse inconnu")
+    out = {"name": name, "recipients": recipients, "period": period}
+    if views:
+        out["views"] = views
+        if dimension != "department":
+            out["dimension"] = dimension
+    for key in ("servers", "products", "users", "departments", "sites"):
+        values = _list(entry.get(key))
+        if values:
+            out[key] = values
+    if entry.get("attach_excel") is False:
+        out["attach_excel"] = False
+    subject = str(entry.get("subject") or "").strip()
+    if subject:
+        out["subject"] = subject[:200]
+    return out
+
+
+def subscription_from_entry(path: str, entry: dict):
+    """Abonnement validé (sans l'enregistrer) : sert à l'envoi d'essai."""
+    from heptagoneslm.config import parse_config
+
+    clean = _clean_subscription(entry)
+    _, raw = _load(path)
+    probe = copy.deepcopy(raw)
+    probe.setdefault("email", {})
+    if not isinstance(probe["email"], dict) or not probe["email"].get("smtp_host"):
+        raise AdminError("Serveur SMTP non configuré (HeptagonesLM-Setup.exe › e-mail) : envoi impossible")
+    probe["email"]["subscriptions"] = [clean]
+    try:
+        return parse_config(probe).email.subscriptions[0]
+    except ConfigError as exc:
+        raise AdminError(str(exc)) from None
+
+
+def save_subscription(path: str, entry: dict, original: str | None, backup_dir: str | None) -> dict:
+    reason = editable(path)
+    if reason:
+        raise AdminError(reason)
+    new = _clean_subscription(entry)
+    previous, raw = _load(path)
+    email = raw.get("email") if isinstance(raw.get("email"), dict) else None
+    if not email or not email.get("smtp_host"):
+        raise AdminError("Serveur SMTP non configuré (HeptagonesLM-Setup.exe › e-mail) : les rapports ne peuvent pas être envoyés")
+    subs = list(email.get("subscriptions") or [])
+    names = [str(s.get("name", "")).lower() for s in subs]
+    if original:
+        if original.lower() not in names:
+            raise AdminError(f"Rapport inconnu : {original}")
+        if new["name"].lower() != original.lower() and new["name"].lower() in names:
+            raise AdminError(f"Un rapport s'appelle déjà {new['name']}")
+        subs[names.index(original.lower())] = new
+    else:
+        if new["name"].lower() in names:
+            raise AdminError(f"Un rapport s'appelle déjà {new['name']}")
+        subs.append(new)
+    email["subscriptions"] = subs
+    _write(path, previous, raw, backup_dir)
+    return new
+
+
+def delete_subscription(path: str, name: str, backup_dir: str | None) -> None:
+    reason = editable(path)
+    if reason:
+        raise AdminError(reason)
+    previous, raw = _load(path)
+    email = raw.get("email") if isinstance(raw.get("email"), dict) else {}
+    subs = list(email.get("subscriptions") or [])
+    rest = [s for s in subs if str(s.get("name", "")).lower() != name.lower()]
+    if len(rest) == len(subs):
+        raise AdminError(f"Rapport inconnu : {name}")
+    if rest:
+        email["subscriptions"] = rest
+    else:
+        email.pop("subscriptions", None)
+    _write(path, previous, raw, backup_dir)

@@ -5,6 +5,35 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.4.0] — en préparation
+
+### Nouveautés
+- **Prévision du besoin** (rubrique *Achats › Prévision*) : pic de jetons prévu à 3, 6 et 12 mois par produit,
+  jetons nécessaires (pic prévu arrondi), avec marge (haut de la fourchette à 90 %), écart aux jetons émis et
+  impact budgétaire annuel. Méthode explicable : pic hebdomadaire, tendance linéaire dès 8 semaines
+  d'historique (prolongée au plus sur la durée de l'historique), saisonnalité mensuelle dès 12 mois. Produits
+  Autodesk Cloud compris (utilisateurs distincts par jour). Graphique historique / prévision.
+- **Rapport de renouvellement** (*Achats › Renouvellements*) : pour chaque échéance des 12 mois à venir (date
+  d'expiration du fichier de licence, `renewal` d'une règle `products`, `autodesk.renewals` ou date saisie dans
+  l'Administration pour les abonnements Autodesk) : usage réel des 90 derniers jours, jetons recommandés, besoin
+  prévu, quantité à renouveler, coût actuel et proposé, économie ou budget. Jamais de baisse proposée pour un
+  produit avec refus ou saturations fréquentes.
+- **Refacturation par projet** : nouvel axe « Projet » dans la Répartition et le Croisement, coûts compris
+  (licences Autodesk nommées imputées à leur titulaire). Projet déduit d'un import CSV utilisateur ; projet
+  (export des membres d'un groupe AD, outil de gestion de projets) — `heptagoneslm import-projects` ou
+  *Administration › Projets* — puis des règles `projects` (nom du poste, utilisateur, service). Schéma v9
+  (table `user_project`).
+- **Rapports planifiés sur mesure** : chaque abonnement e-mail peut choisir ses vues (Prévision,
+  Renouvellements, Répartition par projet, Optimisation…), ses filtres (serveurs, produits, utilisateurs,
+  services, sites), l'axe d'analyse et une période trimestrielle (`last-quarter`) ; le message reprend chaque
+  vue et le classeur joint contient une feuille par vue. Gestion depuis *Administration › Rapports planifiés*
+  (création, modification, suppression, envoi d'essai).
+- *Administration › Coûts et échéances des licences Autodesk* : date de fin d'abonnement par produit.
+
+### Corrections
+- Un envoi d'essai (`send-report --to`, ou bouton « Envoyer un essai ») n'est plus enregistré comme l'envoi de la
+  période : l'envoi planifié n'est plus sauté.
+
 ## [26.3.3] — 2026-10-04
 
 Publie aussi le contenu de 26.3.1 et 26.3.2 (non publiées séparément).

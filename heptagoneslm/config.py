@@ -8,9 +8,12 @@ from __future__ import annotations
 import fnmatch
 import os
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 
 import yaml
+
+from heptagoneslm.projects import ProjectRule
 
 
 class ConfigError(ValueError):
@@ -52,6 +55,7 @@ class ProductRule:
     publisher: str | None = None
     vendor: str | None = None
     annual_cost: float | None = None   # coût annuel d'UN jeton (maintenance / abonnement)
+    renewal: date | None = None        # échéance du contrat (licences permanentes sous maintenance)
 
 
 @dataclass
@@ -101,6 +105,7 @@ class AutodeskConfig:
     import_dir: str | None = None  # dossier surveillé : chaque export déposé est importé à la collecte
     inactive_days: int = 30        # licence inactive au-delà de ce nombre de jours sans utilisation
     annual_costs: dict[str, float] = field(default_factory=dict)  # motif de produit -> coût annuel d'une licence
+    renewals: dict[str, date] = field(default_factory=dict)       # motif de produit -> échéance de l'abonnement
     api: AutodeskApiConfig | None = None
 
 
@@ -188,6 +193,17 @@ class Subscription:
     products: list[str] = field(default_factory=list)
     attach_excel: bool = True
     subject: str | None = None
+    views: list[str] = field(default_factory=list)        # vues du rapport sur mesure (vide : rapport standard)
+    users: list[str] = field(default_factory=list)
+    departments: list[str] = field(default_factory=list)
+    sites: list[str] = field(default_factory=list)
+    dimension: str = "department"                          # Répartition / Croisement : axe d'analyse
+
+
+#: Vues proposées aux abonnements (rapports de l'interface, hors vues en temps réel).
+SUBSCRIPTION_VIEWS = ("summary", "timeseries", "breakdown", "matrix", "heatmap", "contention", "denials", "efficiency",
+                      "optimization", "unused", "named", "reservations", "forecast", "renewal", "collections")
+SUBSCRIPTION_DIMENSIONS = ("user", "host", "department", "product", "server", "publisher", "site", "project")
 
 
 ALERT_TYPES = ("collection", "denial", "saturation", "expiry")
@@ -262,6 +278,7 @@ class AppConfig:
     servers: list[ServerConfig]
     products: list[ProductRule] = field(default_factory=list)
     sites: list[SiteRule] = field(default_factory=list)
+    projects: list[ProjectRule] = field(default_factory=list)
     reporting: ReportingConfig = field(default_factory=ReportingConfig)
     retention: RetentionConfig = field(default_factory=RetentionConfig)
     lmutil_path: str = "lmutil"
@@ -286,6 +303,14 @@ class AppConfig:
             if rule.annual_cost is not None:
                 costs.setdefault(rule.product, rule.annual_cost)
         return costs
+
+    def product_renewals(self) -> dict[str, date]:
+        """Échéance de contrat par produit (première règle renseignée)."""
+        out: dict[str, date] = {}
+        for rule in self.products:
+            if rule.renewal is not None:
+                out.setdefault(rule.product, rule.renewal)
+        return out
 
     def resolve_site(self, hostname: str) -> str | None:
         """Site d'un poste : première règle ``sites`` dont le motif correspond au nom."""
@@ -378,8 +403,9 @@ def parse_config(raw: dict) -> AppConfig:
             publisher=p.get("publisher"),
             vendor=p.get("vendor"),
             annual_cost=float(p["annual_cost"]) if p.get("annual_cost") not in (None, "") else None,
+            renewal=_date(p.get("renewal"), f"products[{i}].renewal"),
         )
-        for p in raw.get("products") or []
+        for i, p in enumerate(raw.get("products") or [])
     ]
 
     sites = []
@@ -387,6 +413,8 @@ def parse_config(raw: dict) -> AppConfig:
         if not isinstance(r, dict) or not r.get("pattern") or not r.get("site"):
             raise ConfigError(f"sites[{i}] : pattern et site sont obligatoires")
         sites.append(SiteRule(str(r["pattern"]), str(r["site"])))
+
+    projects = _parse_projects(raw.get("projects"))
 
     rep = raw.get("reporting") or {}
     bh = rep.get("business_hours", [8, 19])
@@ -421,6 +449,7 @@ def parse_config(raw: dict) -> AppConfig:
         servers=servers,
         products=products,
         sites=sites,
+        projects=projects,
         reporting=reporting,
         retention=retention,
         lmutil_path=_expand(raw.get("lmutil_path", "lmutil")),
@@ -429,6 +458,37 @@ def parse_config(raw: dict) -> AppConfig:
         log_level=logging_cfg.get("level", "INFO"),
         autodesk=autodesk,
     )
+
+
+def _parse_projects(value) -> list[ProjectRule]:
+    rules = []
+    if value in (None, ""):
+        return rules
+    if not isinstance(value, list):
+        raise ConfigError("projects : liste de règles attendue (project, hosts, users, departments)")
+    for i, r in enumerate(value):
+        if not isinstance(r, dict) or not str(r.get("project") or "").strip():
+            raise ConfigError(f"projects[{i}] : project est obligatoire")
+        rule = ProjectRule(str(r["project"]).strip(), _as_list(r.get("hosts")), _as_list(r.get("users")),
+                           _as_list(r.get("departments")))
+        if not (rule.hosts or rule.users or rule.departments):
+            raise ConfigError(f"projects[{i}] ({rule.project}) : indiquer hosts, users ou departments")
+        rules.append(rule)
+    return rules
+
+
+def _date(value, where: str) -> date | None:
+    """Date AAAA-MM-JJ (YAML la lit déjà en date quand elle n'est pas entre guillemets)."""
+    if value in (None, ""):
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value).strip())
+    except ValueError:
+        raise ConfigError(f"{where} : date attendue au format AAAA-MM-JJ") from None
 
 
 def _parse_autodesk(a) -> AutodeskConfig:
@@ -444,7 +504,11 @@ def _parse_autodesk(a) -> AutodeskConfig:
         raise ConfigError(f"autodesk : valeur numérique attendue ({exc})") from exc
     if inactive < 1:
         raise ConfigError("autodesk.inactive_days doit être supérieur ou égal à 1")
+    renewals = a.get("renewals") or {}
+    if not isinstance(renewals, dict):
+        raise ConfigError("autodesk.renewals : associer un produit (motif * accepté) à une date AAAA-MM-JJ")
     return AutodeskConfig(import_dir=_expand(a.get("import_dir")), inactive_days=inactive, annual_costs=parsed,
+                          renewals={str(k): _date(v, f"autodesk.renewals.{k}") for k, v in renewals.items()},
                           api=_parse_autodesk_api(a.get("api")))
 
 
@@ -479,7 +543,7 @@ def _parse_autodesk_api(c) -> AutodeskApiConfig | None:
                              base_url=base, timeout_s=timeout)
 
 
-PERIODS = ("last-month", "this-month", "last-week", "last-7d", "last-year")
+PERIODS = ("last-month", "this-month", "last-week", "last-7d", "last-quarter", "last-year")
 
 
 def _as_list(value) -> list[str]:
@@ -582,6 +646,11 @@ def _parse_email(e: dict) -> EmailConfig:
                 products=_as_list(s.get("products")),
                 attach_excel=bool(s.get("attach_excel", True)),
                 subject=s.get("subject"),
+                views=[str(v).lower() for v in _as_list(s.get("views"))],
+                users=[u.lower() for u in _as_list(s.get("users"))],
+                departments=_as_list(s.get("departments")),
+                sites=_as_list(s.get("sites")),
+                dimension=str(s.get("dimension", "department")).lower(),
             )
         except KeyError as exc:
             raise ConfigError(f"email.subscriptions[{i}] : champ obligatoire manquant {exc}") from None
@@ -589,6 +658,12 @@ def _parse_email(e: dict) -> EmailConfig:
             raise ConfigError(f"Abonnement {sub.name} : aucun destinataire")
         if sub.period not in PERIODS:
             raise ConfigError(f"Abonnement {sub.name} : period doit valoir {', '.join(PERIODS)}")
+        unknown = [v for v in sub.views if v not in SUBSCRIPTION_VIEWS]
+        if unknown:
+            raise ConfigError(f"Abonnement {sub.name} : vue(s) {', '.join(unknown)} inconnue(s) "
+                              f"(possibles : {', '.join(SUBSCRIPTION_VIEWS)})")
+        if sub.dimension not in SUBSCRIPTION_DIMENSIONS:
+            raise ConfigError(f"Abonnement {sub.name} : dimension doit valoir {', '.join(SUBSCRIPTION_DIMENSIONS)}")
         if sub.name.lower() in names:
             raise ConfigError(f"Abonnement en double : {sub.name}")
         names.add(sub.name.lower())

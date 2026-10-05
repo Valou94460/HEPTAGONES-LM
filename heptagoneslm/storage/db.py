@@ -103,6 +103,12 @@ class Database:
             return f"DATEPART(HOUR, {column})"
         return f"CAST(strftime('%H', {column}) AS INTEGER)"
 
+    def day_of(self, column: str) -> str:
+        """Date (sans l'heure) d'une colonne date/heure, en SQL."""
+        if self.dialect == "mssql":
+            return f"CAST({column} AS DATE)"
+        return f"date({column})"
+
     def weekday_of(self, column: str) -> str:
         """Jour de semaine d'une colonne date/heure, lundi = 0 (indépendant de DATEFIRST)."""
         if self.dialect == "mssql":

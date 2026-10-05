@@ -202,7 +202,7 @@ Lancer `HeptagonesLM.exe` (double-clic) ou `heptagoneslm web --demo --open`.
 | Id | Objectif | Étapes | Résultat attendu | Statut |
 |---|---|---|---|:---:|
 | WEB-01 🔴 | Ouverture | Lancer l'interface | Tableau de bord affiché, badge « Collectes OK », plage des données affichée (barre latérale) | ☐ |
-| WEB-02 🔴 | 16 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
+| WEB-02 🔴 | 18 vues | Cliquer chaque entrée de la barre latérale | Chaque onglet affiche son tableau (et son graphique le cas échéant), aucun message d'erreur | ☐ |
 | WEB-03 | Préréglages de période | Tester 7 j, 30 j, mois en cours, mois précédent, année, toutes les données | Dates « Du / Au » cohérentes, données rechargées | ☐ |
 | WEB-04 | Dates personnalisées | Saisir des dates | Préréglage passe à « Personnalisée », données de la période | ☐ |
 | WEB-05 | Début après la fin | Du > Au | Message « La date de début doit précéder la date de fin » | ☐ |
@@ -362,6 +362,20 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | OPT-10 🔴 | API Autodesk : synchronisation | `autodesk-sync --dry-run` puis `autodesk-sync` ; rapport « Autodesk · utilisateurs nommés » | Lignes utilisateur × produit lues ; dernière utilisation et jours d'utilisation identiques au portail pour 5 utilisateurs | ☐ |
 | OPT-11 | API Autodesk : renouvellement | Deux collectes à plus de 24 h d'intervalle | Une synchronisation par jour, jeton renouvelé sans reconnexion | ☐ |
 | OPT-08 | Autodesk nominatif : dossier surveillé | Déposer un export dans `autodesk.import_dir`, attendre la collecte suivante | Importé une seule fois ; un fichier illisible est journalisé sans faire échouer la collecte | ☐ |
+
+### 5.10 septies Achats : prévision, renouvellements, projets, rapports sur mesure (ACH)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| ACH-01 🔴 | Prévision | *Achats › Prévision*, période « Tout » ; filtrer un produit | Pic prévu à 3 / 6 / 12 mois, nécessaires, marge, écart ; graphique historique (trait plein) puis prévision (pointillés) ; « Historique insuffisant » sous 4 semaines de données | ☐ |
+| ACH-02 | Prévision : refus | Produit avec refus dans les 90 derniers jours | Écart d'au moins +1 et mention « besoin réel sous-estimé » | ☐ |
+| ACH-03 🔴 | Renouvellements | Feature qui expire dans moins de 12 mois (fichier de licence) ; `renewal:` sur une règle `products` | Ligne par échéance, source « Fichier de licence » ou « Contrat (configuration) » ; jours restants ; quantité proposée ; économie / budget si `annual_cost` renseigné | ☐ |
+| ACH-04 | Renouvellements : pas de baisse en tension | Produit saturé ou avec refus dont l'échéance approche | Jamais proposé à la baisse | ☐ |
+| ACH-05 | Renouvellements Autodesk | *Administration › Coûts et échéances* : date de fin d'abonnement d'un produit | Produit présent dans « Renouvellements », à renouveler = licences actives | ☐ |
+| ACH-06 🔴 | Projets | *Administration › Projets* : importer un CSV `utilisateur;projet` (export des membres d'un groupe AD) ; « Répartition » par Projet | Projets importés listés avec leur nombre d'utilisateurs ; heures et coût refacturé par projet ; utilisateurs non affectés sous « (non renseigné) » | ☐ |
+| ACH-07 | Projets : règles | Règles `projects:` (poste, service) ; utilisateur absent du CSV | Session rangée par la première règle correspondante ; l'import CSV prime | ☐ |
+| ACH-08 🔴 | Rapport planifié sur mesure | *Administration › Rapports planifiés* : nouveau rapport (vues Prévision, Renouvellements, Répartition par projet), « Envoyer un essai » | Message reçu avec une section par vue ; classeur joint d'une feuille par vue ; l'essai n'empêche pas l'envoi planifié de la période | ☐ |
+| ACH-09 | Rapport trimestriel | `period: last-quarter` ; `send-report --skip-sent` deux jours de suite | Trimestre précédent envoyé une seule fois | ☐ |
 
 ### 5.10 ter Serveurs RLM (RLM)
 
