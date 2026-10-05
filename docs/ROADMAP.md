@@ -41,7 +41,7 @@ selon les priorités des premiers clients.
 | **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1), API Autodesk Business Success Plan validée sur un compte réel, usage quotidien dans toutes les rubriques (26.3.3) : licences inactives / jamais utilisées, coût récupérable | — |
 | Cloud / SaaS | Oui | ❌ | 27.2 |
 | SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
-| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.11, environ 75 pages), plan de test, guide d'installation | — |
+| Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.12, environ 80 pages), plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
 > Le comparatif corrigé (version 26.3.0) reprend ce tableau : les intégrations ITSM, les rôles
@@ -95,7 +95,7 @@ Server 2025 (8 features identiques à `lmstat`, refus hors du groupe, PV produit
 | Exploitation ✅ | Setup sans console, bouton « Quitter », icône sur le bureau, relance automatique de l'interface, garde-fou contre le simulateur en production. | 1 j |
 | Setup signé (procédure prête) | Signature de code de `HeptagonesLM-Setup.exe` (plus d'alerte SmartScreen) dès qu'un certificat de signature de code est disponible. | ½ j |
 
-### 26.4.0 — Analytics et achats (développée, à publier)
+### 26.4.0 — Analytics et achats (publiée le 05/10/2026)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|

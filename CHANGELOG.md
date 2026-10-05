@@ -5,7 +5,7 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
-## [26.4.0] — en préparation
+## [26.4.0] — 2026-10-05
 
 ### Nouveautés
 - **Prévision du besoin** (rubrique *Achats › Prévision*) : pic de jetons prévu à 3, 6 et 12 mois par produit,
@@ -320,7 +320,8 @@ Première version publiée (développée sous le nom de travail FreeLM).
 - CI : tests Linux / Windows, SQL Server 2022, navigateur (Playwright), construction de l'exécutable ;
   publication automatique des releases.
 
-[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.3...HEAD
+[Non publié]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.4.0...HEAD
+[26.4.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.3...v26.4.0
 [26.3.3]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.3.0...v26.3.3
 [26.3.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
 [26.2.0]: https://github.com/Valou94460/HEPTAGONES-LM/compare/v26.1.1...v26.3.0
