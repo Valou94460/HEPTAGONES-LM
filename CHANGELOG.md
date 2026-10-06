@@ -5,6 +5,22 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 
 ## [Non publié]
 
+## [26.5.0] — 2026-10-06
+
+### Nouveautés — « Prise en main »
+- **Navigation en 6 entrées** (Tableau de bord, En direct, Analyse, Optimisation, Achats, Données) plus
+  Administration pour les administrateurs ; les vues d'une rubrique sont des onglets. Les noms des vues sont
+  inchangés et les anciens liens (`#type=…`) fonctionnent toujours. Toutes les options sont conservées.
+- **Accueil « À traiter »** : pénuries, économies possibles, échéances proches, avec un bouton vers la vue utile.
+- **Filtres contextuels** (ceux qui ne s'appliquent pas à la vue sont masqués, avec une note) et **tableaux
+  lisibles** (colonnes essentielles, bouton pour afficher toutes les colonnes).
+- **Aide intégrée** : glossaire en bulles « ? » sur les en-têtes, messages explicites sur les pages vides.
+- **Visite guidée** à la première connexion (5 étapes selon le rôle), mémorisée côté serveur par utilisateur
+  (schéma v10, table `user_pref`), relançable par « Revoir la visite guidée ». Non proposée sur la démonstration
+  ni quand la page est ouverte sur un rapport précis.
+- **Checklist de démarrage** de l'administrateur (serveurs, coûts, échéances, projets, e-mail) dans
+  Administration et en carte « Mise en route » sur le tableau de bord (`/api/admin/checklist`).
+
 ## [26.4.0] — 2026-10-05
 
 ### Nouveautés

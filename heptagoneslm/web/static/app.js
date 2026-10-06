@@ -300,6 +300,80 @@
   /* -- Menu mobile ------------------------------------------------------------ */
   function closeMenu() { $("sidebar").classList.remove("open"); $("menu").setAttribute("aria-expanded", "false"); }
 
+  /* -- Visite guidée (première connexion) -------------------------------------------- */
+  let tour = null;   // { step, steps }
+  function tourSteps() {
+    const role = meta.admin ? "admin" : (meta.access && !meta.access.global ? "manager" : "reader");
+    const intro = {
+      reader: ["Bienvenue dans HeptagonesLM", "Vous voyez l'usage de toutes les licences, en lecture seule. Cette visite dure une minute."],
+      manager: ["Bienvenue dans HeptagonesLM", `Vous ne voyez que vos services (${(meta.access.departments || []).join(", ") || "périmètre de votre rôle"}), exports compris. Cette visite dure une minute.`],
+      admin: ["Bienvenue, administrateur", "Vous voyez tout et vous pouvez configurer l'application. Cette visite dure une minute, puis une checklist vous guide."],
+    }[role];
+    const last = role === "admin"
+      ? { title: "Terminez la configuration", text: "L'Administration contient une checklist de démarrage : elle montre ce qui manque (coûts, échéances, projets) et évite les pages vides.", type: "admin", target: "#checklist" }
+      : { title: "Exporter et demander de l'aide", text: "Chaque vue s'exporte en Excel, CSV ou JSON. Passez la souris sur un « ? » d'un en-tête de colonne pour lire sa définition.", type: "summary", target: ".exports" };
+    return [
+      { title: intro[0], text: intro[1], type: "dashboard", target: null },
+      { title: "Ce qui demande votre attention", text: "Le tableau de bord liste ce qu'il y a à traiter : refus, économies, échéances. Chaque carte ouvre la bonne vue.", type: "dashboard", target: "#todo" },
+      { title: "Un menu en six entrées", text: "Les vues sont regroupées en onglets : Analyse, Optimisation, Achats, Données.", type: "dashboard", target: "#nav", menu: true },
+      { title: "Des filtres qui s'adaptent", text: "Seuls les filtres utiles à la vue s'affichent. Les filtres actifs restent en surbrillance et le bouton Réinitialiser les efface.", type: "summary", target: ".filterbar" },
+      last,
+    ];
+  }
+  function postPrefs(action) {
+    return fetch("api/prefs", { method: "POST", credentials: "same-origin", headers: { "X-HeptagonesLM": "1", "Content-Type": "application/json" }, body: JSON.stringify({ onboarding: action }) }).catch(() => null);
+  }
+  function startTour() {
+    tour = { step: 0, steps: tourSteps() };
+    showTourStep();
+  }
+  function endTour(done = true) {
+    tour = null;
+    document.querySelectorAll(".tour-spot").forEach(e => e.classList.remove("tour-spot"));
+    const layer = $("tour-layer"); if (layer) layer.remove();
+    closeMenu();
+    if (done) postPrefs("done");
+  }
+  async function showTourStep() {
+    if (!tour) return;
+    const st = tour.steps[tour.step];
+    if (state.type !== st.type) { go({ type: st.type }); await waitForView(); }
+    if (!tour) return;
+    document.querySelectorAll(".tour-spot").forEach(e => e.classList.remove("tour-spot"));
+    if (st.menu && window.innerWidth <= 960) $("sidebar").classList.add("open"); else closeMenu();
+    let layer = $("tour-layer");
+    if (!layer) { layer = document.createElement("div"); layer.id = "tour-layer"; document.body.appendChild(layer); }
+    const n = tour.steps.length;
+    layer.innerHTML = `<div class="tour-scrim"></div><div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">` +
+      `<h2 id="tour-title">${esc(st.title)}</h2><p>${esc(st.text)}</p><div class="tour-row"><span class="tour-dots" aria-label="Étape ${tour.step + 1} sur ${n}">` +
+      tour.steps.map((_, i) => `<i class="${i <= tour.step ? "on" : ""}"></i>`).join("") + `</span>` +
+      (tour.step > 0 ? `<button type="button" class="btn ghost" id="tour-prev">Précédent</button>` : `<button type="button" class="btn ghost" id="tour-skip">Passer</button>`) +
+      `<button type="button" class="btn primary" id="tour-next">${tour.step === n - 1 ? "Terminer" : "Suivant"}</button></div></div>`;
+    const target = st.target && document.querySelector(st.target);
+    if (target && !target.hidden) { target.classList.add("tour-spot"); target.scrollIntoView({ block: "nearest" }); }
+    $("tour-next").addEventListener("click", () => { if (tour.step === n - 1) endTour(); else { tour.step++; showTourStep(); } });
+    const prev = $("tour-prev"); if (prev) prev.addEventListener("click", () => { tour.step--; showTourStep(); });
+    const skip = $("tour-skip"); if (skip) skip.addEventListener("click", () => endTour());
+    $("tour-next").focus();
+  }
+  function waitForView() {
+    return new Promise(resolve => {
+      const started = Date.now();
+      const tick = () => { if (!$("view").classList.contains("loading") && shownType === state.type) resolve(); else if (Date.now() - started > 8000) resolve(); else setTimeout(tick, 80); };
+      setTimeout(tick, 60);
+    });
+  }
+  let deepLink = false;     // la page a été ouverte sur un rapport précis
+  async function maybeStartTour() {
+    if (meta.demo) return;                       // pas de visite sur la démonstration
+    if (deepLink) return;                        // lien profond (rapport partagé, retour de connexion) : on ne détourne pas
+    try {
+      const prefs = await fetchJSON("api/prefs");
+      if (!prefs.onboarding_done) startTour();
+    } catch (e) { /* préférences indisponibles : pas de visite */ }
+  }
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && tour) endTour(); });
+
   /* -- Bulles d'aide ("?") ----------------------------------------------------------- */
   function bindHelp() {
     const show = el => { const b = el.getBoundingClientRect(); C.showTip(`<div class="t-row"><span>${esc(el.dataset.help)}</span></div>`, b.left, b.bottom); };
@@ -323,6 +397,7 @@
     document.addEventListener("click", ev => { if (!$("sidebar").contains(ev.target)) closeMenu(); });
 
     bindHelp();
+    deepLink = /type=/.test(location.hash);
     loadHash();
     try {
       meta = await fetchJSON("api/meta");
@@ -431,6 +506,8 @@
 
     applyPreset();
     changed();
+    $("replay-tour").addEventListener("click", () => { closeMenu(); startTour(); });
+    maybeStartTour();
   }
 
   function visibleGroups() {
@@ -573,6 +650,25 @@
     if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
     return data;
   }
+  const CHECK_TARGET = { servers: "servers-card", costs: "costs-card", renewals: "costs-card", projects: "projects-card", reports: "subs-card" };
+  async function loadChecklist() {
+    const box = $("checklist");
+    if (!box) return;
+    let c;
+    try { c = await fetchJSON("api/admin/checklist"); } catch (e) { return; }
+    if (!c || !c.items) return;
+    const pct = c.total ? Math.round(100 * c.done / c.total) : 0;
+    box.hidden = false;
+    box.innerHTML = `<div class="card-head"><div><h2>Terminer la configuration</h2>
+      <div class="sub">${c.done} étape${c.done > 1 ? "s" : ""} sur ${c.total} terminée${c.done > 1 ? "s" : ""}.</div></div></div>
+      <div class="card-body"><div class="check-progress" aria-hidden="true"><i style="width:${pct}%"></i></div>
+      <ul class="check-list">${c.items.map(i => `<li class="check-item"><span class="mark ${i.ok ? "ok" : ""}" aria-hidden="true">${i.ok ? "✓" : ""}</span>
+        <span><b>${esc(i.label)}</b>${i.optional ? ' <span class="muted">(facultatif)</span>' : ""}${i.detail ? `<br><span class="muted">${esc(i.detail)}</span>` : ""}</span>
+        ${!i.ok && CHECK_TARGET[i.action] ? `<button type="button" class="btn small ghost" data-goto="${CHECK_TARGET[i.action]}">Y aller</button>` : ""}</li>`).join("")}</ul></div>`;
+    box.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", () => {
+      const t = $(b.dataset.goto); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+  }
   let adminEdit = null;      // serveur en cours de modification : null (ajout) | nom d'origine
   async function renderAdmin() {
     shownType = "admin";
@@ -585,7 +681,8 @@
     const status = s => !s.status ? '<span class="muted">pas encore collecté</span>'
       : `<span class="badge sev ${s.status === "OK" ? "sev-good" : "sev-critical"}">${esc(s.status)}</span> <span class="muted">${esc(fmt(s.last_run, "datetime"))}</span>`;
     view.innerHTML = `
-      <section class="card"><div class="card-head"><div><h2>Serveurs de licences</h2>
+      <section class="card" id="checklist" hidden style="margin-bottom:16px"></section>
+      <section class="card" id="servers-card"><div class="card-head"><div><h2>Serveurs de licences</h2>
         <div class="sub">Pris en compte par la collecte suivante (toutes les 5 minutes). Les chemins de lmutil / rlmutil restent réglés par l'assistant d'installation.</div></div></div>
         <div class="card-body">
         ${ro ? `<div class="alert sev-warning"><span class="sev-icon" aria-hidden="true">!</span><div class="alert-body"><div class="alert-detail">${esc(ro)}</div></div></div>` : ""}
@@ -640,6 +737,7 @@
       <section class="card" style="margin-top:16px" id="subs-card"><div class="card-head"><div><h2>Rapports planifiés</h2>
         <div class="sub">Envoyés par e-mail chaque jour, semaine, mois ou trimestre selon la période : vues choisies, filtres, classeur Excel joint (une feuille par vue).</div></div></div>
         <div class="card-body" id="subs-body"><p class="muted">Chargement…</p></div></section>`;
+    loadChecklist();
     const form = () => ({ name: $("srv-name").value.trim(), port_at_host: $("srv-target").value.trim(),
       license_type: $("srv-type").value, enabled: $("srv-enabled").checked });
     const say = (id, msg, ok) => { const e = $(id); e.textContent = msg; e.style.color = ok === false ? "var(--critical)" : ok ? "var(--good)" : ""; };
@@ -902,6 +1000,17 @@
       `<h2>${esc(x.title)}</h2><p>${esc(x.detail || "")}</p>` +
       (meta.reports[x.target] ? `<button type="button" class="btn primary" data-go="${esc(x.target)}">${esc(x.label)}</button>` : "") + `</article>`).join("")
       : `<div class="alerts-ok"><span class="status-dot sev-good" aria-hidden="true">✓</span>Rien à traiter : pas de pénurie, pas d'économie évidente, pas d'échéance dans les 12 mois.</div>`;
+
+    if (meta.admin) {
+      fetchJSON("api/admin/checklist").then(c => {
+        if (!c || !c.total || c.done >= c.total || shownType !== "dashboard" || !$("todo")) return;
+        const missing = c.items.filter(i => !i.ok && !i.optional), rest = missing.length;
+        if (!rest) return;
+        $("todo").insertAdjacentHTML("afterbegin", `<article class="todo-card"><span class="todo-pill sev-info">Mise en route</span>` +
+          `<h2>Terminer la configuration (${c.done}/${c.total})</h2><p>${rest} étape${rest > 1 ? "s" : ""} à finir : ${esc(missing.map(i => i.label.toLowerCase()).join(", "))}.</p>` +
+          `<button type="button" class="btn primary" data-go="admin">Ouvrir la liste</button></article>`);
+      }).catch(() => {});
+    }
 
     // Alertes
     const alerts = r.alerts || [];

@@ -110,12 +110,12 @@ Maquette validée avant le développement. Les liens partagés actuels continuen
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
-| Refonte de la navigation | Menu organisé par question (« Où en suis-je ? », « Où je gaspille ? », « Que dois-je acheter ? », « Qui utilise quoi ? ») : 18 entrées ramenées à environ 8, vues voisines fusionnées (Efficacité + Optimisation + Licences inutilisées, Contention + Refus). | 4 j |
-| Accueil orienté actions | Bloc « À traiter » : alertes, économies possibles, échéances proches, chacun avec un bouton. | 1 j |
-| Filtres et tableaux lisibles | Filtres contextuels (seuls ceux qui s'appliquent à la page), filtres actifs visibles ; colonnes essentielles d'abord, « Afficher plus de colonnes » ; recommandation en première colonne. | 2 j |
-| Aide intégrée | Glossaire (bulle d'aide sur chaque terme : jeton, taux en heures ouvrées, recommandé…), pages vides qui expliquent comment les remplir. | 1 j |
-| Onboarding | Visite guidée de 5 étapes adaptée au rôle (lecteur, responsable de service, administrateur), mémorisée par utilisateur côté serveur (schéma v10), « Revoir la visite » dans le menu. | 2 j |
-| Checklist de démarrage (administrateur) | Serveurs de licences, coûts, échéances, projets, SMTP : ce qui est fait, ce qui manque, avec le lien pour le renseigner. | 1 j |
+| Refonte de la navigation ✅ | Menu en 6 entrées (Tableau de bord, En direct, Analyse, Optimisation, Achats, Données) + Administration ; les vues d'une rubrique deviennent des onglets, avec leurs noms d'origine. Aucune option retirée. | 4 j |
+| Accueil orienté actions ✅ | Bloc « À traiter » : alertes, économies possibles, échéances proches, chacun avec un bouton. | 1 j |
+| Filtres et tableaux lisibles ✅ | Filtres contextuels (seuls ceux qui s'appliquent à la page), filtres actifs visibles ; colonnes essentielles d'abord, « Afficher plus de colonnes » ; recommandation en première colonne. | 2 j |
+| Aide intégrée ✅ | Glossaire (bulle d'aide sur chaque terme : jeton, taux en heures ouvrées, recommandé…), pages vides qui expliquent comment les remplir. | 1 j |
+| Onboarding ✅ | Visite guidée de 5 étapes adaptée au rôle (lecteur, responsable de service, administrateur), mémorisée par utilisateur côté serveur (schéma v10), « Revoir la visite » dans le menu. | 2 j |
+| Checklist de démarrage (administrateur) ✅ | Serveurs de licences, coûts, échéances, projets, SMTP : ce qui est fait, ce qui manque, avec le lien pour le renseigner. | 1 j |
 
 ### 26.6.0 — Contrats, langue et exploitation (cible : fin novembre 2026, ~14 j)
 

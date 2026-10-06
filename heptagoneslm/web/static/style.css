@@ -432,3 +432,25 @@ td.empty-cell { color: var(--muted); }
 .help { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-weight: 700; line-height: 1; cursor: help; vertical-align: 1px; margin-left: 3px; }
 .help:hover, .help:focus-visible { color: var(--accent); border-color: var(--accent); outline: none; }
 td.empty { padding: 18px 16px; line-height: 1.5; }
+
+/* Visite guidée */
+.link-btn { background: none; border: 0; padding: 4px 0; color: var(--accent); cursor: pointer; text-align: left; font-size: 12.5px; }
+.link-btn:hover { text-decoration: underline; }
+.tour-scrim { position: fixed; inset: 0; background: rgba(8, 10, 14, 0.5); z-index: 60; }
+.tour-spot { position: relative; z-index: 65; outline: 3px solid var(--accent); outline-offset: 3px; border-radius: 12px; background: var(--surface); }
+.tour-card { position: fixed; right: 16px; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); width: min(400px, calc(100vw - 32px)); z-index: 70; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.tour-card h2 { margin: 0; font-size: 17px; }
+.tour-card p { margin: 0; color: var(--text-2); }
+.tour-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.tour-dots { display: flex; gap: 6px; margin-right: auto; }
+.tour-dots i { width: 8px; height: 8px; border-radius: 50%; background: var(--border); }
+.tour-dots i.on { background: var(--accent); }
+/* Checklist de démarrage (Administration, tableau de bord) */
+.check-list { display: flex; flex-direction: column; }
+.check-item { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 11px 0; border-bottom: 1px solid var(--border); }
+.check-item:last-child { border-bottom: 0; }
+.check-item .mark { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; background: color-mix(in srgb, var(--warning) 22%, transparent); color: var(--text); }
+.check-item .mark.ok { background: color-mix(in srgb, var(--good) 22%, transparent); }
+.check-item small { grid-column: 2; color: var(--text-2); }
+.check-progress { height: 8px; background: var(--surface-2); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+.check-progress i { display: block; height: 100%; background: var(--good); }
