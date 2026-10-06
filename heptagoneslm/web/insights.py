@@ -542,6 +542,56 @@ def _daily_sessions(sessions: list[dict], days: list[date]) -> tuple[list[int], 
     return [len(users.get(d, ())) for d in days], [round(hours.get(d, 0.0), 1) for d in days]
 
 
+def _plural(n: int, one: str, many: str | None = None) -> str:
+    return f"{n} {one if n < 2 else (many or one + 's')}"
+
+
+def _money(value: float, currency: str) -> str:
+    return f"{value:,.0f}".replace(",", "\u202f") + "\u00a0" + currency
+
+
+def compute_todo(db: Database, p, data, opt: list[dict], nd_rows: list[dict], today: date | None = None) -> list[dict]:
+    """Actions à traiter en tête du tableau de bord : pénuries, économies possibles, échéances proches."""
+    from heptagoneslm.web import renewal
+
+    items: list[dict] = []
+    short = sorted((s for s in data.summaries if s.denials), key=lambda s: -s.denials)
+    biz = business_hours_count(p.start, p.end, p.business_hours)
+    tense = [s for s in data.summaries if not s.denials and biz and s.saturated_hours >= SATURATION_SHARE * biz]
+    if short:
+        total = sum(s.denials for s in short)
+        items.append({"kind": "shortage", "severity": "critical", "title": _plural(len(short), "produit") + " en pénurie",
+                      "detail": ", ".join(f"{s.label} : {_plural(s.denials, 'refus', 'refus')}" for s in short[:2])
+                      + (f" ({_plural(total, 'refus', 'refus')} au total)" if len(short) > 2 else "") + ". Des utilisateurs ont attendu.",
+                      "target": "denials", "label": "Voir les refus"})
+    elif tense:
+        items.append({"kind": "saturation", "severity": "warning", "title": _plural(len(tense), "produit") + " souvent saturé" + ("s" if len(tense) > 1 else ""),
+                      "detail": ", ".join(f"{s.label} ({s.saturated_hours} h)" for s in tense[:2]) + ".",
+                      "target": "contention", "label": "Voir la contention"})
+    rows = list(opt) + list(nd_rows)
+    has_costs = any(r["unit_cost"] is not None for r in rows)
+    savings = sum(r["savings"] or 0 for r in rows)
+    surplus = sum(r["surplus"] for r in rows)
+    if has_costs and savings > 0:
+        best = sorted((r for r in rows if r["savings"]), key=lambda r: -r["savings"])[:2]
+        items.append({"kind": "savings", "severity": "info", "title": _money(savings, p.currency) + " d'économie possible par an",
+                      "detail": " ; ".join(f"{r['product']} : {r['advice'].lower()}" for r in best) + ".",
+                      "target": "optimization", "label": "Voir les économies"})
+    elif surplus > 0:
+        items.append({"kind": "surplus", "severity": "info", "title": _plural(surplus, "jeton") + " en trop",
+                      "detail": "Renseignez le coût annuel des produits pour chiffrer l'économie.",
+                      "target": "efficiency", "label": "Voir l'efficacité"})
+    ref = today or min(date.today(), (p.end - timedelta(seconds=1)).date())
+    upcoming = sorted((e for e in renewal.renewals(db, p, ref) if e["expires_on"] >= ref), key=lambda e: e["expires_on"])
+    if upcoming:
+        nxt = upcoming[0]
+        items.append({"kind": "renewal", "severity": "warning" if (nxt["expires_on"] - ref).days <= 60 else "info",
+                      "title": _plural(len(upcoming), "échéance") + " dans les 12 mois",
+                      "detail": f"La prochaine : {nxt['product']}, le {nxt['expires_on']:%d/%m/%Y}.",
+                      "target": "renewal", "label": "Préparer le renouvellement"})
+    return items
+
+
 def report_dashboard(db: Database, p) -> dict:
     api = _api()
     length = p.end - p.start
@@ -593,6 +643,8 @@ def report_dashboard(db: Database, p) -> dict:
     collections = api.collections_status(db)
     expiring = expirations(db, p)
     alerts = compute_alerts(db, p, data, collections, expiring)
+    nd = named_data(db, p)
+    todo = compute_todo(db, p, data, opt, named_optimization_rows(nd, p) if nd else [])
 
     products = [{
         "product": s.label, "server": s.server, "issued": s.issued, "peak": s.peak_in_use,
@@ -635,6 +687,7 @@ def report_dashboard(db: Database, p) -> dict:
         "currency": p.currency,
         "kpis": kpis,
         "alerts": alerts,
+        "todo": todo,
         "trend": {"x": [d.isoformat() for d in days],
                   "business_utilization": hs["business_utilization"],
                   "peak_utilization": hs["peak_utilization"]},

@@ -420,3 +420,12 @@ td.empty-cell { color: var(--muted); }
 .demo-banner code { background: rgba(0, 0, 0, .06); padding: 1px 5px; border-radius: 4px; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .demo-banner { background: #3D3000; color: #FFE7A0; border-color: #6B5500; } }
 :root[data-theme="dark"] .demo-banner { background: #3D3000; color: #FFE7A0; border-color: #6B5500; }
+
+/* À traiter (tableau de bord) */
+.todo-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; margin-bottom: 14px; }
+.todo-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 8px; align-items: flex-start; box-shadow: var(--shadow); }
+.todo-card h2 { margin: 0; font-size: 18px; line-height: 1.25; }
+.todo-card p { margin: 0; color: var(--text-2); flex: 1; }
+.todo-pill { font-size: 11.5px; font-weight: 700; border-radius: 99px; padding: 1px 10px; background: color-mix(in srgb, var(--sev) 16%, transparent); color: var(--text); }
+.todo-grid .alerts-ok { grid-column: 1 / -1; }
+.filter-note { font-size: 12.5px; color: var(--text-2); border: 1px dashed var(--border); border-radius: 10px; padding: 3px 10px; }

@@ -47,6 +47,26 @@
     admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
     other: '<circle cx="12" cy="12" r="9"/>',
   };
+  /* Filtres : seuls ceux que la vue prend en compte sont affichés (les autres seraient sans effet). */
+  const FILTERS_BASE = ["period", "server", "product"];
+  const FILTER_SCOPE = {
+    live: ["server", "product"], timeseries: FILTERS_BASE, heatmap: FILTERS_BASE, contention: FILTERS_BASE,
+    efficiency: FILTERS_BASE, optimization: FILTERS_BASE, unused: FILTERS_BASE, reservations: FILTERS_BASE,
+    forecast: FILTERS_BASE, renewal: FILTERS_BASE, denials: [...FILTERS_BASE, "user", "department"],
+    named: [...FILTERS_BASE, "user", "department"], collections: ["period", "server"],
+  };
+  const FILTER_NOTE = { forecast: "Part de la fin de la période choisie ; lit les 24 derniers mois.", renewal: "Part de la fin de la période choisie ; usage des 90 derniers jours.", live: "Dernier sondage : pas de période." };
+  /* Colonnes essentielles des tableaux larges ; « Afficher plus de colonnes » donne le reste (les exports contiennent tout). */
+  const COMPACT = {
+    summary: ["product", "issued", "peak", "business_utilization", "saturated_hours", "denials"],
+    optimization: ["product", "advice", "savings", "annual_cost", "issued", "recommended"],
+    forecast: ["product", "advice", "needed_12", "gap", "impact", "issued"],
+    renewal: ["product", "expires_on", "advice", "delta", "impact"],
+    sessions: ["product", "username", "hostname", "checkout_time", "checkin_time", "hours_in_period", "server"],
+  };
+  const allColumns = {};
+  let siteAvailable = false;
+  const TODO_LABEL = { critical: "Urgent", serious: "Important", warning: "À préparer", info: "Économie" };
   const SEV_LABEL = { critical: "Critique", serious: "Important", warning: "Attention", info: "Info" };
   const KPI_TARGET = {
     utilization: { type: "timeseries", metric: "utilization" },
@@ -300,7 +320,8 @@
     deps.push({ value: "(non renseigné)", label: "(non renseigné)" });
     multis.department = createMulti($("ms-department"), "Services", deps, "department");
     // Sites : proposés dès que des règles « sites » classent les postes
-    if ((meta.sites || []).length) {
+    siteAvailable = (meta.sites || []).length > 0;
+    if (siteAvailable) {
       const sites = meta.sites.map(x => ({ value: x, label: x }));
       sites.push({ value: "(non renseigné)", label: "(non renseigné)" });
       multis.site = createMulti($("ms-site"), "Sites", sites, "site");
@@ -425,6 +446,12 @@
     });
     document.querySelectorAll("#tabs [data-tab-type]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabType === state.type)));
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
+    const scope = FILTER_SCOPE[state.type] || ["period", "server", "product", "user", "department", "site"];
+    const on = k => scope.includes(k);
+    $("presets").hidden = !on("period"); document.querySelector(".filterbar .dates").hidden = !on("period");
+    for (const k of ["server", "product", "user", "department"]) $("ms-" + k).hidden = !on(k);
+    $("ms-site").hidden = !(on("site") && siteAvailable);
+    const fn = $("filter-note"); fn.textContent = FILTER_NOTE[state.type] || ""; fn.hidden = !FILTER_NOTE[state.type];
     document.querySelector(".filterbar").hidden = state.type === "admin";   // pas de filtres sur l'administration
     const single = grp.types.length < 2;
     $("page-title").textContent = single ? ((meta && meta.reports[state.type]) || grp.label) : grp.label;
@@ -747,6 +774,7 @@
         <div class="card-head">
           <h2 id="table-title">Chargement…</h2>
           <div class="table-tools">
+            <button id="cols-toggle" class="btn ghost small" type="button" hidden></button>
             <span id="row-count" class="muted"></span>
             <input type="search" id="table-search" placeholder="Rechercher dans le tableau" aria-label="Rechercher dans le tableau">
           </div>
@@ -757,6 +785,7 @@
     $("table-search").value = table.search;
     $("table-search").addEventListener("input", ev => { table.search = ev.target.value.toLowerCase(); table.shown = PAGE; renderTable(); });
     $("more").addEventListener("click", () => { table.shown += PAGE * 5; renderTable(); });
+    $("cols-toggle").addEventListener("click", () => { allColumns[current.type] = !allColumns[current.type]; renderTable(); });
     view.querySelectorAll("[data-opt]").forEach(b => b.addEventListener("click", () => { state[b.dataset.opt] = b.dataset.value; changed(); }));
     const dim = $("dimension");
     if (dim) {
@@ -803,6 +832,7 @@
   function renderDashboard(r) {
     const v = $("view");
     v.innerHTML =
+      `<section class="todo-grid" id="todo" aria-label="À traiter"></section>` +
       `<section class="alerts" id="alerts" aria-label="Alertes"></section>` +
       `<section class="kpi-grid" id="kpi-grid" aria-label="Indicateurs clés"></section>` +
       `<div class="grid">` +
@@ -814,6 +844,14 @@
       card("span-4", "Profil horaire", "Occupation moyenne par jour et heure", goLink("heatmap", "Détail"), `<div id="mini-heat"></div>`) +
       card("span-4", "Serveurs et échéances", "", goLink("collections", "Collectes"), `<div id="servers"></div>`) +
       `</div>`;
+
+    // À traiter : pénuries, économies possibles, échéances proches
+    const todo = r.todo || [];
+    $("todo").innerHTML = todo.length ? todo.map(x =>
+      `<article class="todo-card"><span class="todo-pill sev-${esc(x.severity)}">${esc(TODO_LABEL[x.severity] || "À voir")}</span>` +
+      `<h2>${esc(x.title)}</h2><p>${esc(x.detail || "")}</p>` +
+      (meta.reports[x.target] ? `<button type="button" class="btn primary" data-go="${esc(x.target)}">${esc(x.label)}</button>` : "") + `</article>`).join("")
+      : `<div class="alerts-ok"><span class="status-dot sev-good" aria-hidden="true">✓</span>Rien à traiter : pas de pénurie, pas d'économie évidente, pas d'échéance dans les 12 mois.</div>`;
 
     // Alertes
     const alerts = r.alerts || [];
@@ -1030,12 +1068,23 @@
     return `<span class="badge sev sev-${sev}">${esc(v)}</span>`;
   }
 
+  function visibleColumns(r) {
+    const btn = $("cols-toggle");
+    const keys = COMPACT[r.type];
+    const compact = keys ? keys.map(k => r.columns.find(c => c.key === k)).filter(Boolean) : [];
+    if (compact.length < 3 || compact.length >= r.columns.length) { btn.hidden = true; return r.columns; }
+    const all = !!allColumns[r.type];
+    btn.hidden = false;
+    btn.textContent = all ? "Masquer les colonnes détaillées" : `Afficher plus de colonnes (${r.columns.length - compact.length})`;
+    return all ? r.columns : compact;
+  }
   function renderTable() {
     const r = current;
     const t = $("table");
     if (!r || !t) return;
     if (!r.rows.length) {
       t.innerHTML = `<tbody><tr><td class="empty">Aucune donnée pour ces filtres sur la période.</td></tr></tbody>`;
+      $("cols-toggle").hidden = true;
       $("row-count").textContent = "";
       $("more").hidden = true;
       return;
@@ -1045,11 +1094,12 @@
     let max = 0;
     if (heat) for (const row of rows) for (const c of r.columns) if (NUMERIC.has(c.type) && c.key !== "total" && row[c.key] > max) max = row[c.key];
 
-    const head = "<thead><tr>" + r.columns.map(c => {
+    const cols = visibleColumns(r);
+    const head = "<thead><tr>" + cols.map(c => {
       const sort = table.sortKey === c.key ? (table.sortDir > 0 ? "ascending" : "descending") : "none";
       return `<th class="${NUMERIC.has(c.type) ? "num" : ""}" data-key="${esc(c.key)}" aria-sort="${sort}" scope="col">${esc(c.label)}</th>`;
     }).join("") + "</tr></thead>";
-    const body = rows.slice(0, table.shown).map(row => "<tr>" + r.columns.map(c => {
+    const body = rows.slice(0, table.shown).map(row => "<tr>" + cols.map(c => {
       const v = row[c.key];
       const cls = [NUMERIC.has(c.type) ? "num" : "", v === null || v === undefined ? "empty-cell" : ""].join(" ").trim();
       let style = "";
