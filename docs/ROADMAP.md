@@ -14,7 +14,7 @@ selon les priorités des premiers clients.
 |---|:---:|---|:---:|
 | Monitoring temps réel, par produit / feature, utilisateur / poste | Oui | ✅ Vue « En direct », actualisée chaque minute | — |
 | Historique checkout / check-in, durée des sessions | Oui | ✅ Sessions (lmstat à la minute, log debug à la seconde) | — |
-| Refus (denials) | Oui | ✅ FlexLM (log debug) · ❌ RLM (report log non lu) | 26.5 |
+| Refus (denials) | Oui | ✅ FlexLM (log debug) · ❌ RLM (report log non lu) | 27.1 |
 | Détection de saturation | Oui | ✅ Contention, heures saturées, alerte « plus aucun jeton » | — |
 | Licences sous-utilisées | Oui | ✅ Alerte « sous-utilisé », efficacité des jetons, recommandation | — |
 | Licences **inutilisées** (aucun usage sur la période) | Oui | ✅ Vue dédiée avec coût annuel (26.3) | — |
@@ -24,23 +24,23 @@ selon les priorités des premiers clients.
 | Analytics avancées : **prévision** | Oui | ✅ Prévision à 3 / 6 / 12 mois, fourchette à 90 % (26.4) | — |
 | Optimisation des achats / renouvellements | Oui | ✅ Jetons recommandés, coûts, économies, rapport de renouvellement (26.4) | — |
 | Chargeback (coût par service) | Oui | ✅ Refacturation par service et par projet (26.4) | — |
-| **Idle session monitoring** (inactivité réelle sur le poste) | Oui | 🟡 Seulement les fermetures « INACTIVE » du démon FlexLM | 27.1 |
-| **License harvesting** automatique | Oui | ❌ (nécessite un agent sur les postes) | 27.1 |
-| **Allocation** de licences (quotas par groupe) | Oui | ❌ | 27.1 |
+| **Idle session monitoring** (inactivité réelle sur le poste) | Oui | 🟡 Seulement les fermetures « INACTIVE » du démon FlexLM | 27.2 |
+| **License harvesting** automatique | Oui | ❌ (nécessite un agent sur les postes) | 27.2 |
+| **Allocation** de licences (quotas par groupe) | Oui | ❌ | 27.2 |
 | **Named user** / réservations | Oui | ✅ Vue Réservations, taux d'usage du bénéficiaire (26.3) | — |
 | Token monitoring | Oui | ✅ FlexLM et RLM | — |
 | **Licences empruntées** (borrow) | Oui | ✅ Signalées (sessions, En direct) (26.3) | — |
-| **Dongles** (clés USB de licence) | Oui | ❌ | 26.5 |
-| Gestionnaires de licences | 70+ | 🟡 FlexLM + RLM · ❌ DSLS, Sentinel RMS/HASP, LM-X, LUM… | 26.5 |
+| **Dongles** (clés USB de licence) | Oui | ❌ | 27.1 |
+| Gestionnaires de licences | 70+ | 🟡 FlexLM + RLM · ❌ DSLS, Sentinel RMS/HASP, LM-X, LUM… | 27.1 |
 | Autodesk, Ansys, MATLAB (FlexLM) | Oui | ✅ | — |
 | **ServiceNow, Jira, GLPI, tickets ITSM automatiques** | Oui / selon intégration | ✅ Connecteurs natifs + webhook Teams / Slack (26.3) | — |
-| **Rôles fins par service** | Oui | ✅ Administrateur, lecteur, responsable de service (26.3) · page Administration : serveurs, imports, coûts, rapports planifiés (26.3.3, 26.4) · gestion des rôles en ligne : ❌ | 27.2 |
+| **Rôles fins par service** | Oui | ✅ Administrateur, lecteur, responsable de service (26.3) · page Administration : serveurs, imports, coûts, rapports planifiés (26.3.3, 26.4) · gestion des rôles en ligne : ❌ | 27.3 |
 | On-premise | Oui | ✅ | — |
 | Multi-serveurs | Oui | ✅ (triades comprises) | — |
 | **Multi-sites** | Oui | ✅ Site des postes, filtre et répartition (26.3) | — |
 | **Licences nominatives Autodesk** (utilisateur nommé, sans serveur) | Oui | ✅ Import des exports du portail Autodesk Account (26.3.1), API Autodesk Business Success Plan validée sur un compte réel, usage quotidien dans toutes les rubriques (26.3.3) : licences inactives / jamais utilisées, coût récupérable | — |
-| Cloud / SaaS | Oui | ❌ | 27.2 |
-| SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.2 |
+| Cloud / SaaS | Oui | ❌ | 27.3 |
+| SAM (inventaire logiciel au-delà des serveurs de licences) | Oui | ❌ | 27.3 |
 | Documentation d'exploitation (DEX), plan de test | Non | ✅ DEX (version 1.12, environ 80 pages), plan de test, guide d'installation | — |
 | TMA, support, SLA, résolution d'incidents, astreinte | Selon offre | Offre de service Heptagones (hors logiciel) | — |
 
@@ -104,7 +104,30 @@ Server 2025 (8 features identiques à `lmstat`, refus hors du groupe, PV produit
 | Chargeback par projet ✅ | Projet déduit d'un import CSV (export des membres d'un groupe AD), du poste ou du service ; refacturation par projet, licences Autodesk nommées comprises. | 2 j |
 | Rapports planifiés sur mesure ✅ | Choix des vues, filtres, axe et période (trimestre compris) par abonnement e-mail, une feuille Excel par vue ; gestion et envoi d'essai depuis l'Administration. | 1 j |
 
-### 26.5.0 — Couverture des gestionnaires (cible : fin décembre 2026, ~10 j)
+### 26.5.0 — Prise en main (cible : début novembre 2026, ~10 j)
+
+Maquette validée avant le développement. Les liens partagés actuels continuent de fonctionner (redirections).
+
+| Fonction | Contenu | Effort |
+|---|---|:---:|
+| Refonte de la navigation | Menu organisé par question (« Où en suis-je ? », « Où je gaspille ? », « Que dois-je acheter ? », « Qui utilise quoi ? ») : 18 entrées ramenées à environ 8, vues voisines fusionnées (Efficacité + Optimisation + Licences inutilisées, Contention + Refus). | 4 j |
+| Accueil orienté actions | Bloc « À traiter » : alertes, économies possibles, échéances proches, chacun avec un bouton. | 1 j |
+| Filtres et tableaux lisibles | Filtres contextuels (seuls ceux qui s'appliquent à la page), filtres actifs visibles ; colonnes essentielles d'abord, « Afficher plus de colonnes » ; recommandation en première colonne. | 2 j |
+| Aide intégrée | Glossaire (bulle d'aide sur chaque terme : jeton, taux en heures ouvrées, recommandé…), pages vides qui expliquent comment les remplir. | 1 j |
+| Onboarding | Visite guidée de 5 étapes adaptée au rôle (lecteur, responsable de service, administrateur), mémorisée par utilisateur côté serveur (schéma v10), « Revoir la visite » dans le menu. | 2 j |
+| Checklist de démarrage (administrateur) | Serveurs de licences, coûts, échéances, projets, SMTP : ce qui est fait, ce qui manque, avec le lien pour le renseigner. | 1 j |
+
+### 26.6.0 — Contrats, langue et exploitation (cible : fin novembre 2026, ~14 j)
+
+| Fonction | Contenu | Effort |
+|---|---|:---:|
+| Page Contrats | Produit, fournisseur, date de renouvellement, coût, notes ; rappels par e-mail à J-90, J-60 et J-30 ; alimente le rapport Renouvellements. | 3 j |
+| Interface FR / EN | Sélecteur **FR / EN** dans l'en-tête, choix mémorisé par utilisateur (langue du navigateur par défaut) : interface web complète (menus, rapports, aides, onboarding) puis e-mails et Excel selon la langue de l'abonnement. L'assistant d'installation et le DEX restent en français. | 6 à 8 j |
+| Journal d'audit consultable | Connexions, exports et actions d'administration lisibles dans l'interface (administrateurs). | 1 j |
+| Guide et gabarit Power BI | Branchement sur les vues SQL existantes (`v_session_detail`, `v_usage_hourly`, `v_denial`) et rapport modèle. | 1 j |
+| Badge « nouvelle version » | Les administrateurs voient qu'une version est disponible ; lecture d'un fichier public `version.json` (numéro, date, lien vers les notes) publié à chaque release sur le site Heptagones, ou d'un chemin interne pour les serveurs sans Internet. Désactivé par défaut, n'envoie aucune donnée, n'installe rien. | 1 j |
+
+### 27.1.0 — Couverture des gestionnaires (cible : janvier 2027, ~10 j, plus tôt si un client en a besoin)
 
 Chaque collecteur est validé sur une sortie réelle fournie par un client (test de non-régression).
 
@@ -116,7 +139,7 @@ Chaque collecteur est validé sur une sortie réelle fournie par un client (test
 | Refus RLM (report log) | Foundry, Maxon… | 1 j |
 | IBM LUM / autres à la demande | — | 1 j chacun |
 
-### 27.1.0 — Optimisation active (cible : T1 2027, ~15 j)
+### 27.2.0 — Optimisation active (cible : T1 2027, ~15 j)
 
 | Fonction | Contenu | Effort |
 |---|---|:---:|
@@ -125,11 +148,11 @@ Chaque collecteur est validé sur une sortie réelle fournie par un client (test
 | License harvesting | Règles par produit (ex. inactif 45 min) : avertissement à l'utilisateur, puis libération de la licence (fermeture propre ou `lmremove`), journal des récupérations. | 4 j |
 | Allocation | Quotas par groupe AD générés dans le fichier options FlexLM (`MAX`, `RESERVE`, `INCLUDE`), avec suivi du respect des quotas. | 3 j |
 
-### 27.2.0 — Cloud et SAM (cible : T2 2027, à cadrer)
+### 27.3.0 — Cloud et SAM (cible : T2 2027, à cadrer)
 - Offre hébergée (instance par client, collecteur local relayant vers le cloud).
 - Licences SaaS / nominatives d'autres éditeurs selon les API disponibles (Adobe, Microsoft…), sur le modèle
   du connecteur API Autodesk.
-- Inventaire logiciel des postes (via l'agent 27.1) : premier niveau de SAM.
+- Inventaire logiciel des postes (via l'agent 27.2) : premier niveau de SAM.
 
 ## 3. Hors logiciel : l'offre de service
 

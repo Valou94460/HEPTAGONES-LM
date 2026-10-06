@@ -431,7 +431,7 @@ Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md)
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.2 (ITSM, rôles, prévision, gestionnaires, agent poste, cloud) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.3 (ITSM, rôles, prévision, prise en main, langue, gestionnaires, agent poste, cloud) |
 | [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation (mise en service) |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribuer : environnement, tests, conventions |
