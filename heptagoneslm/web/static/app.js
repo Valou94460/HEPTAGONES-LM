@@ -64,6 +64,46 @@
     renewal: ["product", "expires_on", "advice", "delta", "impact"],
     sessions: ["product", "username", "hostname", "checkout_time", "checkin_time", "hours_in_period", "server"],
   };
+  /* Glossaire : définition affichée au survol (ou au focus) du « ? » des en-têtes de colonnes. */
+  const GLOSSARY = {
+    issued: "Nombre de jetons (licences utilisables par une personne à la fois) que le serveur met à disposition.",
+    peak: "Plus grand nombre de jetons utilisés en même temps sur la période.",
+    avg: "Nombre moyen de jetons utilisés en même temps.",
+    avg_utilization: "Part des jetons utilisés en moyenne, jour et nuit.",
+    peak_utilization: "Part des jetons utilisés au moment du pic.",
+    business_utilization: "Part des jetons utilisés en moyenne du lundi au vendredi, aux heures ouvrées de l'entreprise.",
+    saturated_hours: "Heures pendant lesquelles tous les jetons étaient pris : un utilisateur de plus aurait été refusé.",
+    denials: "Demandes de licence refusées parce qu'aucun jeton n'était libre.",
+    recommended: "Nombre de jetons qui couvre 95 % du temps ouvré : au-delà, les pics restent ponctuels.",
+    surplus: "Jetons émis au-delà du nombre recommandé : économie possible.",
+    unused: "Jetons qui n'ont jamais servi sur la période.",
+    half_share: "Part du temps où au moins la moitié des jetons est utilisée.",
+    saturated_share: "Part du temps où tous les jetons sont pris.",
+    savings: "Économie annuelle si l'excédent n'est pas renouvelé (jetons en trop × coût annuel d'un jeton).",
+    annual_cost: "Coût annuel de ces jetons : jetons émis × coût annuel d'un jeton.",
+    cost_per_hour: "Coût de la période divisé par les heures d'utilisation.",
+    trend: "Jetons gagnés (ou perdus) par mois sur le pic hebdomadaire, tendance linéaire.",
+    range_12: "Plage dans laquelle le pic réel a 9 chances sur 10 de rester dans 12 mois.",
+    needed_3: "Jetons qui couvrent le plus haut pic prévu sur les 3 prochains mois.",
+    needed_6: "Jetons qui couvrent le plus haut pic prévu sur les 6 prochains mois.",
+    needed_12: "Jetons qui couvrent le plus haut pic prévu sur les 12 prochains mois.",
+    margin_12: "Haut de la fourchette à 90 % : jetons à prévoir pour ne presque jamais saturer.",
+    gap: "Jetons nécessaires à 12 mois moins jetons émis : positif, il en manquera.",
+    impact: "Budget annuel supplémentaire (+) ou économie (−) correspondant à l'écart.",
+    forecast: "Besoin prévu sur l'année qui suit l'échéance.",
+    proposal: "Nombre de jetons à renouveler : recommandé ou besoin prévu, jamais à la baisse en cas de refus.",
+    delta: "Jetons à renouveler moins jetons actuels.",
+    days_left: "Jours restant avant l'échéance.",
+    source: "D'où vient la date d'échéance : fichier de licence, contrat déclaré ou abonnement Autodesk.",
+  };
+  const EMPTY_HINT = {
+    renewal: ["Aucune échéance dans les 12 mois.", "Les dates viennent du fichier de licence ou de la configuration (renewal d'une règle products, ou fin d'abonnement Autodesk saisie dans l'Administration)."],
+    forecast: ["Historique insuffisant pour une prévision.", "Il faut au moins 4 semaines de données collectées ; la tendance apparaît dès 8 semaines et la saisonnalité dès 12 mois."],
+    unused: ["Aucune licence inutilisée sur la période : tous les produits ont servi.", ""],
+    named: ["Aucune licence Autodesk nommée connue.", "Importez un export du portail Autodesk ou connectez l'API Autodesk."],
+    reservations: ["Aucune réservation détectée.", "Elles viennent des lignes RESERVE du fichier d'options des serveurs FlexLM."],
+    denials: ["Aucun refus sur la période.", "Les refus ne sont connus que des serveurs dont le journal est collecté."],
+  };
   const allColumns = {};
   let siteAvailable = false;
   const TODO_LABEL = { critical: "Urgent", serious: "Important", warning: "À préparer", info: "Économie" };
@@ -260,6 +300,15 @@
   /* -- Menu mobile ------------------------------------------------------------ */
   function closeMenu() { $("sidebar").classList.remove("open"); $("menu").setAttribute("aria-expanded", "false"); }
 
+  /* -- Bulles d'aide ("?") ----------------------------------------------------------- */
+  function bindHelp() {
+    const show = el => { const b = el.getBoundingClientRect(); C.showTip(`<div class="t-row"><span>${esc(el.dataset.help)}</span></div>`, b.left, b.bottom); };
+    document.addEventListener("mouseover", ev => { const h = ev.target.closest && ev.target.closest(".help"); if (h) show(h); });
+    document.addEventListener("mouseout", ev => { if (ev.target.closest && ev.target.closest(".help")) C.hideTip(); });
+    document.addEventListener("focusin", ev => { if (ev.target.classList && ev.target.classList.contains("help")) show(ev.target); });
+    document.addEventListener("focusout", ev => { if (ev.target.classList && ev.target.classList.contains("help")) C.hideTip(); });
+  }
+
   /* -- Initialisation ------------------------------------------------------------ */
   async function init() {
     let theme = "auto";
@@ -273,6 +322,7 @@
     });
     document.addEventListener("click", ev => { if (!$("sidebar").contains(ev.target)) closeMenu(); });
 
+    bindHelp();
     loadHash();
     try {
       meta = await fetchJSON("api/meta");
@@ -1083,7 +1133,10 @@
     const t = $("table");
     if (!r || !t) return;
     if (!r.rows.length) {
-      t.innerHTML = `<tbody><tr><td class="empty">Aucune donnée pour ces filtres sur la période.</td></tr></tbody>`;
+      const hint = EMPTY_HINT[r.type];
+      t.innerHTML = `<tbody><tr><td class="empty">` + (hint
+        ? `<strong>${esc(hint[0])}</strong>${hint[1] ? `<br>${esc(hint[1])}` : ""}` + (meta.admin && (r.type === "renewal" || r.type === "named") ? `<br><button type="button" class="link" data-go="admin">Ouvrir l'Administration →</button>` : "")
+        : "Aucune donnée pour ces filtres sur la période.") + `</td></tr></tbody>`;
       $("cols-toggle").hidden = true;
       $("row-count").textContent = "";
       $("more").hidden = true;
@@ -1097,7 +1150,8 @@
     const cols = visibleColumns(r);
     const head = "<thead><tr>" + cols.map(c => {
       const sort = table.sortKey === c.key ? (table.sortDir > 0 ? "ascending" : "descending") : "none";
-      return `<th class="${NUMERIC.has(c.type) ? "num" : ""}" data-key="${esc(c.key)}" aria-sort="${sort}" scope="col">${esc(c.label)}</th>`;
+      const help = GLOSSARY[c.key] ? ` <span class="help" tabindex="0" role="note" aria-label="${esc(GLOSSARY[c.key])}" data-help="${esc(GLOSSARY[c.key])}">?</span>` : "";
+      return `<th class="${NUMERIC.has(c.type) ? "num" : ""}" data-key="${esc(c.key)}" aria-sort="${sort}" scope="col">${esc(c.label)}${help}</th>`;
     }).join("") + "</tr></thead>";
     const body = rows.slice(0, table.shown).map(row => "<tr>" + cols.map(c => {
       const v = row[c.key];
@@ -1118,7 +1172,8 @@
       return `<td class="${cls}"${style}>${content}</td>`;
     }).join("") + "</tr>").join("");
     t.innerHTML = head + "<tbody>" + body + "</tbody>";
-    t.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    t.querySelectorAll("th").forEach(th => th.addEventListener("click", ev => {
+      if (ev.target.closest(".help")) return;
       const key = th.dataset.key;
       table.sortDir = table.sortKey === key ? -table.sortDir : (NUMERIC.has((r.columns.find(c => c.key === key) || {}).type) ? -1 : 1);
       table.sortKey = key;
