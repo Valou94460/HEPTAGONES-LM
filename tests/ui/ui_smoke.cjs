@@ -101,7 +101,7 @@ const fs = require("fs");
       // Navigation Précédent / Suivant entre onglets
       await page.goto(`${base}/#type=summary&preset=all`);
       await page.waitForSelector(".kpi");
-      await page.click('.nav-item[data-type="heatmap"]');
+      await page.click('#tabs [data-tab-type="heatmap"]');
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Profil horaire");
       await page.goBack();
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Synthèse par produit", null, { timeout: 10000 })

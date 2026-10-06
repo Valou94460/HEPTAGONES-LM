@@ -12,14 +12,19 @@
   const STALE_MINUTES = 60;
   const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-  /* Navigation : rapports regroupés par usage. */
-  const NAV = [
-    ["Pilotage", ["dashboard", "live"]],
-    ["Analyse", ["summary", "timeseries", "breakdown", "matrix", "heatmap"]],
-    ["Optimisation", ["efficiency", "optimization", "unused", "named", "reservations", "contention", "denials"]],
-    ["Achats", ["forecast", "renewal"]],
-    ["Données", ["sessions", "collections"]],
+  /* Navigation : six entrées de menu ; chaque rapport reste une vue (state.type) affichée sous forme d'onglet.
+     Les anciens liens (#type=contention, #type=summary…) continuent donc de fonctionner. */
+  const GROUPS = [
+    { id: "dashboard", label: "Tableau de bord", desc: "Ce qui demande votre attention", icon: "dashboard", types: ["dashboard"] },
+    { id: "live", label: "En direct", desc: "Qui utilise quoi, maintenant", icon: "live", types: ["live"] },
+    { id: "analysis", label: "Analyse", desc: "Synthèse, usage, répartition, croisement", icon: "summary", types: ["summary", "timeseries", "breakdown", "matrix", "heatmap"] },
+    { id: "optimization", label: "Optimisation", desc: "Efficacité, coûts, inutilisées, contention, refus", icon: "optimization", types: ["optimization", "efficiency", "unused", "named", "reservations", "contention", "denials"] },
+    { id: "purchasing", label: "Achats", desc: "Prévision et renouvellements", icon: "forecast", types: ["forecast", "renewal"] },
+    { id: "data", label: "Données", desc: "Sessions et état des collectes", icon: "collections", types: ["sessions", "collections"] },
   ];
+  const ADMIN_GROUP = { id: "admin", label: "Administration", desc: "Serveurs, imports, coûts, rapports", icon: "admin", types: ["admin"] };
+  const groupOf = type => GROUPS.concat([ADMIN_GROUP]).find(g => g.types.includes(type)) || GROUPS[2];
+  const lastTab = {};      // dernier onglet ouvert de chaque entrée de menu
   const ICONS = {
     dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     live: '<circle cx="12" cy="12" r="2.5"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>',
@@ -318,6 +323,8 @@
 
     // Liens internes des pages (délégation) : data-go="type" [+ data-*]
     $("view").addEventListener("click", ev => {
+      const tab = ev.target.closest("[data-tab-type]");
+      if (tab) { go({ type: tab.dataset.tabType }); return; }
       const t = ev.target.closest("[data-go]");
       if (!t) return;
       const extra = {};
@@ -355,18 +362,31 @@
     changed();
   }
 
+  function visibleGroups() {
+    const placed = new Set(GROUPS.flatMap(g => g.types));
+    const groups = GROUPS.map(g => ({ ...g, types: g.types.filter(k => meta.reports[k]) }));
+    const others = Object.keys(meta.reports).filter(k => !placed.has(k) && k !== "admin");
+    if (others.length) groups[2].types.push(...others);     // vue inconnue : rangée dans Analyse
+    if (meta.admin) groups.push(ADMIN_GROUP);
+    return groups.filter(g => g.types.length);
+  }
   function renderNav() {
     const nav = $("nav");
-    const placed = new Set(NAV.flatMap(([, items]) => items));
-    const groups = NAV.map(([g, items]) => [g, items.filter(k => meta.reports[k])]);
-    const others = Object.keys(meta.reports).filter(k => !placed.has(k) && k !== "admin");
-    if (others.length) groups[1][1].push(...others);
-    if (meta.admin) groups.push(["Administration", ["admin"]]);
-    nav.innerHTML = groups.filter(([, items]) => items.length).map(([g, items]) =>
-      `<div class="nav-group">${esc(g)}</div>` + items.map(k =>
-        `<button type="button" class="nav-item" data-type="${esc(k)}">${icon(k)}<span>${esc(meta.reports[k])}</span></button>`).join("")
+    nav.innerHTML = visibleGroups().map(g =>
+      (g.id === "admin" ? '<div class="nav-sep"></div>' : "") +
+      `<button type="button" class="nav-item" data-group="${esc(g.id)}" data-type="${esc(g.types[0])}">${icon(g.icon)}<span class="nav-text"><span class="nav-label">${esc(g.label)}</span><small>${esc(g.desc)}</small></span></button>`
     ).join("");
-    nav.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => { closeMenu(); go({ type: b.dataset.type }); }));
+    nav.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => {
+      closeMenu();
+      const g = visibleGroups().find(x => x.id === b.dataset.group);
+      go({ type: (lastTab[g.id] && g.types.includes(lastTab[g.id])) ? lastTab[g.id] : g.types[0] });
+    }));
+  }
+  function tabsHtml(type) {
+    const g = visibleGroups().find(x => x.types.includes(type));
+    if (!g || g.types.length < 2) return "";
+    return `<div class="tabs" id="tabs" role="tablist" aria-label="${esc(g.label)}">` + g.types.map(k =>
+      `<button type="button" role="tab" data-tab-type="${esc(k)}" aria-selected="${k === type}">${esc(meta.reports[k])}</button>`).join("") + "</div>";
   }
 
   function go(changes) {
@@ -390,7 +410,7 @@
         ? `<span class="dot" style="background:var(--warning)"></span><span>⏸ <span class="txt">Dernière collecte </span>${esc(ago(last))}</span>`
         : `<span class="dot" style="background:var(--good)"></span><span>✓ <span class="txt">Collectes OK · </span>${esc(ago(last))}</span>`;
     h.title = cols.map(c => `${c.server}/${c.collector} : ${c.status} (${fmt(c.last_run, "datetime")})${c.message ? " — " + c.message : ""}`).join("\n");
-    const item = document.querySelector('.nav-item[data-type="collections"]');
+    const item = document.querySelector('.nav-item[data-group="data"]');
     if (item && failing.length && !item.querySelector(".badge")) item.insertAdjacentHTML("beforeend", `<span class="badge sev sev-critical">${failing.length}</span>`);
   }
 
@@ -398,13 +418,17 @@
   function syncControls() {
     document.querySelectorAll("#presets [data-preset]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === state.preset)));
     $("start").value = state.start; $("end").value = state.end;
+    const grp = groupOf(state.type);
+    lastTab[grp.id] = state.type;
     document.querySelectorAll(".nav-item").forEach(t => {
-      if (t.dataset.type === state.type) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+      if (t.dataset.group === grp.id) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
+    document.querySelectorAll("#tabs [data-tab-type]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabType === state.type)));
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
     document.querySelector(".filterbar").hidden = state.type === "admin";   // pas de filtres sur l'administration
-    $("page-title").textContent = (meta && meta.reports[state.type]) || "";
-    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${$("page-title").textContent} — HeptagonesLM`;
+    const single = grp.types.length < 2;
+    $("page-title").textContent = single ? ((meta && meta.reports[state.type]) || grp.label) : grp.label;
+    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${(meta && meta.reports[state.type]) || grp.label} — HeptagonesLM`;
     document.querySelectorAll("[data-opt]").forEach(b => b.setAttribute("aria-pressed", String(state[b.dataset.opt] === b.dataset.value)));
     const dim = $("dimension");
     if (dim) dim.value = state.dimension;
@@ -711,6 +735,7 @@
       return;
     }
     view.innerHTML = `
+      ${tabsHtml(type)}
       ${reportOptions(type)}
       <div id="kpis" class="kpis"></div>
       <section id="chart-card" class="card" hidden>
