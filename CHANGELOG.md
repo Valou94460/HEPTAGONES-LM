@@ -21,6 +21,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 - **Checklist de démarrage** de l'administrateur (serveurs, coûts, échéances, projets, e-mail) dans
   Administration et en carte « Mise en route » sur le tableau de bord (`/api/admin/checklist`).
 
+### Sécurité
+- Politique de sécurité (`SECURITY.md`, signalement privé des vulnérabilités) et contrôle des secrets
+  (gitleaks) sur tout l'historique à chaque push et pull request.
+
 ## [26.4.0] — 2026-10-05
 
 ### Nouveautés

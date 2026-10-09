@@ -17,3 +17,8 @@ package-lock.json
 *.spec
 .build-venv/
 ui-captures/
+# secrets et certificats (jamais dans le dépôt)
+*.pfx
+*.p12
+.env
+secrets/
