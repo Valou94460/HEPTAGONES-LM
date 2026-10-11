@@ -25,7 +25,7 @@ import textwrap
 
 from heptagoneslm.storage.db import Database
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 # Marqueurs remplacés selon le dialecte.
 _TYPES = {
@@ -224,6 +224,14 @@ TABLES: dict[str, str] = {
         username NVARCHAR(255) NOT NULL PRIMARY KEY,
         project NVARCHAR(255) NOT NULL,
         source_file NVARCHAR(255) NULL,
+        updated_at {DT} NOT NULL
+    """,
+    # v10 : préférences par utilisateur (visite guidée de la première connexion, langue)
+    "user_pref": """
+        username NVARCHAR(255) NOT NULL PRIMARY KEY,
+        tour_version INT NOT NULL DEFAULT 0,
+        onboarded_at {DT} NULL,
+        language NVARCHAR(5) NULL,
         updated_at {DT} NOT NULL
     """,
     "named_import": """

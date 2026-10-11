@@ -1,5 +1,5 @@
 -- Schéma HeptagonesLM (généré par `heptagoneslm ddl --dialect mssql`, ne pas modifier à la main)
--- Version du schéma : 9
+-- Version du schéma : 10
 
 IF OBJECT_ID(N'dbo.schema_info', N'U') IS NULL
 CREATE TABLE dbo.schema_info (
@@ -222,6 +222,16 @@ CREATE TABLE dbo.user_project (
     username NVARCHAR(255) NOT NULL PRIMARY KEY,
     project NVARCHAR(255) NOT NULL,
     source_file NVARCHAR(255) NULL,
+    updated_at DATETIME2(0) NOT NULL
+)
+GO
+
+IF OBJECT_ID(N'dbo.user_pref', N'U') IS NULL
+CREATE TABLE dbo.user_pref (
+    username NVARCHAR(255) NOT NULL PRIMARY KEY,
+    tour_version INT NOT NULL DEFAULT 0,
+    onboarded_at DATETIME2(0) NULL,
+    language NVARCHAR(5) NULL,
     updated_at DATETIME2(0) NOT NULL
 )
 GO

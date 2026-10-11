@@ -38,32 +38,44 @@ flowchart LR
 
 ```
 heptagoneslm/
-├── cli.py                  Point d'entrée (init-db, collect, report, import-log, purge…)
+├── cli.py                  Point d'entrée (init-db, collect, report, web, setup, import-*, purge…)
+├── launcher.py             HeptagonesLM.exe / HeptagonesLM-Setup.exe (double-clic → interface ou assistant)
 ├── config.py               Chargement/validation du YAML, mapping feature → produit
 ├── models.py               Modèle normalisé : ServerStatus, FeatureStatus, Checkout, LicenseEvent
 ├── service.py              Orchestration : exécute les collecteurs, reconstruit les sessions, écrit en base
 ├── collectors/
 │   ├── base.py             Interfaces StatusCollector / LogCollector + registre
-│   ├── flexlm/
-│   │   ├── lmstat.py       Exécution de lmutil lmstat + parser de la sortie
-│   │   └── logfile.py      Parser du log debug + lecture incrémentale (offset, rotation)
-│   └── rlm/
-│       └── rlmstat.py      Exécution de rlmutil rlmstat + parser (pools, utilisateurs, échéances)
-├── alerts.py               Alertes immédiates par e-mail (après chaque collecte, anti-répétition)
+│   ├── flexlm/             lmstat.py (lmutil lmstat + parser) · logfile.py (log debug incrémental)
+│   └── rlm/                rlmstat.py (rlmutil rlmstat : pools, utilisateurs, échéances)
+├── autodesk.py             Licences Autodesk nommées : import des exports « Usage report »
+├── autodesk_api.py         Connecteur API Autodesk (OAuth, requêtes d'usage, synchronisation)
+├── projects.py             Affectations utilisateur → projet (import CSV, règles)
+├── users.py                Import du référentiel utilisateurs (CSV AD/RH)
+├── alerts.py               Alertes immédiates (après chaque collecte, anti-répétition)
+├── itsm.py                 Tickets ServiceNow, Jira, GLPI, webhook (ouverture, complément, résolution)
+├── mailer.py               Rapports par e-mail (abonnements, rapports sur mesure)
+├── vault.py                Secrets chiffrés par Windows (DPAPI)
 ├── storage/
 │   ├── db.py               Connexion DB-API (pyodbc / sqlite3) et différences de dialecte
-│   ├── schema.py           Schéma unique → DDL SQL Server et SQLite, vues de reporting
-│   └── repository.py       Toutes les requêtes d'écriture
+│   ├── schema.py           Schéma unique → DDL SQL Server et SQLite, vues de reporting, migrations
+│   └── repository.py       Requêtes d'écriture
 ├── reporting/
 │   ├── dataset.py          Calcul des indicateurs (pur Python, testable)
-│   └── excel.py            Mise en forme du classeur (openpyxl)
+│   ├── excel.py            Mise en forme du classeur (openpyxl)
+│   └── sanitize.py         Neutralisation des formules dans les exports (CSV / Excel)
 ├── web/
-│   ├── api.py              Rapports à la demande + exports (Excel, CSV, JSON)
-│   ├── server.py           Serveur HTTP (bibliothèque standard), lecture seule
+│   ├── server.py           Serveur HTTP (bibliothèque standard) : rapports, exports, administration
+│   ├── api.py              Registre des rapports, filtres, exports (Excel, CSV, JSON)
+│   ├── insights.py         Tableau de bord, « À traiter », efficacité, optimisation, contention
+│   ├── forecast.py         Prévision à 3, 6 et 12 mois
+│   ├── renewal.py          Rapport de renouvellement
+│   ├── named.py            Autodesk nominatif dans toutes les rubriques
+│   ├── admin.py            Page Administration (serveurs, coûts, projets, rapports planifiés)
+│   ├── prefs.py            Préférences par utilisateur (visite guidée) et liste de démarrage
+│   ├── auth.py · roles.py · access.py   Connexion AD / SSO, rôles par service, test d'accès
 │   └── static/             Interface HTML/JS/CSS, graphiques SVG, sans CDN
-├── simulation/             Simulateur FlexLM, faux lmutil, `heptagoneslm demo`
-├── users.py                Import du référentiel utilisateurs (CSV AD/RH)
-└── launcher.py             Point d'entrée de HeptagonesLM.exe (double-clic → interface)
+├── setup/                  Assistant d'installation : contrôles, installation, IIS, vérification, recette, PV
+└── simulation/             Simulateur FlexLM, faux lmutil, démonstration
 ```
 
 Principes :
@@ -253,6 +265,19 @@ erDiagram
         nvarchar state_json
     }
 ```
+
+Tables complémentaires (créées et migrées automatiquement par `init-db`, version du schéma dans
+`schema_info`, actuellement **v10**) :
+
+| Table | Rôle |
+|---|---|
+| `report_delivery` | Envois de rapports par e-mail (un envoi par abonnement et par période) |
+| `alert_state` | État des alertes immédiates (anti-répétition, retour à la normale) |
+| `itsm_ticket` | Tickets ITSM ouverts par alerte (référence, état) |
+| `feature_reservation` | Réservations (utilisateurs nommés) lues dans les fichiers options |
+| `named_seat` · `named_import` · `named_usage_day` | Licences Autodesk nommées : état, imports, usage quotidien |
+| `user_project` | Affectations utilisateur → projet (refacturation par projet) |
+| `user_pref` | Préférences par utilisateur : visite guidée vue ou passée (26.5) |
 
 Choix de conception :
 

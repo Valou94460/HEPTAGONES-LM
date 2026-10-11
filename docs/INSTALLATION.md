@@ -190,7 +190,7 @@ hors du fichier). Codes retour : **0** succès, **1** échec, **2** installé av
 ## 6. Mettre à jour une installation existante
 
 Télécharger le nouveau `HeptagonesLM-Setup.exe` et le lancer sur le serveur. Sur la page d'accueil,
-l'assistant reconnaît l'installation et sa version. Le bouton **« Mettre à jour vers 26.3.x »** :
+l'assistant reconnaît l'installation et sa version. Le bouton **« Mettre à jour vers … »** (numéro de la version téléchargée) :
 
 1. **sauvegarde** `heptagoneslm.yaml`, les réponses de l'assistant, `web.config` et la base SQLite dans
    `<installation>\backup\<horodatage>\` (base SQL Server : sauvegarde par le DBA, le schéma n'évolue que
@@ -227,11 +227,16 @@ Sur la page d'accueil, **« Configurer les licences Autodesk »** ouvre l'étape
 API Autodesk). Seule la section `autodesk` de `heptagoneslm.yaml` est écrite. Le reste de l'installation
 est conservé et rien n'est ressaisi. Voir [AUTODESK_API.md](AUTODESK_API.md) § 2.
 
-### Administrer depuis l'interface web (26.3.3, 26.4)
+### Administrer depuis l'interface web (26.3.3 à 26.5)
 
 Les membres du **groupe AD des administrateurs** voient la rubrique **Administration** de l'interface. Ce
 groupe se déclare à l'étape *Interface web et IIS* de l'assistant, ou sur une installation existante via
 l'accueil du Setup › *Administrateurs de l'interface web*. On y trouve :
+
+- **Terminer la configuration** (26.5) : liste de démarrage en tête de page — serveurs de licences, coûts
+  annuels, échéances de renouvellement, projets, serveur e-mail, rapports planifiés (facultatif) — avec, pour
+  chaque étape restante, un bouton *Y aller*. Tant qu'elle n'est pas terminée, une carte « Mise en route »
+  la rappelle sur le tableau de bord des administrateurs ;
 
 - **Serveurs de licences** : liste avec l'état de la dernière collecte, ajout, modification, suppression
   et *Tester la connexion* (lmstat / rlmstat en direct). La collecte suivante prend en compte les

@@ -12,14 +12,19 @@
   const STALE_MINUTES = 60;
   const DAYS = ["Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi", "Samedi", "Dimanche"];
 
-  /* Navigation : rapports regroupés par usage. */
-  const NAV = [
-    ["Pilotage", ["dashboard", "live"]],
-    ["Analyse", ["summary", "timeseries", "breakdown", "matrix", "heatmap"]],
-    ["Optimisation", ["efficiency", "optimization", "unused", "named", "reservations", "contention", "denials"]],
-    ["Achats", ["forecast", "renewal"]],
-    ["Données", ["sessions", "collections"]],
+  /* Navigation : six entrées de menu ; chaque rapport reste une vue (state.type) affichée sous forme d'onglet.
+     Les anciens liens (#type=contention, #type=summary…) continuent donc de fonctionner. */
+  const GROUPS = [
+    { id: "dashboard", label: "Tableau de bord", desc: "Ce qui demande votre attention", icon: "dashboard", types: ["dashboard"] },
+    { id: "live", label: "En direct", desc: "Qui utilise quoi, maintenant", icon: "live", types: ["live"] },
+    { id: "analysis", label: "Analyse", desc: "Synthèse, usage, répartition, croisement", icon: "summary", types: ["summary", "timeseries", "breakdown", "matrix", "heatmap"] },
+    { id: "optimization", label: "Optimisation", desc: "Efficacité, coûts, inutilisées, contention, refus", icon: "optimization", types: ["optimization", "efficiency", "unused", "named", "reservations", "contention", "denials"] },
+    { id: "purchasing", label: "Achats", desc: "Prévision et renouvellements", icon: "forecast", types: ["forecast", "renewal"] },
+    { id: "data", label: "Données", desc: "Sessions et état des collectes", icon: "collections", types: ["sessions", "collections"] },
   ];
+  const ADMIN_GROUP = { id: "admin", label: "Administration", desc: "Serveurs, imports, coûts, rapports", icon: "admin", types: ["admin"] };
+  const groupOf = type => GROUPS.concat([ADMIN_GROUP]).find(g => g.types.includes(type)) || GROUPS[2];
+  const lastTab = {};      // dernier onglet ouvert de chaque entrée de menu
   const ICONS = {
     dashboard: '<rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/>',
     live: '<circle cx="12" cy="12" r="2.5"/><path d="M7.8 16.2a6 6 0 0 1 0-8.4M16.2 7.8a6 6 0 0 1 0 8.4M4.9 19.1a10 10 0 0 1 0-14.2M19.1 4.9a10 10 0 0 1 0 14.2"/>',
@@ -42,6 +47,66 @@
     admin: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/>',
     other: '<circle cx="12" cy="12" r="9"/>',
   };
+  /* Filtres : seuls ceux que la vue prend en compte sont affichés (les autres seraient sans effet). */
+  const FILTERS_BASE = ["period", "server", "product"];
+  const FILTER_SCOPE = {
+    live: ["server", "product"], timeseries: FILTERS_BASE, heatmap: FILTERS_BASE, contention: FILTERS_BASE,
+    efficiency: FILTERS_BASE, optimization: FILTERS_BASE, unused: FILTERS_BASE, reservations: FILTERS_BASE,
+    forecast: FILTERS_BASE, renewal: FILTERS_BASE, denials: [...FILTERS_BASE, "user", "department"],
+    named: [...FILTERS_BASE, "user", "department"], collections: ["period", "server"],
+  };
+  const FILTER_NOTE = { forecast: "Part de la fin de la période choisie ; lit les 24 derniers mois.", renewal: "Part de la fin de la période choisie ; usage des 90 derniers jours.", live: "Dernier sondage : pas de période." };
+  /* Colonnes essentielles des tableaux larges ; « Afficher plus de colonnes » donne le reste (les exports contiennent tout). */
+  const COMPACT = {
+    summary: ["product", "issued", "peak", "business_utilization", "saturated_hours", "denials"],
+    optimization: ["product", "advice", "savings", "annual_cost", "issued", "recommended"],
+    forecast: ["product", "advice", "needed_12", "gap", "impact", "issued"],
+    renewal: ["product", "expires_on", "advice", "delta", "impact"],
+    sessions: ["product", "username", "hostname", "checkout_time", "checkin_time", "hours_in_period", "server"],
+  };
+  /* Glossaire : définition affichée au survol (ou au focus) du « ? » des en-têtes de colonnes. */
+  const GLOSSARY = {
+    issued: "Nombre de jetons (licences utilisables par une personne à la fois) que le serveur met à disposition.",
+    peak: "Plus grand nombre de jetons utilisés en même temps sur la période.",
+    avg: "Nombre moyen de jetons utilisés en même temps.",
+    avg_utilization: "Part des jetons utilisés en moyenne, jour et nuit.",
+    peak_utilization: "Part des jetons utilisés au moment du pic.",
+    business_utilization: "Part des jetons utilisés en moyenne du lundi au vendredi, aux heures ouvrées de l'entreprise.",
+    saturated_hours: "Heures pendant lesquelles tous les jetons étaient pris : un utilisateur de plus aurait été refusé.",
+    denials: "Demandes de licence refusées parce qu'aucun jeton n'était libre.",
+    recommended: "Nombre de jetons qui couvre 95 % du temps ouvré : au-delà, les pics restent ponctuels.",
+    surplus: "Jetons émis au-delà du nombre recommandé : économie possible.",
+    unused: "Jetons qui n'ont jamais servi sur la période.",
+    half_share: "Part du temps où au moins la moitié des jetons est utilisée.",
+    saturated_share: "Part du temps où tous les jetons sont pris.",
+    savings: "Économie annuelle si l'excédent n'est pas renouvelé (jetons en trop × coût annuel d'un jeton).",
+    annual_cost: "Coût annuel de ces jetons : jetons émis × coût annuel d'un jeton.",
+    cost_per_hour: "Coût de la période divisé par les heures d'utilisation.",
+    trend: "Jetons gagnés (ou perdus) par mois sur le pic hebdomadaire, tendance linéaire.",
+    range_12: "Plage dans laquelle le pic réel a 9 chances sur 10 de rester dans 12 mois.",
+    needed_3: "Jetons qui couvrent le plus haut pic prévu sur les 3 prochains mois.",
+    needed_6: "Jetons qui couvrent le plus haut pic prévu sur les 6 prochains mois.",
+    needed_12: "Jetons qui couvrent le plus haut pic prévu sur les 12 prochains mois.",
+    margin_12: "Haut de la fourchette à 90 % : jetons à prévoir pour ne presque jamais saturer.",
+    gap: "Jetons nécessaires à 12 mois moins jetons émis : positif, il en manquera.",
+    impact: "Budget annuel supplémentaire (+) ou économie (−) correspondant à l'écart.",
+    forecast: "Besoin prévu sur l'année qui suit l'échéance.",
+    proposal: "Nombre de jetons à renouveler : recommandé ou besoin prévu, jamais à la baisse en cas de refus.",
+    delta: "Jetons à renouveler moins jetons actuels.",
+    days_left: "Jours restant avant l'échéance.",
+    source: "D'où vient la date d'échéance : fichier de licence, contrat déclaré ou abonnement Autodesk.",
+  };
+  const EMPTY_HINT = {
+    renewal: ["Aucune échéance dans les 12 mois.", "Les dates viennent du fichier de licence ou de la configuration (renewal d'une règle products, ou fin d'abonnement Autodesk saisie dans l'Administration)."],
+    forecast: ["Historique insuffisant pour une prévision.", "Il faut au moins 4 semaines de données collectées ; la tendance apparaît dès 8 semaines et la saisonnalité dès 12 mois."],
+    unused: ["Aucune licence inutilisée sur la période : tous les produits ont servi.", ""],
+    named: ["Aucune licence Autodesk nommée connue.", "Importez un export du portail Autodesk ou connectez l'API Autodesk."],
+    reservations: ["Aucune réservation détectée.", "Elles viennent des lignes RESERVE du fichier d'options des serveurs FlexLM."],
+    denials: ["Aucun refus sur la période.", "Les refus ne sont connus que des serveurs dont le journal est collecté."],
+  };
+  const allColumns = {};
+  let siteAvailable = false;
+  const TODO_LABEL = { critical: "Urgent", serious: "Important", warning: "À préparer", info: "Économie" };
   const SEV_LABEL = { critical: "Critique", serious: "Important", warning: "Attention", info: "Info" };
   const KPI_TARGET = {
     utilization: { type: "timeseries", metric: "utilization" },
@@ -235,6 +300,89 @@
   /* -- Menu mobile ------------------------------------------------------------ */
   function closeMenu() { $("sidebar").classList.remove("open"); $("menu").setAttribute("aria-expanded", "false"); }
 
+  /* -- Visite guidée (première connexion) -------------------------------------------- */
+  let tour = null;   // { step, steps }
+  function tourSteps() {
+    const role = meta.admin ? "admin" : (meta.access && !meta.access.global ? "manager" : "reader");
+    const intro = {
+      reader: ["Bienvenue dans HeptagonesLM", "Vous voyez l'usage de toutes les licences, en lecture seule. Cette visite dure une minute."],
+      manager: ["Bienvenue dans HeptagonesLM", `Vous ne voyez que vos services (${(meta.access.departments || []).join(", ") || "périmètre de votre rôle"}), exports compris. Cette visite dure une minute.`],
+      admin: ["Bienvenue, administrateur", "Vous voyez tout et vous pouvez configurer l'application. Cette visite dure une minute, puis une checklist vous guide."],
+    }[role];
+    const last = role === "admin"
+      ? { title: "Terminez la configuration", text: "L'Administration contient une checklist de démarrage : elle montre ce qui manque (coûts, échéances, projets) et évite les pages vides.", type: "admin", target: "#checklist" }
+      : { title: "Exporter et demander de l'aide", text: "Chaque vue s'exporte en Excel, CSV ou JSON. Passez la souris sur un « ? » d'un en-tête de colonne pour lire sa définition.", type: "summary", target: ".exports" };
+    return [
+      { title: intro[0], text: intro[1], type: "dashboard", target: null },
+      { title: "Ce qui demande votre attention", text: "Le tableau de bord liste ce qu'il y a à traiter : refus, économies, échéances. Chaque carte ouvre la bonne vue.", type: "dashboard", target: "#todo" },
+      { title: "Un menu en six entrées", text: "Les vues sont regroupées en onglets : Analyse, Optimisation, Achats, Données.", type: "dashboard", target: "#nav", menu: true },
+      { title: "Des filtres qui s'adaptent", text: "Seuls les filtres utiles à la vue s'affichent. Les filtres actifs restent en surbrillance et le bouton Réinitialiser les efface.", type: "summary", target: ".filterbar" },
+      last,
+    ];
+  }
+  function postPrefs(action) {
+    return fetch("api/prefs", { method: "POST", credentials: "same-origin", headers: { "X-HeptagonesLM": "1", "Content-Type": "application/json" }, body: JSON.stringify({ onboarding: action }) }).catch(() => null);
+  }
+  function startTour() {
+    tour = { step: 0, steps: tourSteps() };
+    showTourStep();
+  }
+  function endTour(done = true) {
+    tour = null;
+    document.querySelectorAll(".tour-spot").forEach(e => e.classList.remove("tour-spot"));
+    const layer = $("tour-layer"); if (layer) layer.remove();
+    closeMenu();
+    if (done) postPrefs("done");
+  }
+  async function showTourStep() {
+    if (!tour) return;
+    const st = tour.steps[tour.step];
+    if (state.type !== st.type) { go({ type: st.type }); await waitForView(); }
+    if (!tour) return;
+    document.querySelectorAll(".tour-spot").forEach(e => e.classList.remove("tour-spot"));
+    if (st.menu && window.innerWidth <= 960) $("sidebar").classList.add("open"); else closeMenu();
+    let layer = $("tour-layer");
+    if (!layer) { layer = document.createElement("div"); layer.id = "tour-layer"; document.body.appendChild(layer); }
+    const n = tour.steps.length;
+    layer.innerHTML = `<div class="tour-scrim"></div><div class="tour-card" role="dialog" aria-modal="true" aria-labelledby="tour-title">` +
+      `<h2 id="tour-title">${esc(st.title)}</h2><p>${esc(st.text)}</p><div class="tour-row"><span class="tour-dots" aria-label="Étape ${tour.step + 1} sur ${n}">` +
+      tour.steps.map((_, i) => `<i class="${i <= tour.step ? "on" : ""}"></i>`).join("") + `</span>` +
+      (tour.step > 0 ? `<button type="button" class="btn ghost" id="tour-prev">Précédent</button>` : `<button type="button" class="btn ghost" id="tour-skip">Passer</button>`) +
+      `<button type="button" class="btn primary" id="tour-next">${tour.step === n - 1 ? "Terminer" : "Suivant"}</button></div></div>`;
+    const target = st.target && document.querySelector(st.target);
+    if (target && !target.hidden) { target.classList.add("tour-spot"); target.scrollIntoView({ block: "nearest" }); }
+    $("tour-next").addEventListener("click", () => { if (tour.step === n - 1) endTour(); else { tour.step++; showTourStep(); } });
+    const prev = $("tour-prev"); if (prev) prev.addEventListener("click", () => { tour.step--; showTourStep(); });
+    const skip = $("tour-skip"); if (skip) skip.addEventListener("click", () => endTour());
+    $("tour-next").focus();
+  }
+  function waitForView() {
+    return new Promise(resolve => {
+      const started = Date.now();
+      const tick = () => { if (!$("view").classList.contains("loading") && shownType === state.type) resolve(); else if (Date.now() - started > 8000) resolve(); else setTimeout(tick, 80); };
+      setTimeout(tick, 60);
+    });
+  }
+  let deepLink = false;     // la page a été ouverte sur un rapport précis
+  async function maybeStartTour() {
+    if (meta.demo) return;                       // pas de visite sur la démonstration
+    if (deepLink) return;                        // lien profond (rapport partagé, retour de connexion) : on ne détourne pas
+    try {
+      const prefs = await fetchJSON("api/prefs");
+      if (!prefs.onboarding_done) startTour();
+    } catch (e) { /* préférences indisponibles : pas de visite */ }
+  }
+  document.addEventListener("keydown", ev => { if (ev.key === "Escape" && tour) endTour(); });
+
+  /* -- Bulles d'aide ("?") ----------------------------------------------------------- */
+  function bindHelp() {
+    const show = el => { const b = el.getBoundingClientRect(); C.showTip(`<div class="t-row"><span>${esc(el.dataset.help)}</span></div>`, b.left, b.bottom); };
+    document.addEventListener("mouseover", ev => { const h = ev.target.closest && ev.target.closest(".help"); if (h) show(h); });
+    document.addEventListener("mouseout", ev => { if (ev.target.closest && ev.target.closest(".help")) C.hideTip(); });
+    document.addEventListener("focusin", ev => { if (ev.target.classList && ev.target.classList.contains("help")) show(ev.target); });
+    document.addEventListener("focusout", ev => { if (ev.target.classList && ev.target.classList.contains("help")) C.hideTip(); });
+  }
+
   /* -- Initialisation ------------------------------------------------------------ */
   async function init() {
     let theme = "auto";
@@ -248,6 +396,8 @@
     });
     document.addEventListener("click", ev => { if (!$("sidebar").contains(ev.target)) closeMenu(); });
 
+    bindHelp();
+    deepLink = /type=/.test(location.hash);
     loadHash();
     try {
       meta = await fetchJSON("api/meta");
@@ -295,7 +445,8 @@
     deps.push({ value: "(non renseigné)", label: "(non renseigné)" });
     multis.department = createMulti($("ms-department"), "Services", deps, "department");
     // Sites : proposés dès que des règles « sites » classent les postes
-    if ((meta.sites || []).length) {
+    siteAvailable = (meta.sites || []).length > 0;
+    if (siteAvailable) {
       const sites = meta.sites.map(x => ({ value: x, label: x }));
       sites.push({ value: "(non renseigné)", label: "(non renseigné)" });
       multis.site = createMulti($("ms-site"), "Sites", sites, "site");
@@ -318,6 +469,8 @@
 
     // Liens internes des pages (délégation) : data-go="type" [+ data-*]
     $("view").addEventListener("click", ev => {
+      const tab = ev.target.closest("[data-tab-type]");
+      if (tab) { go({ type: tab.dataset.tabType }); return; }
       const t = ev.target.closest("[data-go]");
       if (!t) return;
       const extra = {};
@@ -353,20 +506,35 @@
 
     applyPreset();
     changed();
+    $("replay-tour").addEventListener("click", () => { closeMenu(); startTour(); });
+    maybeStartTour();
   }
 
+  function visibleGroups() {
+    const placed = new Set(GROUPS.flatMap(g => g.types));
+    const groups = GROUPS.map(g => ({ ...g, types: g.types.filter(k => meta.reports[k]) }));
+    const others = Object.keys(meta.reports).filter(k => !placed.has(k) && k !== "admin");
+    if (others.length) groups[2].types.push(...others);     // vue inconnue : rangée dans Analyse
+    if (meta.admin) groups.push(ADMIN_GROUP);
+    return groups.filter(g => g.types.length);
+  }
   function renderNav() {
     const nav = $("nav");
-    const placed = new Set(NAV.flatMap(([, items]) => items));
-    const groups = NAV.map(([g, items]) => [g, items.filter(k => meta.reports[k])]);
-    const others = Object.keys(meta.reports).filter(k => !placed.has(k) && k !== "admin");
-    if (others.length) groups[1][1].push(...others);
-    if (meta.admin) groups.push(["Administration", ["admin"]]);
-    nav.innerHTML = groups.filter(([, items]) => items.length).map(([g, items]) =>
-      `<div class="nav-group">${esc(g)}</div>` + items.map(k =>
-        `<button type="button" class="nav-item" data-type="${esc(k)}">${icon(k)}<span>${esc(meta.reports[k])}</span></button>`).join("")
+    nav.innerHTML = visibleGroups().map(g =>
+      (g.id === "admin" ? '<div class="nav-sep"></div>' : "") +
+      `<button type="button" class="nav-item" data-group="${esc(g.id)}" data-type="${esc(g.types[0])}">${icon(g.icon)}<span class="nav-text"><span class="nav-label">${esc(g.label)}</span><small>${esc(g.desc)}</small></span></button>`
     ).join("");
-    nav.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => { closeMenu(); go({ type: b.dataset.type }); }));
+    nav.querySelectorAll(".nav-item").forEach(b => b.addEventListener("click", () => {
+      closeMenu();
+      const g = visibleGroups().find(x => x.id === b.dataset.group);
+      go({ type: (lastTab[g.id] && g.types.includes(lastTab[g.id])) ? lastTab[g.id] : g.types[0] });
+    }));
+  }
+  function tabsHtml(type) {
+    const g = visibleGroups().find(x => x.types.includes(type));
+    if (!g || g.types.length < 2) return "";
+    return `<div class="tabs" id="tabs" role="tablist" aria-label="${esc(g.label)}">` + g.types.map(k =>
+      `<button type="button" role="tab" data-tab-type="${esc(k)}" aria-selected="${k === type}">${esc(meta.reports[k])}</button>`).join("") + "</div>";
   }
 
   function go(changes) {
@@ -390,7 +558,7 @@
         ? `<span class="dot" style="background:var(--warning)"></span><span>⏸ <span class="txt">Dernière collecte </span>${esc(ago(last))}</span>`
         : `<span class="dot" style="background:var(--good)"></span><span>✓ <span class="txt">Collectes OK · </span>${esc(ago(last))}</span>`;
     h.title = cols.map(c => `${c.server}/${c.collector} : ${c.status} (${fmt(c.last_run, "datetime")})${c.message ? " — " + c.message : ""}`).join("\n");
-    const item = document.querySelector('.nav-item[data-type="collections"]');
+    const item = document.querySelector('.nav-item[data-group="data"]');
     if (item && failing.length && !item.querySelector(".badge")) item.insertAdjacentHTML("beforeend", `<span class="badge sev sev-critical">${failing.length}</span>`);
   }
 
@@ -398,13 +566,23 @@
   function syncControls() {
     document.querySelectorAll("#presets [data-preset]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.preset === state.preset)));
     $("start").value = state.start; $("end").value = state.end;
+    const grp = groupOf(state.type);
+    lastTab[grp.id] = state.type;
     document.querySelectorAll(".nav-item").forEach(t => {
-      if (t.dataset.type === state.type) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
+      if (t.dataset.group === grp.id) t.setAttribute("aria-current", "page"); else t.removeAttribute("aria-current");
     });
+    document.querySelectorAll("#tabs [data-tab-type]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tabType === state.type)));
     $("reset").hidden = !LIST_KEYS.some(k => state[k].length);
+    const scope = FILTER_SCOPE[state.type] || ["period", "server", "product", "user", "department", "site"];
+    const on = k => scope.includes(k);
+    $("presets").hidden = !on("period"); document.querySelector(".filterbar .dates").hidden = !on("period");
+    for (const k of ["server", "product", "user", "department"]) $("ms-" + k).hidden = !on(k);
+    $("ms-site").hidden = !(on("site") && siteAvailable);
+    const fn = $("filter-note"); fn.textContent = FILTER_NOTE[state.type] || ""; fn.hidden = !FILTER_NOTE[state.type];
     document.querySelector(".filterbar").hidden = state.type === "admin";   // pas de filtres sur l'administration
-    $("page-title").textContent = (meta && meta.reports[state.type]) || "";
-    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${$("page-title").textContent} — HeptagonesLM`;
+    const single = grp.types.length < 2;
+    $("page-title").textContent = single ? ((meta && meta.reports[state.type]) || grp.label) : grp.label;
+    document.title = `${meta && meta.demo ? "[Démonstration] " : ""}${(meta && meta.reports[state.type]) || grp.label} — HeptagonesLM`;
     document.querySelectorAll("[data-opt]").forEach(b => b.setAttribute("aria-pressed", String(state[b.dataset.opt] === b.dataset.value)));
     const dim = $("dimension");
     if (dim) dim.value = state.dimension;
@@ -472,6 +650,25 @@
     if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
     return data;
   }
+  const CHECK_TARGET = { servers: "servers-card", costs: "costs-card", renewals: "costs-card", projects: "projects-card", reports: "subs-card" };
+  async function loadChecklist() {
+    const box = $("checklist");
+    if (!box) return;
+    let c;
+    try { c = await fetchJSON("api/admin/checklist"); } catch (e) { return; }
+    if (!c || !c.items) return;
+    const pct = c.total ? Math.round(100 * c.done / c.total) : 0;
+    box.hidden = false;
+    box.innerHTML = `<div class="card-head"><div><h2>Terminer la configuration</h2>
+      <div class="sub">${c.done} étape${c.done > 1 ? "s" : ""} sur ${c.total} terminée${c.done > 1 ? "s" : ""}.</div></div></div>
+      <div class="card-body"><div class="check-progress" aria-hidden="true"><i style="width:${pct}%"></i></div>
+      <ul class="check-list">${c.items.map(i => `<li class="check-item"><span class="mark ${i.ok ? "ok" : ""}" aria-hidden="true">${i.ok ? "✓" : ""}</span>
+        <span><b>${esc(i.label)}</b>${i.optional ? ' <span class="muted">(facultatif)</span>' : ""}${i.detail ? `<br><span class="muted">${esc(i.detail)}</span>` : ""}</span>
+        ${!i.ok && CHECK_TARGET[i.action] ? `<button type="button" class="btn small ghost" data-goto="${CHECK_TARGET[i.action]}">Y aller</button>` : ""}</li>`).join("")}</ul></div>`;
+    box.querySelectorAll("[data-goto]").forEach(b => b.addEventListener("click", () => {
+      const t = $(b.dataset.goto); if (t) t.scrollIntoView({ behavior: "smooth", block: "start" });
+    }));
+  }
   let adminEdit = null;      // serveur en cours de modification : null (ajout) | nom d'origine
   async function renderAdmin() {
     shownType = "admin";
@@ -484,7 +681,8 @@
     const status = s => !s.status ? '<span class="muted">pas encore collecté</span>'
       : `<span class="badge sev ${s.status === "OK" ? "sev-good" : "sev-critical"}">${esc(s.status)}</span> <span class="muted">${esc(fmt(s.last_run, "datetime"))}</span>`;
     view.innerHTML = `
-      <section class="card"><div class="card-head"><div><h2>Serveurs de licences</h2>
+      <section class="card" id="checklist" hidden style="margin-bottom:16px"></section>
+      <section class="card" id="servers-card"><div class="card-head"><div><h2>Serveurs de licences</h2>
         <div class="sub">Pris en compte par la collecte suivante (toutes les 5 minutes). Les chemins de lmutil / rlmutil restent réglés par l'assistant d'installation.</div></div></div>
         <div class="card-body">
         ${ro ? `<div class="alert sev-warning"><span class="sev-icon" aria-hidden="true">!</span><div class="alert-body"><div class="alert-detail">${esc(ro)}</div></div></div>` : ""}
@@ -539,6 +737,7 @@
       <section class="card" style="margin-top:16px" id="subs-card"><div class="card-head"><div><h2>Rapports planifiés</h2>
         <div class="sub">Envoyés par e-mail chaque jour, semaine, mois ou trimestre selon la période : vues choisies, filtres, classeur Excel joint (une feuille par vue).</div></div></div>
         <div class="card-body" id="subs-body"><p class="muted">Chargement…</p></div></section>`;
+    loadChecklist();
     const form = () => ({ name: $("srv-name").value.trim(), port_at_host: $("srv-target").value.trim(),
       license_type: $("srv-type").value, enabled: $("srv-enabled").checked });
     const say = (id, msg, ok) => { const e = $(id); e.textContent = msg; e.style.color = ok === false ? "var(--critical)" : ok ? "var(--good)" : ""; };
@@ -711,6 +910,7 @@
       return;
     }
     view.innerHTML = `
+      ${tabsHtml(type)}
       ${reportOptions(type)}
       <div id="kpis" class="kpis"></div>
       <section id="chart-card" class="card" hidden>
@@ -722,6 +922,7 @@
         <div class="card-head">
           <h2 id="table-title">Chargement…</h2>
           <div class="table-tools">
+            <button id="cols-toggle" class="btn ghost small" type="button" hidden></button>
             <span id="row-count" class="muted"></span>
             <input type="search" id="table-search" placeholder="Rechercher dans le tableau" aria-label="Rechercher dans le tableau">
           </div>
@@ -732,6 +933,7 @@
     $("table-search").value = table.search;
     $("table-search").addEventListener("input", ev => { table.search = ev.target.value.toLowerCase(); table.shown = PAGE; renderTable(); });
     $("more").addEventListener("click", () => { table.shown += PAGE * 5; renderTable(); });
+    $("cols-toggle").addEventListener("click", () => { allColumns[current.type] = !allColumns[current.type]; renderTable(); });
     view.querySelectorAll("[data-opt]").forEach(b => b.addEventListener("click", () => { state[b.dataset.opt] = b.dataset.value; changed(); }));
     const dim = $("dimension");
     if (dim) {
@@ -778,6 +980,7 @@
   function renderDashboard(r) {
     const v = $("view");
     v.innerHTML =
+      `<section class="todo-grid" id="todo" aria-label="À traiter"></section>` +
       `<section class="alerts" id="alerts" aria-label="Alertes"></section>` +
       `<section class="kpi-grid" id="kpi-grid" aria-label="Indicateurs clés"></section>` +
       `<div class="grid">` +
@@ -789,6 +992,25 @@
       card("span-4", "Profil horaire", "Occupation moyenne par jour et heure", goLink("heatmap", "Détail"), `<div id="mini-heat"></div>`) +
       card("span-4", "Serveurs et échéances", "", goLink("collections", "Collectes"), `<div id="servers"></div>`) +
       `</div>`;
+
+    // À traiter : pénuries, économies possibles, échéances proches
+    const todo = r.todo || [];
+    $("todo").innerHTML = todo.length ? todo.map(x =>
+      `<article class="todo-card"><span class="todo-pill sev-${esc(x.severity)}">${esc(TODO_LABEL[x.severity] || "À voir")}</span>` +
+      `<h2>${esc(x.title)}</h2><p>${esc(x.detail || "")}</p>` +
+      (meta.reports[x.target] ? `<button type="button" class="btn primary" data-go="${esc(x.target)}">${esc(x.label)}</button>` : "") + `</article>`).join("")
+      : `<div class="alerts-ok"><span class="status-dot sev-good" aria-hidden="true">✓</span>Rien à traiter : pas de pénurie, pas d'économie évidente, pas d'échéance dans les 12 mois.</div>`;
+
+    if (meta.admin) {
+      fetchJSON("api/admin/checklist").then(c => {
+        if (!c || !c.total || c.done >= c.total || shownType !== "dashboard" || !$("todo")) return;
+        const missing = c.items.filter(i => !i.ok && !i.optional), rest = missing.length;
+        if (!rest) return;
+        $("todo").insertAdjacentHTML("afterbegin", `<article class="todo-card"><span class="todo-pill sev-info">Mise en route</span>` +
+          `<h2>Terminer la configuration (${c.done}/${c.total})</h2><p>${rest} étape${rest > 1 ? "s" : ""} à finir : ${esc(missing.map(i => i.label.toLowerCase()).join(", "))}.</p>` +
+          `<button type="button" class="btn primary" data-go="admin">Ouvrir la liste</button></article>`);
+      }).catch(() => {});
+    }
 
     // Alertes
     const alerts = r.alerts || [];
@@ -1005,12 +1227,26 @@
     return `<span class="badge sev sev-${sev}">${esc(v)}</span>`;
   }
 
+  function visibleColumns(r) {
+    const btn = $("cols-toggle");
+    const keys = COMPACT[r.type];
+    const compact = keys ? keys.map(k => r.columns.find(c => c.key === k)).filter(Boolean) : [];
+    if (compact.length < 3 || compact.length >= r.columns.length) { btn.hidden = true; return r.columns; }
+    const all = !!allColumns[r.type];
+    btn.hidden = false;
+    btn.textContent = all ? "Masquer les colonnes détaillées" : `Afficher plus de colonnes (${r.columns.length - compact.length})`;
+    return all ? r.columns : compact;
+  }
   function renderTable() {
     const r = current;
     const t = $("table");
     if (!r || !t) return;
     if (!r.rows.length) {
-      t.innerHTML = `<tbody><tr><td class="empty">Aucune donnée pour ces filtres sur la période.</td></tr></tbody>`;
+      const hint = EMPTY_HINT[r.type];
+      t.innerHTML = `<tbody><tr><td class="empty">` + (hint
+        ? `<strong>${esc(hint[0])}</strong>${hint[1] ? `<br>${esc(hint[1])}` : ""}` + (meta.admin && (r.type === "renewal" || r.type === "named") ? `<br><button type="button" class="link" data-go="admin">Ouvrir l'Administration →</button>` : "")
+        : "Aucune donnée pour ces filtres sur la période.") + `</td></tr></tbody>`;
+      $("cols-toggle").hidden = true;
       $("row-count").textContent = "";
       $("more").hidden = true;
       return;
@@ -1020,11 +1256,13 @@
     let max = 0;
     if (heat) for (const row of rows) for (const c of r.columns) if (NUMERIC.has(c.type) && c.key !== "total" && row[c.key] > max) max = row[c.key];
 
-    const head = "<thead><tr>" + r.columns.map(c => {
+    const cols = visibleColumns(r);
+    const head = "<thead><tr>" + cols.map(c => {
       const sort = table.sortKey === c.key ? (table.sortDir > 0 ? "ascending" : "descending") : "none";
-      return `<th class="${NUMERIC.has(c.type) ? "num" : ""}" data-key="${esc(c.key)}" aria-sort="${sort}" scope="col">${esc(c.label)}</th>`;
+      const help = GLOSSARY[c.key] ? ` <span class="help" tabindex="0" role="note" aria-label="${esc(GLOSSARY[c.key])}" data-help="${esc(GLOSSARY[c.key])}">?</span>` : "";
+      return `<th class="${NUMERIC.has(c.type) ? "num" : ""}" data-key="${esc(c.key)}" aria-sort="${sort}" scope="col">${esc(c.label)}${help}</th>`;
     }).join("") + "</tr></thead>";
-    const body = rows.slice(0, table.shown).map(row => "<tr>" + r.columns.map(c => {
+    const body = rows.slice(0, table.shown).map(row => "<tr>" + cols.map(c => {
       const v = row[c.key];
       const cls = [NUMERIC.has(c.type) ? "num" : "", v === null || v === undefined ? "empty-cell" : ""].join(" ").trim();
       let style = "";
@@ -1043,7 +1281,8 @@
       return `<td class="${cls}"${style}>${content}</td>`;
     }).join("") + "</tr>").join("");
     t.innerHTML = head + "<tbody>" + body + "</tbody>";
-    t.querySelectorAll("th").forEach(th => th.addEventListener("click", () => {
+    t.querySelectorAll("th").forEach(th => th.addEventListener("click", ev => {
+      if (ev.target.closest(".help")) return;
       const key = th.dataset.key;
       table.sortDir = table.sortKey === key ? -table.sortDir : (NUMERIC.has((r.columns.find(c => c.key === key) || {}).type) ? -1 : 1);
       table.sortKey = key;

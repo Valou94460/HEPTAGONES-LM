@@ -1,0 +1,9 @@
+# Contrôle des secrets (gitleaks) : règles par défaut + exceptions documentées.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Certificats et clé de test du faux serveur ITSM (TLS local des tests, sans valeur)"
+paths = [
+  '''tests/fixtures/itsm_test_(ca|cert|key)\.pem''',
+]

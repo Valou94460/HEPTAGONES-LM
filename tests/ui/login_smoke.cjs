@@ -59,6 +59,16 @@ const fs = require("fs");
   await page.goto(base + "/");
   await page.waitForSelector("#logout:not([hidden])", { timeout: 10000 }).catch(() => {});
 
+  // 7. Première connexion sur l'accueil (sans lien profond) : visite guidée proposée, passée une fois pour toutes (mémorisée côté serveur)
+  await page.waitForSelector("#tour-skip", { timeout: 10000 }).catch(() => failures.push("visite guidée non proposée à la première connexion"));
+  await page.screenshot({ path: `${out}/visite_guidee.png` });
+  await page.click("#tour-skip").catch(() => {});
+  await page.waitForSelector("#tour-layer .tour-card", { state: "detached", timeout: 5000 }).catch(() => failures.push("visite guidée non fermée"));
+  await page.reload();
+  await page.waitForSelector("#user-name", { timeout: 10000 });
+  await page.waitForTimeout(1500);
+  check(!(await page.$("#tour-skip")), "visite guidée relancée alors qu'elle a été passée");
+
   // 6. Déconnexion -> retour à la connexion, API refusée
   await page.click("#logout");
   await page.waitForURL(/login\.html/);

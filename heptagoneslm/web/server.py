@@ -33,7 +33,7 @@ from urllib.parse import parse_qs, quote, unquote, urlparse, urlsplit
 from heptagoneslm import __version__
 from heptagoneslm.config import AppConfig, ConfigError
 from heptagoneslm.storage.db import Database
-from heptagoneslm.web import access, admin, api, named
+from heptagoneslm.web import access, admin, api, named, prefs
 from heptagoneslm.web import roles
 from heptagoneslm.web.auth import COOKIE_NAME, Auth, AuthError, UserInfo
 
@@ -290,6 +290,17 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                            entry["workstation"] or entry["client"], entry["browser"], entry["method"],
                            {True: "oui", False: "non"}.get(entry["prompted"], "?"))
                 return self._json({"ok": True, "entry": entry})
+            if path == "/api/prefs":
+                if self.headers.get("X-HeptagonesLM") != "1":
+                    return self._json({"error": "Requête refusée"}, HTTPStatus.FORBIDDEN)
+                user = self.current_user()
+                if user is None:
+                    return self._deny(path)
+                action = str(self._read_json().get("onboarding", ""))
+                if action not in ("done", "reset"):
+                    return self._json({"error": "Action inconnue"}, HTTPStatus.BAD_REQUEST)
+                with self._db() as db:
+                    return self._json(prefs.set_onboarding(db, user.username, action == "done"))
             if path.startswith("/api/admin/"):
                 return self._admin_post(path)
             if path == "/api/logout":
@@ -345,6 +356,14 @@ class HeptagonesLMHandler(BaseHTTPRequestHandler):
                                        "demo": self.config.web.demo, "access": access.as_dict(),
                                        "admin": self._is_admin(access),
                                        "reports": {k: v[0] for k, v in api.REPORTS.items()}})
+            if url.path == "/api/prefs":
+                with self._db() as db:
+                    return self._json(prefs.get(db, user.username))
+            if url.path == "/api/admin/checklist":
+                if not self._is_admin(access):
+                    return self._forbidden(url.path, "Réservé aux administrateurs de HeptagonesLM")
+                with self._db() as db:
+                    return self._json(prefs.checklist(self.config, db, named.meta_extend(db, api.meta(db))))
             if url.path == "/api/admin/servers":
                 if not self._is_admin(access):
                     return self._forbidden(url.path, "Réservé aux administrateurs de HeptagonesLM")

@@ -16,9 +16,10 @@ Une alternative gratuite à OpenLM pour la mesure et l'optimisation des licences
 
 HeptagonesLM interroge périodiquement vos serveurs de licences (`lmutil lmstat`,
 `rlmutil rlmstat`) et lit leurs logs, historise la consommation dans SQL Server, puis restitue **qui utilise
-quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans une
-tableau de bord web et en exports Excel — avec alertes, vue en direct, efficacité des
-jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
+quoi, quand, avec quel taux d'occupation et quels pics de contention**, dans un
+tableau de bord web et en exports Excel — avec vue en direct, efficacité des jetons,
+chiffrage des économies, prévision des besoins, préparation des renouvellements et
+alertes immédiates par e-mail ou ticket ITSM.
 
 ![Tableau de bord](docs/images/tableau-de-bord.png)
 
@@ -41,12 +42,14 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 |---|---|
 | **Collecte** | FlexLM : sondage `lmutil lmstat -a` (jetons émis/utilisés, checkouts en cours) et lecture incrémentale des logs debug (refus, sessions à la seconde). RLM : sondage `rlmutil rlmstat -a` (pools, jetons, utilisateurs, échéances). Aucun agent sur les postes clients. |
 | **Historisation** | SQL Server (ou SQLite pour les essais) : sessions, refus, sondages, agrégats horaires conservés sans limite, journal des collectes. |
+| **Prise en main** | Navigation en 6 rubriques avec onglets, accueil **« À traiter »** (pénuries, économies, échéances, chacune avec son bouton), **visite guidée** à la première connexion selon le rôle, aide intégrée (définition des termes au survol, pages vides expliquées), **liste de démarrage** de l'administrateur. |
 | **Tableau de bord** | Alertes (collecte en échec ou arrêtée, refus, licences qui expirent, saturation, sous-utilisation), 6 indicateurs clés comparés à la période précédente avec tendance, occupation, état en direct, top produits et utilisateurs, refus, profil horaire, serveurs et échéances. |
 | **En direct** | Jetons utilisés / disponibles par produit et qui les utilise, depuis quand, sur quel poste ; actualisé chaque minute. |
 | **Optimisation** | Efficacité des jetons (part du temps où au moins N jetons sont utilisés), nombre de jetons recommandé, coût annuel du parc, économies potentielles, refacturation par service et **par projet**, **licences inutilisées** (coût à résilier), **réservations** (utilisateurs nommés) et leur taux d'usage réel. |
 | **Achats** | **Prévision** du pic et des jetons nécessaires à 3, 6 et 12 mois (tendance, saisonnalité, fourchette à 90 %) et **rapport de renouvellement** : pour chaque échéance, usage réel, quantité à renouveler, économie ou budget chiffrés. |
 | **Autodesk nominatif** | Licences Autodesk « utilisateur nommé » (sans serveur de licences) : usage lu par l'API Autodesk (Business Success Plan) ou import des exports « Usage report » du portail Autodesk Account, licences inactives ou jamais utilisées à réaffecter, coût annuel récupérable. |
 | **Emprunts et sites** | Licences empruntées (utilisation hors ligne) signalées dans la vue En direct et les sessions ; site de chaque poste (règles sur le nom), filtre et répartition par site. |
+| **Administration web** | Pour les administrateurs : serveurs de licences (ajout, test en direct), import des exports Autodesk et des affectations par projet, coûts et échéances, rapports planifiés par e-mail ; configuration validée et sauvegardée avant chaque écriture. |
 | **Rapports** | 18 vues à la demande, filtres (période, serveurs, produits, utilisateurs, services), graphiques interactifs, mode clair / sombre, liens partageables. |
 | **Exports** | Chaque rapport en Excel (avec graphique), CSV (format Excel français) ou JSON ; classeur complet 8 onglets. |
 | **HeptagonesLM-Setup.exe** | **Seul fichier à télécharger.** Assistant d'installation graphique : prérequis et IIS installés automatiquement, tests de connexion, barre de progression, vérification finale ; mode silencieux. Il installe l'application (`HeptagonesLM.exe` : collecte, interface, rapports) dans `C:\HeptagonesLM`. Aucun Python requis ; rien à installer sur les postes utilisateurs (navigateur). |
@@ -91,22 +94,32 @@ jetons, chiffrage des économies possibles et alertes immédiates par e-mail.
 <td align="center"><em>Prévision : jetons nécessaires à 3, 6 et 12 mois</em></td>
 <td align="center"><em>Renouvellements : quantité à renouveler, économie chiffrée</em></td>
 </tr>
+<tr>
+<td><img src="docs/images/administration.png" alt="Administration et liste de démarrage"></td>
+<td><img src="docs/images/repartition-service.png" alt="Répartition par service"></td>
+</tr>
+<tr>
+<td align="center"><em>Administration : liste de démarrage et serveurs de licences</em></td>
+<td align="center"><em>Répartition et refacturation par service ou par projet</em></td>
+</tr>
 </table>
 
 ## Démarrage rapide
 
 ### Essayer sans rien installer (Windows)
 
-1. Télécharger **`HeptagonesLM-Setup.exe`** depuis la page [Releases](https://github.com/Valou94460/HEPTAGONES-LM/releases)
-   (ou, pour la dernière version de développement : onglet
-   [Actions](https://github.com/Valou94460/HEPTAGONES-LM/actions/workflows/ci.yml) › dernière exécution › artefact `HeptagonesLM-Setup`).
-2. Parcourir l'assistant **en simulation**, sans rien modifier sur le poste :
-   `HeptagonesLM-Setup.exe setup --simulate` (bandeau « Mode simulation » affiché).
+1. Télécharger **`HeptagonesLM-Setup.exe`** depuis la [dernière version publiée](https://github.com/Valou94460/HEPTAGONES-LM/releases/latest).
+2. Dans une invite de commandes, ouvrir l'**interface sur données fictives** (bandeau « Démonstration ») :
+   `HeptagonesLM-Setup.exe web --demo --open`
+3. Ou parcourir l'**assistant d'installation en simulation**, sans rien modifier sur le poste :
+   `HeptagonesLM-Setup.exe setup --simulate` (bandeau « Mode simulation »).
 
-L'interface sur données fictives (bandeau « Démonstration ») s'obtient avec Python, ci-dessous.
+Le Setup demande les droits administrateur à l'ouverture (il sert aussi à installer). Aucune de ces deux
+commandes n'installe quoi que ce soit.
 
-> Windows SmartScreen peut avertir au premier lancement (exécutable non signé) :
-> « Informations complémentaires » › « Exécuter quand même ».
+> Windows SmartScreen peut avertir au premier lancement (exécutable non encore signé) :
+> « Informations complémentaires » › « Exécuter quand même ». Pour vérifier le fichier :
+> `Get-FileHash HeptagonesLM-Setup.exe -Algorithm SHA256` doit correspondre à `SHA256SUMS`, publié avec la version.
 
 ### Construire HeptagonesLM-Setup.exe sur son PC (sans GitHub Actions)
 
@@ -227,32 +240,31 @@ Options globales : `-c heptagoneslm.yaml` (ou variable `HEPTAGONESLM_CONFIG`), `
 heptagoneslm -c heptagoneslm.yaml web --open
 ```
 
-Navigation par la barre latérale, en cinq groupes (plus *Administration* pour les administrateurs) :
+La barre latérale compte six rubriques (plus *Administration* pour les administrateurs) ; les vues
+d'une même rubrique sont des onglets :
 
-| Vue | Contenu |
+| Rubrique | Vues (onglets) |
 |---|---|
-| **Tableau de bord** | Page d'accueil : alertes, indicateurs clés cliquables (tendance, comparaison à la période précédente), taux d'occupation, état en direct, produits, utilisateurs, refus, profil horaire, serveurs et échéances |
-| **En direct** | Dernier sondage : jetons utilisés / libres par produit, utilisateurs connectés (poste, service, durée), file d'attente ; actualisation automatique |
-| Synthèse | Indicateurs clés, taux d'occupation par produit (moyen, au pic, heures ouvrées) |
-| Usage dans le temps | Pic / moyenne / taux par heure, jour, semaine ou mois |
-| Répartition | Heures par utilisateur, poste, service, produit, serveur, éditeur, site ou projet ; coût refacturé |
-| Croisement | Tableau croisé (utilisateur, poste, service ou projet) × produit |
-| Profil horaire | Carte de chaleur heure × jour de semaine |
-| Contention | Jours avec saturation des jetons et/ou refus |
-| Refus | Détail des refus (DENIED) issus des logs |
-| **Efficacité** | Part du temps ouvré où au moins N jetons sont utilisés ; jetons recommandés pour couvrir 95 % du temps, excédent, jetons jamais utilisés |
-| **Optimisation & coûts** | Coût annuel par produit, économies potentielles, coût par heure d'usage, recommandation (réduire, adapté, pénurie) |
-| **Prévision** | Pic prévu à 3, 6 et 12 mois par produit, jetons nécessaires, marge à 90 %, écart et impact budgétaire |
-| **Renouvellements** | Échéances des 12 mois à venir : usage réel, recommandé, besoin prévu, quantité à renouveler, économie ou budget |
-| Sessions | Données brutes filtrables |
-| Collectes | Journal et état de santé des collectes |
+| **Tableau de bord** | Accueil : bloc **« À traiter »** (pénuries, économies possibles, échéances proches), alertes, indicateurs clés cliquables comparés à la période précédente, taux d'occupation, état en direct, produits, utilisateurs, refus, profil horaire, serveurs et échéances |
+| **En direct** | Dernier sondage : jetons utilisés / libres par produit, utilisateurs connectés (poste, service, durée), emprunts ; actualisation chaque minute |
+| **Analyse** | Synthèse (taux d'occupation par produit) · Usage dans le temps (heure, jour, semaine, mois) · Répartition (utilisateur, poste, service, site, projet… et coût refacturé) · Croisement (× produit) · Profil horaire (heure × jour) |
+| **Optimisation** | Optimisation & coûts (économies potentielles, recommandation) · Efficacité (jetons nécessaires pour 95 % du temps ouvré) · Licences inutilisées · Autodesk utilisateurs nommés · Réservations · Contention · Refus |
+| **Achats** | Prévision (pic et jetons nécessaires à 3, 6 et 12 mois, impact budgétaire) · Renouvellements (échéances des 12 mois, quantité à renouveler, économie ou budget) |
+| **Données** | Sessions (données brutes filtrables) · Collectes (journal et état de santé) |
 
+- **Première connexion** : une visite guidée de 5 étapes, adaptée au rôle, présente l'interface ; elle
+  n'est proposée qu'une fois par utilisateur (mémorisé côté serveur) et se relance par « Revoir la visite
+  guidée ». L'administrateur dispose d'une **liste de démarrage** (serveurs, coûts, échéances, projets,
+  e-mail) dans *Administration* et sur le tableau de bord tant qu'elle n'est pas terminée.
+- **Aide intégrée** : un « ? » sur les en-têtes explique chaque terme (jeton, taux en heures ouvrées,
+  recommandé…) ; une page vide indique comment la remplir.
 - **Filtres** : période (7 j, 30 j, 90 j, mois, année… ou dates), serveurs, produits,
-  utilisateurs, services ; ils s'appliquent à toutes les vues.
+  utilisateurs, services, sites ; seuls ceux qui s'appliquent à la vue sont affichés.
   L'adresse de la page conserve les filtres : un lien partagé rouvre le même rapport.
 - **Exports** : bouton Excel / CSV / JSON sur chaque vue, avec les filtres appliqués ;
   « Rapport complet » produit le classeur 8 onglets.
-- **Sécurité** : lecture seule ; n'écoute que sur le poste local par défaut.
+- **Sécurité** : consultation en lecture seule ; seule la page *Administration* (administrateurs)
+  modifie la configuration. N'écoute que sur le poste local par défaut.
   Pour un accès réseau : **connexion avec les comptes Windows / AD** et HTTPS, voir
   [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md).
 
@@ -413,7 +425,7 @@ automatiquement dans la sortie `lmstat` (alertes à 30 et 7 jours).
 | Tickets ITSM automatiques (ServiceNow, Jira, GLPI, webhook Teams / Slack) | ✅ | ✅ |
 | Rôles par service (groupes AD) | ✅ | ✅ |
 | Licences empruntées, réservations (named user), multi-sites, licences inutilisées | ✅ | ✅ |
-| Administration en ligne (configuration depuis l'interface) | ❌ | ✅ |
+| Administration en ligne (serveurs, imports, coûts, rapports planifiés) | ✅ | ✅ |
 | Libération de licences inactives (agent sur les postes) | ❌ | ✅ |
 | Licences SaaS / cloud, offre hébergée | ❌ | ✅ |
 | Autres gestionnaires (DSLS, Sentinel, LM-X… : plus de 70 chez OpenLM) | Extensible, à développer | ✅ |
@@ -430,8 +442,9 @@ Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md)
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architecture, flux de collecte, schéma de base, ajout d'un gestionnaire (RLM…) |
 | [docs/AUTHENTIFICATION.md](docs/AUTHENTIFICATION.md) | Interface partagée : connexion AD (LDAPS), SSO via IIS, certificat HTTPS, service permanent |
 | [docs/SECURITE.md](docs/SECURITE.md) | Audit de sécurité, corrections, liste de contrôle de déploiement |
+| [SECURITY.md](SECURITY.md) | Signaler une vulnérabilité (signalement privé), versions maintenues |
 | [docs/PLAN_DE_TEST.md](docs/PLAN_DE_TEST.md) | Plan de test complet : automatisé, recette, validation sur serveurs réels |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.2 (ITSM, rôles, prévision, gestionnaires, agent poste, cloud) |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | **Feuille de route** : état réel face à OpenLM, lots 26.3 à 27.3 (ITSM, rôles, prévision, prise en main, langue, gestionnaires, agent poste, cloud) |
 | [docs/PLAN.md](docs/PLAN.md) | Plan d'implémentation (mise en service) |
 | [CHANGELOG.md](CHANGELOG.md) | Historique des versions |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribuer : environnement, tests, conventions |
@@ -441,16 +454,17 @@ Les écarts restants sont planifiés dans la [feuille de route](docs/ROADMAP.md)
 ```bash
 git clone https://github.com/Valou94460/HEPTAGONES-LM.git && cd HEPTAGONES-LM
 pip install -e ".[dev]"
-python -m pytest                     # ~90 tests, SQLite en mémoire, aucun serveur requis
+python -m pytest                     # ~380 tests, SQLite en mémoire, aucun serveur requis
 heptagoneslm web --demo --open             # interface sur données simulées
 ```
 
-La [CI](.github/workflows/ci.yml) exécute à chaque push : tests unitaires (Linux et
-Windows, Python 3.10 et 3.12), démonstration complète avec rapport Excel, test de
-l'interface et de la page de connexion dans un vrai navigateur (Playwright), démonstration contre un vrai
-SQL Server 2022, construction et vérification de `HeptagonesLM.exe`. Une étiquette
-`vX.Y.Z` publie automatiquement une [Release](https://github.com/Valou94460/HEPTAGONES-LM/releases)
-avec l'exécutable.
+La [CI](.github/workflows/ci.yml) exécute à chaque push : contrôle des secrets (gitleaks) sur tout
+l'historique, tests unitaires (Linux et Windows, Python 3.10 et 3.12), démonstration complète avec
+rapport Excel, test de l'interface, de la page de connexion et de l'assistant d'installation dans un vrai
+navigateur (Playwright), démonstration contre un vrai SQL Server 2022, construction de
+`HeptagonesLM-Setup.exe` et installation réelle sur Windows Server. Une étiquette `vX.Y.Z` publie
+automatiquement une [Release](https://github.com/Valou94460/HEPTAGONES-LM/releases) avec le Setup,
+le paquet zip et les empreintes SHA-256.
 
 ## Licence
 

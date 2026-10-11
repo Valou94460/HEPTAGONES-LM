@@ -7,8 +7,10 @@
 # Les rapports Excel générés sont téléchargeables dans l'onglet « Actions »
 # du dépôt, section « Artifacts » de chaque exécution.
 #
-# Économie de minutes (dépôt privé : quota mensuel, minutes Windows comptées double) :
-# les jobs Windows lourds (exécutable signé, installations réelles, parcours filmé) ne tournent
+# Sécurité : contrôle des secrets (gitleaks) à chaque push et pull request. Les pull requests
+# venant de forks ne reçoivent aucun secret (signature par certificat de test) ; pas de pull_request_target.
+#
+# Économie de minutes : les jobs Windows lourds (exécutable signé, installations réelles, parcours filmé) ne tournent
 # que sur main, les pull requests, un lancement manuel (« Run workflow ») ou un commit dont le
 # message contient [ci complet]. Les autres pushs lancent les tests rapides.
 # Le parcours filmé de l'assistant ne tourne que sur demande : « Run workflow » avec « filmer » coché.
@@ -40,6 +42,18 @@ defaults:
     shell: bash
 
 jobs:
+  secrets:
+    name: Contrôle des secrets (gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks (historique complet)
+        run: |
+          curl -sSL https://github.com/gitleaks/gitleaks/releases/download/v8.21.2/gitleaks_8.21.2_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --log-opts="--all" --redact --verbose .
+
   tests:
     name: Tests + démo (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}

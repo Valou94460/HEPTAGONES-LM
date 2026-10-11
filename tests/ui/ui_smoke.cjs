@@ -32,13 +32,14 @@ const fs = require("fs");
       users: document.querySelectorAll("#top-users .person").length,
       servers: document.querySelectorAll("#servers .status-row").length,
       alerts: document.querySelectorAll("#alerts .alert, #alerts .alerts-ok").length,
+      todo: document.querySelectorAll("#todo .todo-card, #todo .alerts-ok").length,
       current: (document.querySelector('.nav-item[aria-current="page"]') || {}).dataset?.type,
       error: document.getElementById("error").hidden ? "" : document.getElementById("error").textContent,
     }));
     console.log(scheme.padEnd(5), "dashboard   ", JSON.stringify(dash));
     if (dash.error) failures.push(`dashboard : ${dash.error}`);
     if (dash.kpis !== 6) failures.push(`dashboard : ${dash.kpis} KPI au lieu de 6`);
-    if (!dash.sparks || !dash.trend || !dash.products || !dash.users || !dash.servers || !dash.alerts) failures.push("dashboard : bloc vide");
+    if (!dash.sparks || !dash.trend || !dash.products || !dash.users || !dash.servers || !dash.alerts || !dash.todo) failures.push("dashboard : bloc vide");
     if (dash.current !== "dashboard") failures.push("dashboard : entrée de menu non active");
     await page.screenshot({ path: `${out}/${scheme}_dashboard.png`, fullPage: true });
     // Vue en direct : une carte par produit.
@@ -101,7 +102,7 @@ const fs = require("fs");
       // Navigation Précédent / Suivant entre onglets
       await page.goto(`${base}/#type=summary&preset=all`);
       await page.waitForSelector(".kpi");
-      await page.click('.nav-item[data-type="heatmap"]');
+      await page.click('#tabs [data-tab-type="heatmap"]');
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Profil horaire");
       await page.goBack();
       await page.waitForFunction(() => document.getElementById("table-title").textContent === "Synthèse par produit", null, { timeout: 10000 })
