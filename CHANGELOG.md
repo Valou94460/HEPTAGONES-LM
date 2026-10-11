@@ -21,6 +21,10 @@ numérotation `AA.N.C` : année, numéro de version dans l'année, correctif (ex
 - **Checklist de démarrage** de l'administrateur (serveurs, coûts, échéances, projets, e-mail) dans
   Administration et en carte « Mise en route » sur le tableau de bord (`/api/admin/checklist`).
 
+### Documentation
+- README, guides d'architecture et d'installation, plan de test (cas PRI-01 à PRI-06) et captures d'écran
+  mis à jour pour la 26.5 ; dossier d'exploitation 1.13.
+
 ### Sécurité
 - Politique de sécurité (`SECURITY.md`, signalement privé des vulnérabilités) et contrôle des secrets
   (gitleaks) sur tout l'historique à chaque push et pull request.
