@@ -104,6 +104,7 @@ En CI : à chaque push et pull request ([ci.yml](../.github/workflows/ci.yml)).
 | `tests/test_autodesk_api.py` | 16 | API Autodesk contre un faux serveur (tests/fake_autodesk.py) : connexion OAuth PKCE et Client Secret, state contrôlé, jeton de renouvellement à usage unique, équipes, requête d'usage asynchrone paginée, limite de débit (429), syntaxe de dates, identifiants hachés, fusion avec l'export du portail, simulation, configuration, commandes `autodesk-login` / `autodesk-sync` / `collect`, étape de l'assistant |
 | `tests/test_update.py` | 6 | Mise à jour en place : plan sans mot de passe, configuration intacte, sauvegarde, version enregistrée, tâches et site IIS non recréés, mode silencieux, installation antérieure sans fichier de réponses ; conservation des réglages personnalisés à la réinstallation |
 | `tests/ui/setup_update.cjs` | — | Navigateur réel : installation 26.3.0 simulée, bouton « Mettre à jour », progression, vérification, version enregistrée |
+| `tests/test_lot265.py` | 6 | 26.5 : préférences par utilisateur (visite guidée vue, insensible à la casse, réinitialisation), routes `/api/prefs` (en-tête anti-CSRF, action inconnue), liste de démarrage (`/api/admin/checklist`), bloc « À traiter » du tableau de bord, schéma v10 |
 | `tests/ui/ui_smoke.cjs` | — | Navigateur réel : tableau de bord (6 KPI, micro-courbes, blocs, clic KPI → rapport) et vue en direct en clair et en sombre, 12 rapports en clair, 3 en sombre, filtre multi-produits, infobulle, exports CSV / JSON / Excel / complet, bouton Précédent, absence de débordement mobile, **aucune erreur JavaScript** |
 
 ### 4.2 Jobs de la CI
@@ -376,6 +377,17 @@ Prévoir 2 abonnements dans le YAML (tous produits / un seul serveur) et une bo�
 | ACH-07 | Projets : règles | Règles `projects:` (poste, service) ; utilisateur absent du CSV | Session rangée par la première règle correspondante ; l'import CSV prime | ☐ |
 | ACH-08 🔴 | Rapport planifié sur mesure | *Administration › Rapports planifiés* : nouveau rapport (vues Prévision, Renouvellements, Répartition par projet), « Envoyer un essai » | Message reçu avec une section par vue ; classeur joint d'une feuille par vue ; l'essai n'empêche pas l'envoi planifié de la période | ☐ |
 | ACH-09 | Rapport trimestriel | `period: last-quarter` ; `send-report --skip-sent` deux jours de suite | Trimestre précédent envoyé une seule fois | ☐ |
+
+### 5.10 octies Prise en main (PRI, 26.5)
+
+| ID | Cas | Procédure | Résultat attendu | OK |
+|---|---|---|---|---|
+| PRI-01 🔴 | Navigation | Parcourir les 6 rubriques de la barre latérale et leurs onglets ; ouvrir un ancien lien partagé (`#type=efficiency…`) | Chaque vue s'ouvre dans sa rubrique, onglet actif signalé ; l'ancien lien rouvre la même vue avec ses filtres | ☐ |
+| PRI-02 🔴 | « À traiter » | Tableau de bord sur une période avec refus, licences dormantes et échéances | Cartes Urgent / Économie / À préparer cohérentes avec les vues Refus, Optimisation et Renouvellements ; chaque bouton ouvre la bonne vue | ☐ |
+| PRI-03 🔴 | Visite guidée | Première connexion d'un compte (lecteur, puis administrateur) sur l'accueil | Visite de 5 étapes adaptée au rôle ; « Passer » ou « Terminer » : plus proposée, y compris depuis un autre poste ; « Revoir la visite guidée » la relance ; pas de visite sur un lien profond ni en démonstration | ☐ |
+| PRI-04 🔴 | Liste de démarrage | Compte administrateur, installation incomplète (pas de coûts, pas de SMTP) | *Administration* : étapes faites / restantes, « Y aller » positionne sur la bonne section ; carte « Mise en route » sur le tableau de bord jusqu'à ce que tout soit fait ; invisible pour un lecteur (403 sur `/api/admin/checklist`) | ☐ |
+| PRI-05 | Filtres contextuels | Vue *En direct*, puis *Profil horaire* | Seuls les filtres applicables sont affichés, avec une note sur ceux qui ne s'appliquent pas | ☐ |
+| PRI-06 | Aide intégrée | Survol ou focus clavier d'un « ? » d'en-tête ; vue vide (Renouvellements sans échéance) | Définition du terme ; message expliquant comment remplir la vue (et lien vers l'Administration pour un administrateur) | ☐ |
 
 ### 5.10 ter Serveurs RLM (RLM)
 
