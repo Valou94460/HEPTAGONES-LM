@@ -243,6 +243,13 @@ class ConfigCliTest(Base):
             kw["on_url"] = lambda u: (print(u), follow(u))
             return orig(*a, **kw)
         autodesk_api.login = login_follow
+        real_date = autodesk_api.date
+
+        class FrozenDate(date):              # période fixe (90 jours jusqu'au 05/10) : données simulées datées
+            @classmethod
+            def today(cls):
+                return date(2026, 10, 5)
+        autodesk_api.date = FrozenDate
         try:
             with redirect_stdout(out):
                 self.assertEqual(cli.main(["-c", str(config), "autodesk-login", "--no-browser", "--timeout", "20"]), 0)
@@ -251,6 +258,7 @@ class ConfigCliTest(Base):
                 cli.main(["-c", str(config), "collect"])                 # deuxième collecte : pas de nouvel appel
         finally:
             autodesk_api.login = orig
+            autodesk_api.date = real_date
         text = out.getvalue()
         self.assertIn("context_id TEAM-1", text)
         self.assertIn("simulation, rien n'est écrit", text)
